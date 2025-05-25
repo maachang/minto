@@ -26,7 +26,7 @@
 //     レスポンスオブジェクトが利用できる.
 //////////////////////////////////////////////////////////
 (function () {
-    'use strict'
+    'use strict';
 
     // [デフォルト]jhtml出力メソッド名.
     const _OUT = "$out";
@@ -220,14 +220,12 @@
         // outメソッドが実行時に設定しない場合.
         if (noOut != true) {
             // メモリ上にoutメソッドを出力する形で設定します.
-            ret = "(function() {\n'use strict';\n" +
-                "exports.handler = async function() {\n" +
+            ret = "exports.handler = async function() {\n" +
                 "let _$outString = \"\";\n" +
-                "const " + outFunc + " = function(n) { _$outString += n; return " + outFunc + "; };\n" +
+                "const " + outFunc + " = function(n) { _$outString += n; };\n" +
                 ret +
                 "\nreturn _$outString;\n" +
-                "}\n" +
-                "})();\n"
+                "}\n";
         }
         return ret;
     }
@@ -257,4 +255,5 @@
     exports.convert = convert;
     exports.isExtension = isExtension;
     exports.changeExtensionByJhtmlToJs = changeExtensionByJhtmlToJs;
+
 })();

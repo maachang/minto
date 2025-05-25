@@ -1,0 +1,4 @@
+#!/bin/sh
+
+ARGS=${*}
+node ${MINTO_HOME}/tools/mtPack ${ARGS}

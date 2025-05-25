@@ -9,23 +9,18 @@
     let _c_request = null;
     let _c_response = null;
 
-    // Baseパス名.
-    const _BASE_PATH = require("path").resolve() + "/";
-    // putlic名.
-    const _PUBLIC_NAME = "public";
-    // publicパス名.
-    const _PUBLIC_PATH = _BASE_PATH + _PUBLIC_NAME + "/"
-
     // 実行対象拡張子(js).
     const _RUN_JS = ".mt.js";
     // 実行対象拡張子(jhtml-js).
     const _RUN_JHTML = ".jhtml.js";
+    // jhtml(変換前)拡張子.
+    const _JHTML_SRC_EXTENSION = ".mt.html";
 
     // require
     const _REQUIRE = _g.require;
 
     // lambda main.
-    exports.handler = async function (event, context, callback) {
+    exports.handler = async function (event) {
         // イベント11超えでメモリーリーク対応.警告が出るのでこれを排除.
         require("events").EventEmitter.defaultMaxListeners = 0;
         // 指定実行対象の末尾が[/filter]パスの場合.
@@ -33,8 +28,6 @@
             // 直接パス実行出来ない: 403エラー.
             return _errorFilter(null);
         }
-        // callback実行後のhandler終了を待たない設定にする.
-        context.callbackWaitsForEmptyEventLoop = false;
         // 初期化処理.
         _event = event;
         _c_request = null;
@@ -57,8 +50,50 @@
         return resFilter;
     }
 
+    // [default]Baseパス名.
+    const _BASE_PATH = require("path").resolve() + "/";
+    let _basePath = _BASE_PATH;
+
+    // baseパスを設定.
+    // basePath 対象のbaseパスを設定します.
+    exports.setBasePath = function (basePath) {
+        _basePath = _basePath.trim();
+        if (basePath.endsWith("/")) {
+            _basePath = basePath;
+        } else {
+            _basePath = basePath + "/";
+        }
+    }
+
+    // publicパス名.
+    const _PUBLIC_PATH = function () {
+        return _basePath + "public/";
+    }
     // libraryパス名.
-    const _LIBRARY_PATH = _BASE_PATH + "lib/"
+    const _LIBRARY_PATH = function () {
+        return _basePath + "lib/";
+    }
+    // 拡張mime定義JSON.
+    const _EXT_MIME_FILE = function () {
+        return _basePath + "conf/mime.json"
+    }
+    // filter名と実行パス.
+    const _FILTER_NAME = "filter";
+    const _FILTER_FILE = _FILTER_NAME + _RUN_JS;
+    const _FILTER_PATH = function () {
+        return _PUBLIC_PATH() + _FILTER_FILE;
+    }
+
+    // jhtml変換実行Function.
+    // jhtmlをこのindex.js 内で処理する場合に変換処理
+    //  > jhtml.convert
+    // を設定します.
+    let _jhtmlConvFunc = null;
+    exports.setJHTMLConvFunc = function (func) {
+        if (typeof (func) == "function") {
+            _jhtmlConvFunc = func;
+        }
+    }
 
     // $import処理.
     // name: 対象のJSファイル等を設定します.
@@ -69,7 +104,7 @@
             name = name.substring(1)
         }
         // "/lib" 以下のファイルを require.
-        return _REQUIRE(_LIBRARY_PATH + name)
+        return _REQUIRE(_LIBRARY_PATH() + name)
     }
 
     // requestを取得.
@@ -137,9 +172,6 @@
     // [mimeType]octet-stream.
     const _OCTET_STREAM = "application/octet-stream";
 
-    // 拡張mime定義JSON.
-    const _EXT_MIME_FILE = _BASE_PATH + "conf/mime.json"
-
     // 対象拡張子のMimeTypeを取得.
     let _c_mime = null;
     const _getMime = function (ext) {
@@ -147,9 +179,9 @@
         if (mime == undefined) {
             if (_c_mime == null) {
                 // 拡張mime定義情報(conf/mime.json)が存在する場合は取得.
-                if (_existsSync(_EXT_MIME_FILE)) {
+                if (_existsSync(_EXT_MIME_FILE())) {
                     _c_mime = JSON.parse(
-                        fs.readFileSync(_EXT_MIME_FILE).toString("utf-8"));
+                        fs.readFileSync(_EXT_MIME_FILE()).toString("utf-8"));
                 } else {
                     _c_mime = {};
                 }
@@ -158,10 +190,6 @@
         }
         return mime;
     }
-
-    // filter名と実行パス.
-    const _FILTER_NAME = "filter";
-    const _FILTER_PATH = _PUBLIC_PATH + _FILTER_NAME + _RUN_JS;
 
     // フィルターパス(/public/filter)が設定されている場合.
     const isFilterPath = function (path) {
@@ -174,12 +202,12 @@
     // filter実行ファイル(リクエスト単位で必ず実行される動的js).
     // 戻り値: true の場合処理を続行します.
     const _runFilter = async function () {
-        if (!_existsSync(_FILTER_PATH)) {
+        if (!_existsSync(_FILTER_PATH())) {
             return true;
         }
         try {
             // 実行jsを取得.
-            let runJs = _loadJs(_FILTER_PATH);
+            let runJs = _loadJs(_FILTER_PATH());
             // 実行jsを実行.
             let ret = await runJs.handler();
             runJs = undefined;
@@ -222,7 +250,7 @@
             if (path[0] == "/") {
                 path = path.substring(1)
             }
-            let targetFile = _PUBLIC_PATH + path;
+            let targetFile = _PUBLIC_PATH() + path;
 
             // 終端が / でファイル名が設定されていない場合.
             if (targetFile.endsWith("/")) {
@@ -310,11 +338,19 @@
             path = path.substring(1).trim();
         }
         // publicディレクトリ.
-        path = _PUBLIC_PATH + path;
+        path = _PUBLIC_PATH() + path;
         try {
+            let convFunc = null;
             if (ext == "jhtml") {
-                // jhtml実行.
-                path = path.substring(0, path.length - (ext.length + 1)) + _RUN_JHTML;
+                // jhtml->js変換用のfunctionが設定されている場合.
+                if (_jhtmlConvFunc != null) {
+                    // jhtmlソースパス変換.
+                    path = path.substring(0, path.length - (ext.length + 1)) + _JHTML_SRC_EXTENSION;
+                    convFunc = _jhtmlConvFunc; // jhtml変換function.
+                } else {
+                    // jhtml->js 変換済みの場合はjhtml実行パス変換.
+                    path = path.substring(0, path.length - (ext.length + 1)) + _RUN_JHTML;
+                }
             } else {
                 // js実行.
                 path += _RUN_JS;
@@ -325,7 +361,7 @@
                 return _errorStaticResult(404, (ext == "jhtml") ? "html" : "js");
             }
             // 実行jsを取得.
-            let runJs = _loadJs(path);
+            let runJs = _loadJs(path, convFunc);
             // 実行jsを実行.
             let body = await runJs.handler();
             runJs = undefined;
@@ -403,6 +439,14 @@
             // 空文字をセット.
             body = "";
         }
+        // cookie変換.
+        let cookies = [];
+        if (response.cookie != undefined && response.cookie != null) {
+            for (let k in response.cookie) {
+                cookies = _responseCookies(response.cookie)
+                break;
+            }
+        }
         // status message が設定されていない場合.
         if (response.message == undefined || response.message == null ||
             response.message == "") {
@@ -410,7 +454,7 @@
             return {
                 statusCode: response.status
                 , headers: response.headers
-                , cookies: _responseCookies(response.cookie)
+                , cookies: cookies
                 , isBase64Encoded: base64
                 , body: body
             };
@@ -420,7 +464,7 @@
             statusCode: response.status
             , statusMessage: response.message
             , headers: response.headers
-            , cookies: _responseCookies(response.cookie)
+            , cookies: cookies
             , isBase64Encoded: base64
             , body: body
         };
@@ -455,12 +499,17 @@
     }
 
     // サーバーサイドで実行処理.
-    const _loadJs = function (path) {
-        // ファイルを読み込む.
-        const jsBody = fs.readFileSync(path);
+    const _loadJs = function (path, convFunc) {
         try {
+            // ファイルを読み込む.
+            let jsBody = fs.readFileSync(path).toString();
+            // convFuncが設定されている場合.
+            if (convFunc != undefined && convFunc != null) {
+                // 変換処理.
+                jsBody = convFunc(jsBody);
+            }
             const exp = {};
-            Function("exports", "module", jsBody.toString())(
+            Function("exports", "module", jsBody)(
                 exp, { exports: exp }
             );
             return exp;
