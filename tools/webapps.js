@@ -14,6 +14,9 @@
     // jhtml.
     const jhtml = require("./jhtml.js");
 
+    // require
+    const _REQUIRE = require;
+
     // サーバータイムアウト(30秒).
     const TIMEOUT = 30 * 1000;
 
@@ -65,10 +68,10 @@
         // lambda.lib 内容を参照.
         let libPath = _LAMBDA_LIB_PATH + name;
         if (mintoUtil.existsSync(libPath)) {
-            return require(libPath);
+            return _REQUIRE(libPath);
         }
         // currentディレクトリの lib 配下.
-        return require(mainPath + "lib/" + name);
+        return _REQUIRE(mainPath + "lib/" + name);
     }
 
     // スタートアップ処理.
@@ -86,7 +89,7 @@
         bindPort = port;
 
         // サーバー生成.
-        var server = require("http")
+        var server = _REQUIRE("http")
             .createServer(function (req, res) {
                 // 全requireキャッシュのクリア
                 // (ローカルはテスト実行なので毎回削除).
@@ -149,7 +152,7 @@
     // requireキャッシュ解除.
     const _clearRequireCache = function () {
         // 通常requireキャッシュ削除.
-        const cache = require.cache;
+        const cache = _REQUIRE.cache;
         // llrtの場合cacheは存在しない.
         if (cache != undefined) {
             for (let k in cache) {

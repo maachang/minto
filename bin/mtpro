@@ -1,3 +1,0 @@
-#!/bin/sh
-
-llrt ${MINTO_HOME}/tools/index

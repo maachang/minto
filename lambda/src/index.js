@@ -2,7 +2,7 @@
 // lambda main.
 //////////////////////////////////////////////////////////
 (function (_g) {
-    'use strict'
+    'use strict';
 
     // 初期化条件.
     let _event = null;
@@ -17,7 +17,7 @@
     const _JHTML_SRC_EXTENSION = ".mt.html";
 
     // require
-    const _REQUIRE = _g.require;
+    const _REQUIRE = require;
 
     // lambda main.
     exports.handler = async function (event) {
@@ -105,6 +105,12 @@
         }
         // "/lib" 以下のファイルを require.
         return _REQUIRE(_LIBRARY_PATH() + name)
+    }
+
+    // Function先だと うまくrequireが呼び出せなくなる場合があるので、
+    // 代わりに $require を利用する.
+    _g.$require = function (path) {
+        return _REQUIRE(path);
     }
 
     // requestを取得.
