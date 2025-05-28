@@ -1,4 +1,4 @@
-// AWS-S3接続.
+// AWS-S3接続(aws-sdk-v3).
 // 最低限のS3のI/Oが利用できる.
 //
 (function () {
@@ -11,7 +11,7 @@
         DeleteObjectCommand,
         GetObjectCommand,
         ListObjectsV2Command
-    } = $require("@aws-sdk/client-s3")
+    } = require("@aws-sdk/client-s3")
 
     // 基本リージョン.
     const _DEF_REGION = "ap-northeast-1";

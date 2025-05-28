@@ -107,12 +107,6 @@
         return _REQUIRE(_LIBRARY_PATH() + name)
     }
 
-    // Function先だと うまくrequireが呼び出せなくなる場合があるので、
-    // 代わりに $require を利用する.
-    _g.$require = function (path) {
-        return _REQUIRE(path);
-    }
-
     // requestを取得.
     // 戻り値: request情報が返却されます.
     _g.$request = function () {
