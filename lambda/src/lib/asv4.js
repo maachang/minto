@@ -84,8 +84,12 @@
     // returnMode digestにわたす引数(string).
     // 戻り値 変換結果(returnModeに依存)
     const sha256 = function (key, returnMode) {
-        return crypto.createHash('sha256')
-            .update(key).digest(returnMode);
+        const ret = crypto.createHash('sha256')
+            .update(key);
+        if (returnMode == undefined || returnMode == null) {
+            return ret.digest();
+        }
+        return ret.digest(returnMode);
     }
 
     // hmacSHA256で変換.
@@ -94,8 +98,12 @@
     // returnMode digestにわたす引数(string).
     // 戻り値 変換結果(returnModeに依存)
     const hmacSHA256 = function (key, message, returnMode) {
-        return crypto.createHmac('sha256', key)
-            .update(message).digest(returnMode);
+        const ret = crypto.createHmac('sha256', key)
+            .update(message);
+        if (returnMode == undefined || returnMode == null) {
+            return ret.digest();
+        }
+        return ret.digest(returnMode);
     }
 
     // リクエストヘッダのキー小文字変換版を作成.
