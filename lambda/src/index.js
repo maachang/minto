@@ -9,6 +9,7 @@
     let _c_request = null;
     let _c_response = null;
     let _c_mime = null;
+    let _c_etag = null;
 
     // 実行対象拡張子(js).
     const _RUN_JS = ".mt.js";
@@ -107,6 +108,7 @@
         _c_request = null;
         _c_response = null;
         _c_mime = null;
+        _c_etag = null;
     }
 
     // ライブラリをロード処理.
@@ -291,18 +293,24 @@
 
     // 指定リクエストのetagが etags.json と一致するかチェック.
     const _httpRequestEtag = function (outEtag, path) {
-        // 対象パスのetag情報のファイルを取得.
-        const etagConf = $loadConf(_ETAGS_CONF_FILE);
-        if (etagConf == null) {
-            // 存在しない場合.
-            return false;
+        // キャッシュ条件が生成されていない場合.
+        if (_c_etag == null) {
+            // 対象パスのetag情報のファイルを取得.
+            const etagConf = $loadConf(_ETAGS_CONF_FILE);
+            if (etagConf == null) {
+                // 空生成.
+                _c_etag = {};
+                // 存在しない場合.
+                return false;
+            }
+            _c_etag = etagConf;
         }
         // パスの整形.
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
         // 対象パスの定義etagを取得.
-        const srcEtag = etagConf[path];
+        const srcEtag = _c_etag[path];
         if (srcEtag == undefined) {
             // 存在しない場合.
             return false;
@@ -312,7 +320,7 @@
 
         // requestのetagキャッシュ確認と比較.
         // 一致しない場合はキャッシュ扱いしない.
-        return srcEtag == _event.headers["If-None-Match"];
+        return srcEtag == _event.headers["if-none-match"];
     }
 
     // 静的なローカルファイルをレスポンス返却.
@@ -327,7 +335,9 @@
             // 終端が / でファイル名が設定されていない場合.
             if (targetFile.endsWith("/")) {
                 // index.html or index.htm として処理する.
-                if (_existsSync(targetFile + "index.html")) {
+                // index.html.gz も同時にチェックする.
+                if (_existsSync(targetFile + "index.html") ||
+                    _existsSync(targetFile + "index.html" + _PUBLIC_CONTENTS_GZ)) {
                     targetFile += "index.html";
                     path = "index.html";
                 } else {
@@ -336,15 +346,11 @@
                 }
                 ext = "html";
             }
+
             // etag内容の精査.
             const headers = {};
             const srcEtag = [null];
             const etagCache = _httpRequestEtag(srcEtag, path);
-            if (srcEtag[0] != null) {
-                // etagが存在する場合はresponseヘッダにセット.
-                headers["etag"] = srcEtag[0];
-                headers["expires"] = "-1";
-            }
             // mimeを取得.
             let gz = false;
             let mime = _getMime(ext);
@@ -365,6 +371,12 @@
                     , isBase64Encoded: false
                     , body: ""
                 };
+            }
+            // etagレスポンスが必要な場合.
+            if (srcEtag[0] != null) {
+                // etagが存在する場合はresponseヘッダにセット.
+                headers["etag"] = srcEtag[0];
+                headers["expires"] = "-1";
             }
             // gzip圧縮済みの静的コンテンツが存在する場合.
             if (_existsSync(targetFile + _PUBLIC_CONTENTS_GZ)) {
