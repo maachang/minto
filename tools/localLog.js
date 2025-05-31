@@ -184,16 +184,18 @@
             args : util.format.apply(null, args);
         // ログレベルが満たされた場合.
         if (logLevel <= level) {
-            // ファイル追加出力.
-            //fs.appendFileSync(
-            // 非同期実行.
-            fs.appendFile(
+            // ファイル追加出力(同期実行).
+            fs.appendFileSync(
                 // {baseLogOutFile}.{yyyy-MM_dd}.log
                 baseLogOutFile + "." + ymd + LOG_EXTENTION
                 // [{yyyy-MM-dd hh:mm:ss.sss}] {mode}{message}\n
                 , "[" + ymdhms + "] " + mode + msg + "\n"
-                , function () { } // 非同期実行先.
             );
+            // ファイル追加出力(非同期実行).
+            //fs.appendFile(baseLogOutFile + "." + ymd + LOG_EXTENTION
+            //, "[" + ymdhms + "] " + mode + msg + "\n"
+            //, function () { }
+            //);
         }
         // 元のコンソール出力
         _g[SRC_CONSOLE_NAME][srcMode](msg);

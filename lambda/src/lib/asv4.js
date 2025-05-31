@@ -642,6 +642,7 @@
     //    戻りBodyの型を設定します.
     //    - text: 文字列で返却します.
     //    - json: JSON形式で返却します.
+    //    - blob: blob形式で返却します.
     //    - それ以外: ArrayBuffer形式で返却します.
     //    設定しない場合は `text` になります.
     // 戻り値: bodyが返却されます.
@@ -701,6 +702,9 @@
             } else if (resultType == "json") {
                 // json.
                 return await response.json();
+            } else if (resultType == "blob") {
+                // blob.
+                return await response.blob();
             }
             // binary.
             return await response.arrayBuffer();

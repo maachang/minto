@@ -8,6 +8,7 @@
     let _event = null;
     let _c_request = null;
     let _c_response = null;
+    let _c_mime = null;
 
     // 実行対象拡張子(js).
     const _RUN_JS = ".mt.js";
@@ -15,9 +16,6 @@
     const _RUN_JHTML = ".jhtml.js";
     // jhtml(変換前)拡張子.
     const _JHTML_SRC_EXTENSION = ".mt.html";
-
-    // require
-    const _REQUIRE = require;
 
     // lambda main.
     exports.handler = async function (event) {
@@ -41,11 +39,13 @@
             // 静的ファイルの場合.
             if (ext != "jhtml" && ext != "") {
                 // 静的ファイルの返却.
-                return await _responseStaticFile(event.rawPath, ext);
+                return await _responseStaticFile(
+                    event.rawPath, ext);
             }
             // 動的ファイル処理.
             // 動的ファイルの実行.
-            return await _responseRunJs(event.rawPath, ext);
+            return await _responseRunJs(
+                event.rawPath, ext);
         }
         return resFilter;
     }
@@ -73,9 +73,9 @@
     const _LIBRARY_PATH = function () {
         return _basePath + "lib/";
     }
-    // 拡張mime定義JSON.
-    const _EXT_MIME_FILE = function () {
-        return _basePath + "conf/mime.json"
+    // confパス名.
+    const _CONF_PATH = function () {
+        return _basePath + "conf/";
     }
     // filter名と実行パス.
     const _FILTER_NAME = "filter";
@@ -95,16 +95,48 @@
         }
     }
 
-    // $import処理.
+    // キャッシュ関連情報をクリア(local実行専用).
+    exports.clearCacle = function () {
+        _event = null;
+        _c_request = null;
+        _c_response = null;
+        _c_mime = null;
+    }
+
+    // ライブラリをロード処理.
     // name: 対象のJSファイル等を設定します.
     // 戻り値: require結果が返却されます.
-    _g.$import = function (name) {
+    _g.$loadLib = function (name) {
         name = ("" + name).trim();
         if (name[0] == "/") {
             name = name.substring(1)
         }
         // "/lib" 以下のファイルを require.
-        return _REQUIRE(_LIBRARY_PATH() + name)
+        return require(_LIBRARY_PATH() + name)
+    }
+
+    // コンフィグJSONをロード処理.
+    // name: 対象のjsonファイル等を設定します.
+    // 戻り値: require結果が返却されます.
+    _g.$loadConf = function (name) {
+        name = ("" + name).trim();
+        if (name[0] == "/") {
+            name = name.substring(1)
+        }
+        if (_existsSync(_CONF_PATH() + name)) {
+            // "/conf" 以下のファイルを require.
+            return require(_CONF_PATH() + name)
+        }
+        return null;
+    }
+
+    // requireの代替え対応.
+    // 基本 mt.jsや jhtml.js の場合、require が利用できない.
+    // そのための代替え手段として $require を利用する.
+    // name: requireで設定する文字列を設定します.
+    // 戻り値: require結果が返却されます.
+    _g.$require = function (name) {
+        return require(name);
     }
 
     // requestを取得.
@@ -127,10 +159,20 @@
 
     // 指定拡張子からmimeTypeを取得.
     // ext ファイルの拡張子を設定します.
-    // 戻り値: mimeTypeが返却されます.
-    _g.$mime = function (ext) {
+    // all true の場合 mimeの定義全体を取得します.
+    // 戻り値: mimeTypeおよびmime定義が返却されます.
+    //         all == true で存在しない場合は null 返却.
+    _g.$mime = function (ext, all) {
         const ret = _getMime(ext);
-        if (ret == this.undefined) {
+        // mime定義全体を取得の場合.
+        if (all == true) {
+            if (ret == undefined) {
+                return null;
+            }
+            return ret;
+        }
+        // mimeTypeのみ取得の場合.
+        if (ret == undefined) {
             return _OCTET_STREAM;
         }
         return ret.type;
@@ -173,16 +215,12 @@
     const _OCTET_STREAM = "application/octet-stream";
 
     // 対象拡張子のMimeTypeを取得.
-    let _c_mime = null;
     const _getMime = function (ext) {
         let mime = _MIME[ext];
         if (mime == undefined) {
             if (_c_mime == null) {
-                // 拡張mime定義情報(conf/mime.json)が存在する場合は取得.
-                if (_existsSync(_EXT_MIME_FILE())) {
-                    _c_mime = JSON.parse(
-                        fs.readFileSync(_EXT_MIME_FILE()).toString("utf-8"));
-                } else {
+                _c_mime = _g.$loadConf("mime.json");
+                if (_c_mime == null) {
                     _c_mime = {};
                 }
             }
@@ -203,6 +241,7 @@
     // 戻り値: true の場合処理を続行します.
     const _runFilter = async function () {
         if (!_existsSync(_FILTER_PATH())) {
+            // filterが存在しない場合
             return true;
         }
         try {
@@ -514,7 +553,7 @@
             );
             return exp;
         } catch (e) {
-            console.error("## [ERROR]_loadMtJs path: " + path);
+            console.error("## [ERROR]_loadJs path: " + path);
             throw e;
         }
     }
@@ -609,44 +648,44 @@
     const _createRequest = function (event) {
         const o = {};
         // URLパスを取得.
-        let _c_path = null;
+        let _path = null;
         o.path = function () {
             // cache.
-            if (_c_path != null) {
-                return _c_path;
+            if (_path != null) {
+                return _path;
             }
             const path = event.rawPath;
             if (path.endsWith("/")) {
-                _c_path = path + _DEF_INDEX_FILE;
+                _path = path + _DEF_INDEX_FILE;
             } else {
-                _c_path = path;
+                _path = path;
             }
-            return _c_path;
+            return _path;
         };
         // パスの拡張子を取得.
-        let _c_extends = null;
+        let _extends = null;
         o.extends = function () {
             // cache.
-            if (_c_extends != null) {
-                return _c_extends;
+            if (_extends != null) {
+                return _extends;
             }
-            _c_extends = _extends(o.path());
-            return _c_extends;
+            _extends = _extends(o.path());
+            return _extends;
         }
         // HTTPメソッドを取得.
-        let _c_method = null;
+        let _method = null;
         o.method = function () {
-            if (_c_method != null) {
-                return _c_method;
+            if (_method != null) {
+                return _method;
             }
-            _c_method = event.requestContext.http.method.toUpperCase();
-            return _c_method;
+            _method = event.requestContext.http.method.toUpperCase();
+            return _method;
         }
         // httpヘッダ.
-        let _c_headers = null;
+        let _headers = null;
         o.headers = function () {
-            if (_c_headers != null) {
-                return _c_headers;
+            if (_headers != null) {
+                return _headers;
             }
             const ret = {};
             const h = event.headers;
@@ -656,14 +695,14 @@
                     ret[k.trim().toLowerCase()] = h[k];
                 }
             }
-            _c_headers = ret;
+            _headers = ret;
             return ret;
         }
         // httpヘッダ(cookies).
-        let _c_cookies = null;
+        let _cookies = null;
         o.cookies = function () {
-            if (_c_cookies != null) {
-                return _c_cookies;
+            if (_cookies != null) {
+                return _cookies;
             }
             const ret = {};
             const c = event.cookies;
@@ -680,7 +719,7 @@
                     }
                 }
             }
-            _c_cookies = ret;
+            _cookies = ret;
             return ret;
         }
         // protocol.
@@ -696,15 +735,15 @@
             return ret;
         }
         // パラメータを取得.
-        let _c_params = null;
+        let _params = null;
         o.params = function () {
-            if (_c_params != null) {
-                return _c_params;
+            if (_params != null) {
+                return _params;
             }
             if (o.method() == "GET") {
                 // urlParams.
-                _c_params = o.urlParams();
-                return _c_params;
+                _params = o.urlParams();
+                return _params;
             }
             let body, isBinary;
             if (event.isBase64Encoded == true) {
@@ -723,22 +762,22 @@
                     body = body.toString();
                     isBinary = false;
                 }
-                _c_params = JSON.parse(body);
+                _params = JSON.parse(body);
             } else if (contentType == "application/x-www-form-urlencoded") {
                 // form-data.
                 if (isBinary) {
                     body = body.toString();
                     isBinary = false;
                 }
-                _c_params = _analysisFormParams(body);
+                _params = _analysisFormParams(body);
             } else if (!isBinary) {
                 // string(formData).
-                _c_params = _analysisFormParams(body);
+                _params = _analysisFormParams(body);
             } else {
                 // binary.
-                _c_params = {};
+                _params = {};
             }
-            return _c_params;
+            return _params;
         }
         // body情報を取得.
         o.body = function () {

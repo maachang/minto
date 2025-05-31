@@ -390,6 +390,7 @@
     // resultType ResponseBodyの型を設定します.
     //    - text: 文字列で返却します.
     //    - json: JSON形式で返却します.
+    //    - blob: blob形式で返却します.
     //    - それ以外: ArrayBuffer形式で返却します.
     //    設定しない場合は `text` になります.
     // credential AWSクレデンシャルを設定します.
@@ -787,6 +788,7 @@
         //         - [任意]resultType Body結果の変換条件を設定します.
         //           - text: 文字列で返却します.
         //           - json: jsonで返却します.
+        //           - blob: blob形式で返却します.
         //           - それ以外: ArrayBufferで返却されます.
         //           設定しない場合は `text` が設定されます.
         //        またparams.responseが設定されます.

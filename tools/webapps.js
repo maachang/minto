@@ -14,9 +14,6 @@
     // jhtml.
     const jhtml = require("./jhtml.js");
 
-    // require
-    const _REQUIRE = require;
-
     // サーバータイムアウト(30秒).
     const TIMEOUT = 30 * 1000;
 
@@ -57,10 +54,10 @@
     // lambdaライブラリ.
     const _LAMBDA_LIB_PATH = _DIR_NAME + "../lambda/src/lib/"
 
-    // [書き換え]$import処理.
+    // [書き換え]$loadLib処理.
     // name: 対象のJSファイル等を設定します.
     // 戻り値: require結果が返却されます.
-    _g.$import = function (name) {
+    _g.$loadLib = function (name) {
         name = ("" + name).trim();
         if (name[0] == "/") {
             name = name.substring(1)
@@ -68,10 +65,34 @@
         // lambda.lib 内容を参照.
         let libPath = _LAMBDA_LIB_PATH + name;
         if (mintoUtil.existsSync(libPath)) {
-            return _REQUIRE(libPath);
+            return require(libPath);
         }
         // currentディレクトリの lib 配下.
-        return _REQUIRE(mainPath + "lib/" + name);
+        return require(mainPath + "lib/" + name);
+    }
+
+    // lambdaコンフィグ.
+    const _LAMBDA_CONF_PATH = _DIR_NAME + "../lambda/src/conf/"
+
+    // [書き換え]$loadConf処理.
+    // name: 対象のjsonファイル等を設定します.
+    // 戻り値: require結果が返却されます.
+    _g.$loadConf = function (name) {
+        name = ("" + name).trim();
+        if (name[0] == "/") {
+            name = name.substring(1)
+        }
+        // lambda.conf 内容を参照.
+        let confPath = _LAMBDA_CONF_PATH + name;
+        if (mintoUtil.existsSync(confPath)) {
+            return require(confPath);
+        }
+        // currentディレクトリの conf 配下.
+        confPath = mainPath + "conf/" + name;
+        if (mintoUtil.existsSync(confPath)) {
+            return require(confPath);
+        }
+        return null;
     }
 
     // スタートアップ処理.
@@ -89,7 +110,7 @@
         bindPort = port;
 
         // サーバー生成.
-        var server = _REQUIRE("http")
+        var server = require("http")
             .createServer(function (req, res) {
                 // 全requireキャッシュのクリア
                 // (ローカルはテスト実行なので毎回削除).
@@ -152,13 +173,15 @@
     // requireキャッシュ解除.
     const _clearRequireCache = function () {
         // 通常requireキャッシュ削除.
-        const cache = _REQUIRE.cache;
+        const cache = require.cache;
         // llrtの場合cacheは存在しない.
         if (cache != undefined) {
             for (let k in cache) {
                 delete cache[k];
             }
         }
+        // lambda.index のキャッシュクリア.
+        mintoLambdaIndex.clearCacle();
     }
 
     // (http)mintoLambda実行処理.
