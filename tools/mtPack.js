@@ -119,13 +119,13 @@
     // コマンドでjsのminify実行.
     // src 対象元のファイル＋パスを設定します.
     // dest 対象先のファイル＋パスを設定します.
-    const cmdMimify = function (src, dest) {
+    // consoleOff: true の場合 console.log 関連を削除します.
+    const cmdMimify = function (src, dest, consoleOff) {
+        consoleOff = consoleOff == true
         try {
-            // minifyする.
-            // > uglifyjs <input js file> --compress drop_console=true
-            //   --mangle -o <js.min file>
             execSync("uglifyjs " + src +
-                " --compress drop_console=true --mangle -o " +
+                " --compress drop_console=" + consoleOff +
+                " --mangle -o " +
                 dest);
         } catch (e) {
             throw new Error("uglifyjs command does not exist")
