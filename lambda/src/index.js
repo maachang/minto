@@ -572,9 +572,9 @@
         }
         // cookie変換.
         let cookies = [];
-        if (response.cookie != undefined && response.cookie != null) {
-            for (let k in response.cookie) {
-                cookies = _responseCookies(response.cookie)
+        if (response.cookies != undefined && response.cookies != null) {
+            for (let k in response.cookies) {
+                cookies = _responseCookies(response.cookies)
                 break;
             }
         }
@@ -783,8 +783,7 @@
             const h = event.headers;
             if (h != undefined && h != null) {
                 for (let k in h) {
-                    // key小文字変換.
-                    ret[k.trim().toLowerCase()] = h[k];
+                    ret[k] = h[k]; // lambdaでは keyは全て小文字変換されてる.
                 }
             }
             _headers = ret;
@@ -902,7 +901,7 @@
         }
         // header情報を設定.
         const _headers = {}
-        o.header = function (key, value) {
+        o.headers = function (key, value) {
             _headers[("" + key).trim().toLowerCase()] = value;
         }
         // cookie情報.
@@ -914,7 +913,7 @@
         //         value={value: value, "Max-Age": 2592000, Secure: true}
         //       のような感じで設定します.
         const _cookies = {}
-        o.cookie = function (key, value) {
+        o.cookies = function (key, value) {
             const vparams = {};
             if (typeof (value) == "string") {
                 // 文字列から {} に変換.

@@ -469,7 +469,7 @@
         // cookieヘッダを削除.
         delete headers.cookie;
         for (let k in headers) {
-            event.headers[k] = headers[k];
+            event.headers[k.toLowerCase()] = headers[k];
         }
         // cookieヘッダをEventにセット.
         _setEventCookie(event, cookie);
