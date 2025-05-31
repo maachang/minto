@@ -351,6 +351,14 @@
             const headers = {};
             const srcEtag = [null];
             const etagCache = _httpRequestEtag(srcEtag, path);
+            // etagレスポンスが必要な場合.
+            if (srcEtag[0] != null) {
+                // etagが存在する場合はresponseヘッダにセット.
+                headers["etag"] = srcEtag[0];
+            }
+            // expire=-1を必ず設定.
+            headers["expires"] = "-1";
+
             // mimeを取得.
             let gz = false;
             let mime = _getMime(ext);
@@ -371,12 +379,6 @@
                     , isBase64Encoded: false
                     , body: ""
                 };
-            }
-            // etagレスポンスが必要な場合.
-            if (srcEtag[0] != null) {
-                // etagが存在する場合はresponseヘッダにセット.
-                headers["etag"] = srcEtag[0];
-                headers["expires"] = "-1";
             }
             // gzip圧縮済みの静的コンテンツが存在する場合.
             if (_existsSync(targetFile + _PUBLIC_CONTENTS_GZ)) {
