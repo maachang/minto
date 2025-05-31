@@ -16,7 +16,7 @@
     const { execSync } = require("child_process");
 
     // mintoUtil.
-    const mintoUtil = require("./mintoUtil.js");
+    //const mintoUtil = require("./mintoUtil.js");
 
     // jhtml.
     const jhtml = require("./jhtml.js");
@@ -26,6 +26,9 @@
 
     // mintoメイン.
     require("../lambda/src/index.js");
+
+    // コマンド名.
+    const COMMAND_NAME = "mtpk";
 
     // このファイルが存在するディレクトリ.
     // __dirname と同じ.
@@ -221,11 +224,11 @@
     const getOptions = function () {
         const ret = {};
         // jsMin.
-        ret["min"] = args.isValue("-m", "--min");
+        ret["min"] = args.isValue("-m", "--min", "--all");
         // etag.
-        ret["etag"] = args.isValue("-e", "--etag");
+        ret["etag"] = args.isValue("-e", "--etag", "--all");
         // gz.
-        ret["gz"] = args.isValue("-z", "--gz");
+        ret["gz"] = args.isValue("-z", "--gz", "--all");
         return ret;
     }
 
@@ -250,6 +253,7 @@
     const _convMinJs = function (target, opt) {
         // jsMin処理を行なう場合.
         if (opt["min"] == true) {
+            p("  => min-js: " + target);
             // minify実行.
             cmdMimify(target, target + ".min");
             // 元のファイルを削除.
@@ -316,6 +320,7 @@
                 } else if (fileName.endsWith(JHTML_NAME)) {
                     ///////////////////////
                     // jhtml を js変換.
+                    p("  => conv jhtml: " + destDirName + fileName);
                     const outJs = jhtml.convert(
                         fs.readFileSync(destDirName + fileName).toString());
                     // 元のファイル(jhtml)を削除.
@@ -350,6 +355,7 @@
                     const mime = $mime(_extends(fileName), true);
                     if (mime != null && mime["gz"] == true) {
                         // gzが有効な場合、対象ファイルをgz変換.
+                        p("  => conv gz: " + destDirName + fileName);
                         convGz(destDirName + fileName, destDirName + fileName + ".gz");
                         // 元のファイルを削除.
                         rmvFile(destDirName + fileName)
@@ -383,7 +389,7 @@
 
     // zip圧縮.
     const convZip = function () {
-        p("# zip: " + _ZIP_FILE);
+        p("# deploy zip: " + _ZIP_FILE);
         execSync("cd " + _WORK_DIR + "; zip archive -r ./");
         execSync("mv " + _WORK_DIR + "archive.zip " + _CURRENT_PATH + _ZIP_FILE);
         // workディレクトリを削除.
@@ -392,10 +398,14 @@
     }
 
     // 実行処理.
-    const exec = function () {
+    const runCommand = function () {
+        if (args.isValue("-h", "--help")) {
+            help();
+            return;
+        }
         // 実行オプションを取得.
         const opt = getOptions();
-        p("# mtpk: " + JSON.stringify(opt));
+        p("# " + COMMAND_NAME + ": " + JSON.stringify(opt));
 
         // 一時ディレクトリを削除+作成.
         removeDir(_WORK_DIR);
@@ -424,7 +434,27 @@
 
         // zip圧縮.
         convZip();
+
+        p("# exit " + COMMAND_NAME + ".");
     }
 
-    exec();
+    // help.
+    const help = function () {
+        // help表示.
+        p("Usage: " + COMMAND_NAME + " [OPTION]...");
+        p(" Deploy the minto environment to AWS lambda.");
+        p("[OPTION]:")
+        p("  -m or --min:");
+        p("    Minify your js files with uglifyjs.")
+        p("  -e or --etag:");
+        p("    Enables etag caching for contents.")
+        p("  -z or --gz:");
+        p("    The contents will be gz-compressed if gz is enabled.")
+        p("  --all:");
+        p("    Enables the min, etag, and gz options.")
+        p("");
+    }
+
+    // コマンド実行処理.
+    runCommand();
 })();

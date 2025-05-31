@@ -17,6 +17,12 @@
     // jhtml(変換前)拡張子.
     const _JHTML_SRC_EXTENSION = ".mt.html";
 
+    // etags.conf.
+    const _ETAGS_CONF_FILE = "etags.json";
+
+    // mtpkでコンテンツがgzip化されてる拡張子.
+    const _PUBLIC_CONTENTS_GZ = ".gz";
+
     // lambda main.
     exports.handler = async function (event) {
         // イベント11超えでメモリーリーク対応.警告が出るのでこれを排除.
@@ -283,9 +289,36 @@
         return _returnRunJsResponse(res, "");
     }
 
+    // 指定リクエストのetagが etags.json と一致するかチェック.
+    const _httpRequestEtag = function (outEtag, path) {
+        // 対象パスのetag情報のファイルを取得.
+        const etagConf = $loadConf(_ETAGS_CONF_FILE);
+        if (etagConf == null) {
+            // 存在しない場合.
+            return false;
+        }
+        // パスの整形.
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+        // 対象パスの定義etagを取得.
+        const srcEtag = etagConf[path];
+        if (srcEtag == undefined) {
+            // 存在しない場合.
+            return false;
+        }
+        // conf定義のetagをセット.
+        outEtag[0] = srcEtag;
+
+        // requestのetagキャッシュ確認と比較.
+        // 一致しない場合はキャッシュ扱いしない.
+        return srcEtag == _event.headers["If-None-Match"];
+    }
+
     // 静的なローカルファイルをレスポンス返却.
     const _responseStaticFile = async function (path, ext) {
         try {
+            // パスを取得.
             if (path[0] == "/") {
                 path = path.substring(1)
             }
@@ -296,28 +329,64 @@
                 // index.html or index.htm として処理する.
                 if (_existsSync(targetFile + "index.html")) {
                     targetFile += "index.html";
+                    path = "index.html";
                 } else {
                     targetFile += "index.htm";
+                    path = "index.htm";
                 }
                 ext = "html";
             }
-            // 対象のファイルが存在しない場合.
-            if (!_existsSync(targetFile)) {
-                console.warn("[warning] not static file: " + targetFile);
-                return _errorStaticResult(404, ext);
+            // etag内容の精査.
+            const headers = {};
+            const srcEtag = [null];
+            const etagCache = _httpRequestEtag(srcEtag, path);
+            if (srcEtag[0] != null) {
+                // etagが存在する場合はresponseヘッダにセット.
+                headers["etag"] = srcEtag[0];
+                headers["expires"] = "-1";
             }
-            // 拡張子に対するmimeTypeを取得.
-            let mime = _getMime(ext);
+            // mimeを取得.
             let gz = false;
+            let mime = _getMime(ext);
             if (mime == undefined) {
                 mime = _OCTET_STREAM;
             } else {
                 gz = mime.gz;
                 mime = mime.type;
             }
+            // mimeをセット.
+            headers["content-type"] = mime;
+            // etagキャッシュが一致する場合.
+            if (etagCache == true) {
+                // キャッシュ扱いで返却する.
+                return {
+                    statusCode: 304
+                    , headers: headers
+                    , isBase64Encoded: false
+                    , body: ""
+                };
+            }
+            // gzip圧縮済みの静的コンテンツが存在する場合.
+            if (_existsSync(targetFile + _PUBLIC_CONTENTS_GZ)) {
+                // gzipのfileを取得.
+                let body = fs.readFileSync(targetFile + _PUBLIC_CONTENTS_GZ);
+                headers["content-encoding"] = "gzip";
+                // 返却処理.
+                return {
+                    statusCode: 200
+                    , statusMessage: "ok"
+                    , headers: headers
+                    , isBase64Encoded: true
+                    , body: body.toString("base64")
+                };
+            }
+            // 対象のファイルが存在しない場合.
+            if (!_existsSync(targetFile)) {
+                console.warn("[warning] not static file: " + targetFile);
+                return _errorStaticResult(404, ext);
+            }
             // fileを取得.
             let body = fs.readFileSync(targetFile);
-            const headers = { "content-type": mime }
             // 圧縮処理.
             if (gz) {
                 // gzip処理.
@@ -425,6 +494,17 @@
                 // 返却情報のBodyをセット.
                 response["body"] = body;
             }
+            // レスポンスヘッダにキャッシュなしをセット.
+            const resHeader = response.headers;
+            if (resHeader["last-modified"] != undefined) {
+                delete resHeader["last-modified"];
+            }
+            if (resHeader["etag"] != undefined) {
+                delete resHeader["etag"];
+            }
+            resHeader["cache-control"] = "no-cache"
+            resHeader["pragma"] = "no-cache"
+            resHeader["expires"] = "-1"
             // 戻り条件をセット.
             return _returnRunJsResponse(response, ext);
         } catch (e) {
