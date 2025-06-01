@@ -18,6 +18,9 @@
     // jhtml(変換前)拡張子.
     const _JHTML_SRC_EXTENSION = ".mt.html";
 
+    // mime追加定義.
+    const _MIME_CONF = "mime.json";
+
     // etags.conf.
     const _ETAGS_CONF_FILE = "etags.json";
 
@@ -29,7 +32,8 @@
         // イベント11超えでメモリーリーク対応.警告が出るのでこれを排除.
         require("events").EventEmitter.defaultMaxListeners = 0;
         // 指定実行対象の末尾が[/filter]パスの場合.
-        if (isFilterPath(event.rawPath)) {
+        // .mt.js や .jhtml.js も直接指定はエラー.
+        if (isFilterPath(event.rawPath) || isMintoJs(event.path)) {
             // 直接パス実行出来ない: 403エラー.
             return _errorFilter(null);
         }
@@ -227,7 +231,7 @@
         let mime = _MIME[ext];
         if (mime == undefined) {
             if (_c_mime == null) {
-                _c_mime = _g.$loadConf("mime.json");
+                _c_mime = _g.$loadConf(_MIME_CONF);
                 if (_c_mime == null) {
                     _c_mime = {};
                 }
@@ -240,6 +244,16 @@
     // フィルターパス(/public/filter)が設定されている場合.
     const isFilterPath = function (path) {
         if (path.endsWith("/" + _FILTER_NAME)) {
+            return true;
+        }
+        return false;
+    }
+
+    // minto系実行プログラムが設定されている場合.
+    const isMintoJs = function (path) {
+        if (path.endsWith(_RUN_JS) ||
+            path.endsWith(_RUN_JHTML) ||
+            path.endsWith(_JHTML_SRC_EXTENSION)) {
             return true;
         }
         return false;
@@ -265,7 +279,7 @@
             // $responseが利用されている場合.
             if (_c_response != null) {
                 // $response内容を取得.
-                return _errorFilter(_c_response._get());
+                return _errorFilter(_c_response._$get());
             }
             return _errorFilter(null);
         } catch (e) {
@@ -491,7 +505,7 @@
             // $responseが利用されている場合.
             if (_c_response != null) {
                 // $response内容を取得.
-                response = _c_response._get();
+                response = _c_response._$get();
             } else {
                 // $responseが利用されていない場合.
                 // 空の正常結果を対象とする.
@@ -511,11 +525,14 @@
             // レスポンスヘッダにキャッシュなしをセット.
             const resHeader = response.headers;
             if (resHeader["last-modified"] != undefined) {
+                // キャッシュ返却は削除.
                 delete resHeader["last-modified"];
             }
             if (resHeader["etag"] != undefined) {
+                // キャッシュ返却は削除.
                 delete resHeader["etag"];
             }
+            // キャッシュなし設定.
             resHeader["cache-control"] = "no-cache"
             resHeader["pragma"] = "no-cache"
             resHeader["expires"] = "-1"
@@ -575,6 +592,7 @@
         // cookie変換.
         let cookies = [];
         if (response.cookies != undefined && response.cookies != null) {
+            // cookiesが１つでも存在する場合処理を行なう.
             for (let k in response.cookies) {
                 cookies = _responseCookies(response.cookies)
                 break;
@@ -791,6 +809,18 @@
             _headers = ret;
             return ret;
         }
+        // 指定keyのheaderを取得.
+        o.header = function (key) {
+            const kv = o.headers();
+            if (kv == undefined) {
+                return null;
+            }
+            const ret = kv[key];
+            if (ret == undefined) {
+                return null;
+            }
+            return ret;
+        }
         // httpヘッダ(cookies).
         let _cookies = null;
         o.cookies = function () {
@@ -813,6 +843,18 @@
                 }
             }
             _cookies = ret;
+            return ret;
+        }
+        // 指定keyのcookieを取得.
+        o.cookie = function (key) {
+            const kv = o.cookies();
+            if (kv == undefined) {
+                return null;
+            }
+            const ret = kv[key];
+            if (ret == undefined) {
+                return null;
+            }
             return ret;
         }
         // protocol.
@@ -903,8 +945,27 @@
         }
         // header情報を設定.
         const _headers = {}
-        o.headers = function (key, value) {
+        o.header = function (key, value) {
             _headers[("" + key).trim().toLowerCase()] = value;
+        }
+        // ヘッダ取得や削除関連.
+        o.headers = {
+            get: function (key) {
+                return _headers[("" + key).trim().toLowerCase()];
+            },
+            keys: function () {
+                const ret = [];
+                for (let k in _headers) {
+                    ret.push(k);
+                }
+                return ret;
+            },
+            remove: function (key) {
+                key = ("" + key).trim().toLowerCase();
+                if (_headers[key] != undefined) {
+                    delete _headers[key];
+                }
+            }
         }
         // cookie情報.
         // key 対象のキー名を設定します.
@@ -915,7 +976,7 @@
         //         value={value: value, "Max-Age": 2592000, Secure: true}
         //       のような感じで設定します.
         const _cookies = {}
-        o.cookies = function (key, value) {
+        o.cookie = function (key, value) {
             const vparams = {};
             if (typeof (value) == "string") {
                 // 文字列から {} に変換.
@@ -960,10 +1021,6 @@
             }
             _headers["content-type"] = mime;
         }
-        // contentLength.
-        o.contentLength = function (len) {
-            _headers["content-length"] = "" + len;
-        }
         // リダイレクト.
         o.redirect = function (url, params, status) {
             if (status == undefined) {
@@ -1006,7 +1063,7 @@
             o.body("");
         }
         // レスポンスパラメータを取得.
-        o._get = function () {
+        o._$get = function () {
             return {
                 status: _state,
                 message: _state_msg,

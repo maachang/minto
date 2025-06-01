@@ -119,4 +119,8 @@ const res = crypto.createHash('sha256').update(key)ret.digest(mode);
 
 ただ「全体的に AWS Lambda で利用するにおいては、かなりご完成が高い」とも言えるので、あんまり問題にならないかと思いました。
 
+興味を持ちましたら、以下ドキュメント内容を見ていただき、利用していただければ幸いです。
 
+- URL: https://github.com/maachang/minto/blob/main/docs/setup.md
+
+以上ありがとうございました。

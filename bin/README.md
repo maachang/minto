@@ -92,7 +92,62 @@ export NODE_PATH=`npm root -g`
 
 これを有効にする場合は以下コマンドで実施出来ます.
 ~~~sh
-< mtpk --min
+> mtpk -m
+もしくは
+> mtpk --min
 ~~~
 
 js の minimize を適用する事で「ファイルサイズやデプロイ速度がある程度上がる（パース分等）」と言えますが、一方でException 関連の行数がわからなくなるので、ケースバイケースであると言えます.
+
+それ以外に以下のパラメータが利用可能です.
+
+#### 静的コンテンツに対するetagのキャッシュタグを抽出.
+~~~sh
+> mtpk -e
+もしくは
+> mtpk --etag
+~~~
+
+ブラウザでキャッシュ設定を行なうhttpヘッダの `etag` がありますが、これの情報は対象コンテンツのHash値を設定する必要があります。
+
+一方で「これを毎回HTTPResponse毎」に行なうと、毎回対象コンテンツの内容を元にHash化処理が必要になり、パフォーマンスが悪くなります。
+
+これを `mtpkコマンド` で aws lambda デプロイ向けの zip 化において、情報を演算する事がこのパラメータができます。
+
+対象となるのは `public` 以下で、そこで「minto js系」以外の静的コンテンツを対象として「etag対象のHash計算」がされ、それらが AWS Lambda上で利用可能となります。
+
+#### 静的コンテンツに対するgzip化
+~~~sh
+> mtpk -z
+もしくは
+> mtpk --gz
+~~~
+
+gzip可能な `public` 以下の 静的コンテンツに対する gzip 利用で圧縮可能なコンテンツ(文字列系)に、予め gzip 化する場合に利用します。
+
+これによって例えば `xxxx.html` と言うファイルが `xxxx.html.gs` と言う名前で gzip 圧縮され、これらが gzip 圧縮されたものとして、実際の aws lambda  の url function で利用できます。
+
+またこれらは 拡張子に対して mime定義 から gzip 利用可能なものが、変換対象となります.
+- txt: text/plain
+- html or htm: text/html
+- xhtml: application/xhtml+xml
+- xml: text/xml
+- json: application/json
+- css: text/css
+- js: text/javascript
+
+現状では上記の拡張子(mime) が gzip 化され、そして `/conf/mime.json` で `gz=true` の内容が gzip 対象となります。
+
+これらを行なう事で aws lambda の url function 実行において対象が 実行時に gzip 処理が不要となるので、高速にレスポンス実行ができます.
+
+#### 全てを有効にしたい場合.
+~~~sh
+> mtpk --all
+~~~
+
+上の実行を行なう事で実際には以下のコマンドパラメータと同義になります.
+~~~sh
+> mtpk -m -e -z
+もしくは
+> mtpk --min --etag --gz
+~~~

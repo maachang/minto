@@ -1,3 +1,4 @@
 #!/bin/sh
 
-node ${MINTO_HOME}/tools/index.js
+ARGS=${*}
+node ${MINTO_HOME}/tools/index.js ${ARGS}
