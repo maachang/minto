@@ -314,6 +314,8 @@
             // 通常403返却を行なう.
             return _errorStaticResult(403, ext);
         }
+        // レスポンスヘッダにキャッシュなしをセット.
+        _setResponseNoCacheHeaders(res.headers);
         // 指定条件が存在する場合のエラー返却.
         return _returnRunJsResponse(res, ext);
     }
@@ -509,15 +511,17 @@
     // (静的ファイル)エラー返却.
     const _errorStaticResult = function (status, ext) {
         let mime = _getMime(ext);
-        let headers = null;
+        let headers = {};
         let body = ""
         if (mime == undefined) {
-            headers = { "content-type": "text/plain" };
+            headers["content-type"] = "text/plain";
             body = "error: " + status;
         } else {
-            headers = { "content-type": mime.type };
+            headers["content-type"] = mime.type;
             body = "";
         }
+        // ノーキャッシュヘッダをセット.
+        _setResponseNoCacheHeaders(headers);
         return {
             statusCode: status | 0
             , headers: headers
@@ -581,19 +585,7 @@
                 response["body"] = body;
             }
             // レスポンスヘッダにキャッシュなしをセット.
-            const resHeader = response.headers;
-            if (resHeader["last-modified"] != undefined) {
-                // キャッシュ返却は削除.
-                delete resHeader["last-modified"];
-            }
-            if (resHeader["etag"] != undefined) {
-                // キャッシュ返却は削除.
-                delete resHeader["etag"];
-            }
-            // キャッシュなし設定.
-            resHeader["cache-control"] = "no-cache"
-            resHeader["pragma"] = "no-cache"
-            resHeader["expires"] = "-1"
+            _setResponseNoCacheHeaders(response.headers);
             // 戻り条件をセット.
             return _returnRunJsResponse(response, ext);
         } catch (e) {
@@ -601,6 +593,23 @@
             console.error("[error]runJs: " + path, e);
             return _errorRunJs(e, ext);
         }
+    }
+
+    // レスポンスヘッダにキャッシュなしをセット.
+    const _setResponseNoCacheHeaders = function (resHeader) {
+        // レスポンスヘッダにキャッシュなしをセット.
+        if (resHeader["last-modified"] != undefined) {
+            // キャッシュ返却は削除.
+            delete resHeader["last-modified"];
+        }
+        if (resHeader["etag"] != undefined) {
+            // キャッシュ返却は削除.
+            delete resHeader["etag"];
+        }
+        // キャッシュなし設定.
+        resHeader["cache-control"] = "no-cache";
+        resHeader["pragma"] = "no-cache";
+        resHeader["expires"] = "-1";
     }
 
     // jsやjhtmlなどの実行戻り条件をセット.
@@ -699,6 +708,8 @@
             headers["content-type"] = "application/json";
             body = "{status: " + status + ", message: '" + message + "'}";
         }
+        // ノーキャッシュヘッダをセット.
+        _setResponseNoCacheHeaders(headers);
         return {
             statusCode: status
             , statusMessage: message
