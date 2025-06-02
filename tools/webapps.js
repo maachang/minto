@@ -23,6 +23,9 @@
     // デフォルトサーバーバインドポート.
     const _DEF_BIND_PORT = 3210;
 
+    // Body最大バイト数(1MB).
+    const _MAX_BODY_LENGTH = 0x100000;
+
     // Webサーバ名.
     const _SERVER_NAME = "minto";
 
@@ -490,9 +493,9 @@
         return event;
     }
 
-    // lfuで返却されたresult内容を送信.
+    // minto(lambda index.js)で返却されたresult内容を送信.
     // res Httpレスポンスを設定します.
-    // result lfuで返却されたresultを設定します.
+    // result index.jsで返却されたresultを設定します.
     const _resultMinto = function (res, result) {
         // result = {
         //   statusCode: number,
@@ -509,6 +512,17 @@
             result.body = Buffer.from(
                 result.body, "base64");
             result.isBase64Encoded = false;
+        } else if (typeof (result.body) == "string") {
+            // 文字列をバイナリ変換.
+            result.body = Buffer.from(result.body);
+        }
+        // bodyバイナリ長が 1MB を超えた場合.
+        if (result.body.length >= _MAX_BODY_LENGTH) {
+            // Body制限エラーを返却.
+            _sendResponse(res, 500, "The response body exceeds 1MB.",
+                { "content-type": "text/plain" }, {},
+                "The response body exceeds 1MB.");
+            return;
         }
         // 送信処理.
         _sendResponse(res, result.statusCode,

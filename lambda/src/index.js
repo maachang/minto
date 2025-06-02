@@ -31,22 +31,27 @@
     exports.handler = async function (event) {
         // イベント11超えでメモリーリーク対応.警告が出るのでこれを排除.
         require("events").EventEmitter.defaultMaxListeners = 0;
-        // 指定実行対象の末尾が[/filter]パスの場合.
-        // .mt.js や .jhtml.js も直接指定はエラー.
-        if (isFilterPath(event.rawPath) || isMintoJs(event.path)) {
-            // 直接パス実行出来ない: 403エラー.
-            return _errorFilter(null);
-        }
         // 初期化処理.
         _event = event;
         _c_request = null;
         _c_response = null;
+        // ファイル拡張子を取得.
+        const ext = _extends(event.rawPath);
+        // 指定実行対象の末尾が[/filter]パスの場合.
+        // .mt.js や .jhtml.js も直接指定はエラー.
+        if (isFilterPath(event.rawPath) || isMintoJs(event.rawPath)) {
+            // 直接パス実行出来ない: 403エラー.
+            return _errorStaticResult(403, ext);
+        }
         // filter実行.
-        const resFilter = await _runFilter();
-        // filter実行を通過した場合.
-        if (resFilter == true) {
-            // ファイルパスを取得.
-            const ext = _extends(event.rawPath);
+        let resultFilter = true;
+        // フィルターパスが存在する場合.
+        if (_existsSync(_FILTER_PATH())) {
+            // フィルタ実行.
+            resultFilter = await _runFilter(ext);
+        }
+        // filter実行を通過した場合 or filterなし.
+        if (resultFilter == true) {
             // 静的ファイルの場合.
             if (ext != "jhtml" && ext != "") {
                 // 静的ファイルの返却.
@@ -58,7 +63,8 @@
             return await _responseRunJs(
                 event.rawPath, ext);
         }
-        return resFilter;
+        // filter返却.
+        return resultFilter;
     }
 
     // [default]Baseパス名.
@@ -260,12 +266,9 @@
     }
 
     // filter実行ファイル(リクエスト単位で必ず実行される動的js).
+    // ext 対象パスの拡張子を設定します.
     // 戻り値: true の場合処理を続行します.
-    const _runFilter = async function () {
-        if (!_existsSync(_FILTER_PATH())) {
-            // filterが存在しない場合
-            return true;
-        }
+    const _runFilter = async function (ext) {
         try {
             // 実行jsを取得.
             let runJs = _loadJs(_FILTER_PATH());
@@ -279,9 +282,10 @@
             // $responseが利用されている場合.
             if (_c_response != null) {
                 // $response内容を取得.
-                return _errorFilter(_c_response._$get());
+                return _resultFilter(_c_response._$get(), ext);
             }
-            return _errorFilter(null);
+            // filter実行エラー返却.
+            return _resultFilter(null, ext);
         } catch (e) {
             // エラーログ出力.
             console.error("[error]runFilter: ", e);
@@ -289,20 +293,15 @@
         }
     }
 
-    // filterエラー生成.
-    const _errorFilter = function (res) {
+    // filter実行結果を生成.
+    const _resultFilter = function (res, ext) {
         if (res == undefined || res == null) {
-            return {
-                statusCode: 403
-                , statusMessage: "Forbidden"
-                , headers: {
-                    "content-type": "application/json"
-                }
-                , isBase64Encoded: false
-                , body: "{\"status\": 403, \"message\": \"Forbidden\"}"
-            }
+            // filter実行で処理中断の場合は
+            // 通常403返却を行なう.
+            return _errorStaticResult(403, ext);
         }
-        return _returnRunJsResponse(res, "");
+        // 指定条件が存在する場合のエラー返却.
+        return _returnRunJsResponse(res, ext);
     }
 
     // 指定リクエストのetagが etags.json と一致するかチェック.
@@ -629,6 +628,7 @@
         let status = 500;
         let message = "Internal Server Error";
         if (e instanceof HttpError) {
+            // HttpErrorオブジェクトの場合.
             status = e.getStatus();
             message = e.getMessage();
         }
@@ -638,7 +638,7 @@
             body = "" + message;
         } else {
             headers["content-type"] = "application/json";
-            body = "{status: 500, message: '" + message + "'}";
+            body = "{status: " + status + ", message: '" + message + "'}";
         }
         return {
             statusCode: status
