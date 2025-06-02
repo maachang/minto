@@ -4,6 +4,9 @@
 (function (_g) {
     'use strict';
 
+    // events.
+    const events = require("events");
+
     // 初期化条件.
     let _event = null;
     let _c_request = null;
@@ -27,44 +30,55 @@
     // mtpkでコンテンツがgzip化されてる拡張子.
     const _PUBLIC_CONTENTS_GZ = ".gz";
 
+    // icon.
+    const _FAVICON_ICO = "favicon.ico";
+
     // lambda main.
     exports.handler = async function (event) {
         // イベント11超えでメモリーリーク対応.警告が出るのでこれを排除.
-        require("events").EventEmitter.defaultMaxListeners = 0;
+        events.EventEmitter.defaultMaxListeners = 0;
         // 初期化処理.
         _event = event;
         _c_request = null;
         _c_response = null;
+        // favicon.icoを取得.
+        if (event.rawPath.endsWith("/" + _FAVICON_ICO)) {
+            // favicon.ico はフィルタを介さないで返却.
+            return faviconIco();
+        }
         // ファイル拡張子を取得.
-        const ext = _extends(event.rawPath);
+        let ext = _extends(event.rawPath);
         // 指定実行対象の末尾が[/filter]パスの場合.
         // .mt.js や .jhtml.js も直接指定はエラー.
         if (isFilterPath(event.rawPath) || isMintoJs(event.rawPath)) {
+            // 拡張子がjsの場合(mintoJs).
+            if (ext == "js") {
+                ext = "";
+            }
             // 直接パス実行出来ない: 403エラー.
             return _errorStaticResult(403, ext);
         }
         // filter実行.
-        let resultFilter = true;
         // フィルターパスが存在する場合.
         if (_existsSync(_FILTER_PATH())) {
             // フィルタ実行.
-            resultFilter = await _runFilter(ext);
-        }
-        // filter実行を通過した場合 or filterなし.
-        if (resultFilter == true) {
-            // 静的ファイルの場合.
-            if (ext != "jhtml" && ext != "") {
-                // 静的ファイルの返却.
-                return await _responseStaticFile(
-                    event.rawPath, ext);
+            const resultFilter = await _runFilter(ext);
+            // filter実行を通過した場合 or filterなし.
+            if (resultFilter != true) {
+                // filter返却.
+                return resultFilter;
             }
-            // 動的ファイル処理.
-            // 動的ファイルの実行.
-            return await _responseRunJs(
+        }
+        // 静的ファイルの場合.
+        if (ext != "jhtml" && ext != "") {
+            // 静的ファイルの返却.
+            return await _responseStaticFile(
                 event.rawPath, ext);
         }
-        // filter返却.
-        return resultFilter;
+        // 動的ファイル処理.
+        // 動的ファイルの実行.
+        return await _responseRunJs(
+            event.rawPath, ext);
     }
 
     // [default]Baseパス名.
@@ -336,6 +350,53 @@
         return srcEtag == _event.headers["if-none-match"];
     }
 
+    // icon情報を取得.
+    const faviconIco = function () {
+        const headers = { "expires": "-1" };
+        const srcEtag = [null];
+        // etagを取得.
+        const etagCache = _httpRequestEtag(srcEtag, "/" + _FAVICON_ICO);
+        // etagレスポンスが必要な場合.
+        if (srcEtag[0] != null) {
+            // etagが存在する場合はresponseヘッダにセット.
+            headers["etag"] = srcEtag[0];
+        }
+        // iconのmimeセット.
+        headers["content-type"] = "image/vnd.microsoft.icon";
+        // etagキャッシュが一致する場合.
+        if (etagCache == true) {
+            // キャッシュ扱いで返却する.
+            return {
+                statusCode: 304
+                , headers: headers
+                , isBase64Encoded: false
+                , body: ""
+            };
+        }
+        // ファイルパスをセット.
+        const targetFile = _PUBLIC_PATH() + _FAVICON_ICO;
+        // faviconIcoが存在しない.
+        if (!_existsSync(targetFile)) {
+            // 404エラー.
+            return {
+                statusCode: 404
+                , headers: headers
+                , isBase64Encoded: false
+                , body: ""
+            };
+        }
+        // iconを取得.
+        const body = fs.readFileSync(targetFile);
+        // 返却処理.
+        return {
+            statusCode: 200
+            , statusMessage: "ok"
+            , headers: headers
+            , isBase64Encoded: true
+            , body: body.toString("base64")
+        };
+    }
+
     // 静的なローカルファイルをレスポンス返却.
     const _responseStaticFile = async function (path, ext) {
         try {
@@ -361,7 +422,7 @@
             }
 
             // etag内容の精査.
-            const headers = {};
+            const headers = { "expires": "-1" };
             const srcEtag = [null];
             const etagCache = _httpRequestEtag(srcEtag, path);
             // etagレスポンスが必要な場合.
@@ -369,8 +430,6 @@
                 // etagが存在する場合はresponseヘッダにセット.
                 headers["etag"] = srcEtag[0];
             }
-            // expire=-1を必ず設定.
-            headers["expires"] = "-1";
 
             // mimeを取得.
             let gz = false;
@@ -453,7 +512,7 @@
         let headers = null;
         let body = ""
         if (mime == undefined) {
-            headers = { "content-type": "text" };
+            headers = { "content-type": "text/plain" };
             body = "error: " + status;
         } else {
             headers = { "content-type": mime.type };

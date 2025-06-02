@@ -285,6 +285,14 @@
     // res Httpレスポンスを設定します.
     // body HttpリクエストBodyが存在する場合設定します.
     const _runLambdaIndex = async function (req, res, body) {
+        if (body != null && body != undefined && body.length > _MAX_BODY_LENGTH) {
+            // Body制限エラーを返却.
+            console.error("[error]The request body exceeds 1MB.");
+            _sendResponse(res, 500, "The request body exceeds 1MB.",
+                { "content-type": "text/plain" }, {},
+                "The request body exceeds 1MB.");
+            return;
+        }
         try {
             // mintoMainLambda実行処理.
             const result = await mintoLambdaIndex.handler(
@@ -519,6 +527,7 @@
         // bodyバイナリ長が 1MB を超えた場合.
         if (result.body.length >= _MAX_BODY_LENGTH) {
             // Body制限エラーを返却.
+            console.error("[error]The response body exceeds 1MB.");
             _sendResponse(res, 500, "The response body exceeds 1MB.",
                 { "content-type": "text/plain" }, {},
                 "The response body exceeds 1MB.");
