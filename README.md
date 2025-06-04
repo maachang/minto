@@ -121,6 +121,7 @@ const res = crypto.createHash('sha256').update(key)ret.digest(mode);
 
 興味を持ちましたら、以下ドキュメント内容を見ていただき、利用していただければ幸いです。
 
-- URL: https://github.com/maachang/minto/blob/main/docs/setup.md
+- セットアップ: https://github.com/maachang/minto/blob/main/docs/setup.md
+- Howto: https://github.com/maachang/minto/blob/main/docs/howto.md
 
 以上ありがとうございました。
