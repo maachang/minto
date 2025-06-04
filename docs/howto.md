@@ -684,7 +684,7 @@ const s3client = $loadLib("s3client.js");
     <%
         const list = await s3client.create().listObjects({Bucket: "testBucket", KeyOnly: true});
         const len = list.length;
-        for(let i = 0; i < len; i ++>) {
+        for(let i = 0; i < len; i ++) {
     %>
     <div>・${list[i]}</div>
     <%}%>
