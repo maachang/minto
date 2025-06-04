@@ -694,7 +694,7 @@ const s3client = $loadLib("s3client.js");
 
 こんな感じで実装する事で `S3:testBucket` 配下のキーリストを描画する動的HTMLコンテンツが作成出来ます。
 
-またローカル環境では jhtml 利用が出来ますが、一方で lambda 実行では利用できないため、そのままこのファイルを AWS Console から衆道で Lambda のファイル登録しても、動作しません。
+またローカル環境では jhtml 利用が出来ますが、一方で lambda 実行では利用できないため、そのままこのファイルを AWS Console から手動で Lambda のファイル登録しても、動作しません。
 
 Lambda 上でjhtmlを利用可能にするには `mtpkコマンド` で lambda デプロイ形式(zip変換)したものを Lambda に zip アップロードする事で利用することが出来ます。
 
