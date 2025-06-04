@@ -696,11 +696,11 @@ const s3client = $loadLib("s3client.js");
 
 またローカル環境では jhtml 利用が出来ますが、一方で lambda 実行では利用できないため、そのままこのファイルを AWS Console から手動で Lambda のファイル登録しても、動作しません。
 
-Lambda 上でjhtmlを利用可能にするには `mtpkコマンド` で lambda デプロイ形式(zip変換)したものを Lambda に zip アップロードする事で利用することが出来ます。
+Lambda 上でjhtmlを利用可能にするには [mtpkコマンド](https://github.com/maachang/minto/blob/main/bin/README.md#mtpk-%E3%82%B3%E3%83%9E%E3%83%B3%E3%83%89) で lambda デプロイ形式(zip変換)したものを Lambda に zip アップロードする事で jhtmlを利用すること(実際にはjsに変換される)が出来ます。
 
-## 説明終了
+## EOF
 
-一旦ローカル環境での開発説明は終了となります。
+一旦ローカル環境での開発関連説明は終了となります。
 
 
 

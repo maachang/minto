@@ -166,4 +166,9 @@ minto
 
 ## EOF
 
-一旦セットアップについての説明は以上となります。
+一旦ローカルセットアップについての説明は以上となります。
+
+よろしければ
+- Howto: https://github.com/maachang/minto/blob/main/docs/howto.md
+
+で、実際の利用方法を元にお試しをお願いいたします。
