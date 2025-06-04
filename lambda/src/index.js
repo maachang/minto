@@ -7,6 +7,9 @@
     // events.
     const events = require("events");
 
+    // path.
+    const pathLib = require("path");
+
     // 初期化条件.
     let _event = null;
     let _c_request = null;
@@ -82,7 +85,7 @@
     }
 
     // [default]Baseパス名.
-    const _BASE_PATH = require("path").resolve() + "/";
+    const _BASE_PATH = pathLib.resolve() + "/";
     let _basePath = _BASE_PATH;
 
     // baseパスを設定.
@@ -144,7 +147,11 @@
             name = name.substring(1)
         }
         // "/lib" 以下のファイルを require.
-        return require(_LIBRARY_PATH() + name)
+        if (_existsSync(_LIBRARY_PATH() + name)) {
+            return require(_LIBRARY_PATH() + name)
+        }
+        // 取得できない場合はエラー.
+        throw new Error("Failed to load lib: " + name);
     }
 
     // コンフィグJSONをロード処理.
@@ -159,16 +166,35 @@
             // "/conf" 以下のファイルを require.
             return require(_CONF_PATH() + name)
         }
+        // 取得できない場合は null.
         return null;
     }
 
     // requireの代替え対応.
     // 基本 mt.jsや jhtml.js の場合、require が利用できない.
     // そのための代替え手段として $require を利用する.
+    // また利用方法として "fs" などの 標準ライブラリ利用か
+    // lambda index.js が存在するパスをカレントパスとした
+    // 位置から require 対象の js ファイルを設定します.
     // name: requireで設定する文字列を設定します.
     // 戻り値: require結果が返却されます.
     _g.$require = function (name) {
-        return require(name);
+        name = ("" + name).trim();
+        // カレントパスからのアクセスを行なう.
+        if (name.indexOf("/") != -1) {
+            if (name[0] == "/") {
+                name = name.substring(1);
+            }
+            // カレントパスを絶対パスとして取得.
+            if (_existsSync(_BASE_PATH + name)) {
+                return require(_BASE_PATH + name);
+            }
+            // 取得できない場合はエラー.
+            throw new Error("Failed to load require: " + name);
+        } else {
+            // 標準ライブラリ.
+            return require(name);
+        }
     }
 
     // requestを取得.
@@ -314,8 +340,6 @@
             // 通常403返却を行なう.
             return _errorStaticResult(403, ext);
         }
-        // レスポンスヘッダにキャッシュなしをセット.
-        _setResponseNoCacheHeaders(res.headers);
         // 指定条件が存在する場合のエラー返却.
         return _returnRunJsResponse(res, ext);
     }
@@ -584,8 +608,6 @@
                 // 返却情報のBodyをセット.
                 response["body"] = body;
             }
-            // レスポンスヘッダにキャッシュなしをセット.
-            _setResponseNoCacheHeaders(response.headers);
             // 戻り条件をセット.
             return _returnRunJsResponse(response, ext);
         } catch (e) {
@@ -655,6 +677,10 @@
         } else {
             // 空文字をセット.
             body = "";
+            // コンテンツタイプが設定されていない場合.
+            if (contentType == undefined) {
+                response.headers["content-type"] = "text/plain";
+            }
         }
         // cookie変換.
         let cookies = [];
@@ -665,6 +691,8 @@
                 break;
             }
         }
+        // キャッシュなしを設定.
+        _setResponseNoCacheHeaders(response.headers);
         // status message が設定されていない場合.
         if (response.message == undefined || response.message == null ||
             response.message == "") {
@@ -706,7 +734,8 @@
             body = "" + message;
         } else {
             headers["content-type"] = "application/json";
-            body = "{status: " + status + ", message: '" + message + "'}";
+            body = "{status: " + status + ", message: '"
+                + message + "'}";
         }
         // ノーキャッシュヘッダをセット.
         _setResponseNoCacheHeaders(headers);
@@ -721,23 +750,18 @@
 
     // サーバーサイドで実行処理.
     const _loadJs = function (path, convFunc) {
-        try {
-            // ファイルを読み込む.
-            let jsBody = fs.readFileSync(path).toString();
-            // convFuncが設定されている場合.
-            if (convFunc != undefined && convFunc != null) {
-                // 変換処理.
-                jsBody = convFunc(jsBody);
-            }
-            const exp = {};
-            Function("exports", "module", jsBody)(
-                exp, { exports: exp }
-            );
-            return exp;
-        } catch (e) {
-            console.error("## [ERROR]_loadJs path: " + path);
-            throw e;
+        // ファイルを読み込む.
+        let jsBody = fs.readFileSync(path).toString();
+        // convFuncが設定されている場合.
+        if (convFunc != undefined && convFunc != null) {
+            // 変換処理.
+            jsBody = convFunc(jsBody);
         }
+        const exp = {};
+        Function("exports", "module", jsBody)(
+            exp, { exports: exp }
+        );
+        return exp;
     }
 
     // formパラメータ解析.
@@ -1029,6 +1053,9 @@
                     ret.push(k);
                 }
                 return ret;
+            },
+            put(key, value) {
+                o.header(key, value);
             },
             remove: function (key) {
                 key = ("" + key).trim().toLowerCase();

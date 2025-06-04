@@ -1,7 +1,7 @@
 //////////////////////////////////////////////////////////
 // jhtml.js
 // jhtml = javascript html template.
-// jhtmlファイルを mt.js ファイルに変換する.
+// jhtmlファイルを jhtml.js ファイルに変換する.
 //
 // - jhtml組み込みタグ説明.
 //   <% ... %>

@@ -71,7 +71,12 @@
             return require(libPath);
         }
         // currentディレクトリの lib 配下.
-        return require(mainPath + "lib/" + name);
+        libPath = mainPath + "lib/" + name;
+        if (mintoUtil.existsSync(libPath)) {
+            return require(libPath);
+        }
+        // 取得できない場合はエラー.
+        throw new Error("Failed to load lib: " + name);
     }
 
     // lambdaコンフィグ.
@@ -95,7 +100,44 @@
         if (mintoUtil.existsSync(confPath)) {
             return require(confPath);
         }
+        // 取得失敗の場合は null.
         return null;
+    }
+
+    // lambdaカレント.
+    const _LAMBDA_CURRENT_PATH = _DIR_NAME + "../lambda/src/"
+
+    // requireの代替え対応.
+    // 基本 mt.jsや jhtml.js の場合、require が利用できない.
+    // そのための代替え手段として $require を利用する.
+    // また利用方法として "fs" などの 標準ライブラリ利用か
+    // lambda index.js が存在するパスをカレントパスとした
+    // 位置から require 対象の js ファイルを設定します.
+    // name: requireで設定する文字列を設定します.
+    // 戻り値: require結果が返却されます.
+    _g.$require = function (name) {
+        name = ("" + name).trim();
+        // カレントパスからのアクセスを行なう.
+        if (name.indexOf("/") != -1) {
+            if (name[0] == "/") {
+                name = name.substring(1)
+            }
+            // lambdaカレントパス以下を対象とする.
+            let currentPath = _LAMBDA_CURRENT_PATH + name;
+            if (mintoUtil.existsSync(currentPath)) {
+                return require(currentPath);
+            }
+            // currentディレクトリの直下.
+            currentPath = mainPath + name;
+            if (mintoUtil.existsSync(currentPath)) {
+                return require(currentPath);
+            }
+            // 取得できない場合はエラー.
+            throw new Error("Failed to load require: " + name);
+        } else {
+            // 標準ライブラリ.
+            return require(name);
+        }
     }
 
     // スタートアップ処理.
