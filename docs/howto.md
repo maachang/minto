@@ -521,13 +521,13 @@ HTTPレスポンスヘッダ情報をカスタム設定する場合に利用し�
 
 HTTPレスポンスヘッダに対する確認や削除対応を行います.
 
-- $response().headers().get(string)
+- $response().headers().get(string)<br>
   第一引数にヘッダーキーを設定する事でHTTPヘッダ要素が返却されます。
-- $response().headers().keys()
+- $response().headers().keys()<br>
   設定されているHTTPヘッダキー(Array)が返却されます。
-- $response().headers().put(string, string)
+- $response().headers().put(string, string)<br>
   $response().header(string, string) と同じ。
-- $response().headers().remove(string)
+- $response().headers().remove(string)<br>
   第一引数にヘッダーキーを設定する事で、対象のKey内容を削除します。
 
 ### 4. $response().cookie(string, object)
