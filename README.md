@@ -123,5 +123,6 @@ const res = crypto.createHash('sha256').update(key)ret.digest(mode);
 
 - セットアップ: https://github.com/maachang/minto/blob/main/docs/setup.md
 - Howto: https://github.com/maachang/minto/blob/main/docs/howto.md
+- lambda デプロイ: https://github.com/maachang/minto/blob/main/docs/lambda.md
 
 以上ありがとうございました。
