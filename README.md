@@ -2,7 +2,7 @@
 
 ## 概要
 
-mintoとは(minimize to=最小化する)を目指す、AWS Lambda での URL Function(関数URL)での「超軽量実行環境」を作るためのプロジェクトです。
+mintoとは(minimize to=最小化する)を目指す、AWS Lambda での URL Function(関数URL)での「超軽量実行環境」をcjsで作るためのプロジェクトです。
 
 またminto では llrt(Low Latency Runtime) のnodejs の代替えランタイムを利用して実行することを「前提」としたものです。
 - llrt: https://github.com/awslabs/llrt

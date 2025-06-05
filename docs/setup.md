@@ -160,9 +160,25 @@ minto
 あと `検証環境=nodejs` の一方で、基本実行するランタイム= `llrt` なので「多少の互換性の問題」があるので、これらを含めての「実行テスト」が「AWS Lambda 上」で必要となるので、注意が必要です。
 
 またこれら「AWS Lambda 上での検証」においては
-- jsMin
+- jsMin: `mtpk -m or --min`
 
 は無効でテストをする事をおすすめします（エラー箇所がわからないので）
+
+ただ `jsのminimize` ことで実行速度も上がるようです。
+- コールドスタート.
+> Duration: 52.68 ms Billed Duration: 109 ms Memory Size: 128 MB Max Memory Used: 23 MB
+
+- ウォームスタート.
+> (１回目): Duration: 8.97 ms Billed Duration: 9 ms Memory Size: 128 MB Max Memory Used: 24 MB
+
+> (２回目): Duration: 1.57 ms Billed Duration: 2 ms Memory Size: 128 MB Max Memory Used: 24 MB 
+
+本番利用の場合は `jsのminimize` を有効にする事で速度アップが行えます。
+
+あと、実際にローカル環境で作成した minto 環境を AWS Lambda でデプロイ実行する場合は
+- https://github.com/maachang/minto/blob/main/docs/lambda.md
+
+このドキュメントを参考にしてください。
 
 ## EOF
 
