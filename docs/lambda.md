@@ -1,8 +1,8 @@
-# AWS Lambda に llrtランタイムを利用可能な環境を構築
+# AWS Lambda に llrtランタイムを利用可能な環境を構築 + minto デプロイ
 
 このドキュメントでは、AWS Lambda上で URL Function を有効にした nodejs 環境の代わりに `LLRT (Low Latency Runtime)` ランタイムを用いた、nodejs 環境で動作する URL Function 環境を構築する + ローカル minto 実装の deploy 方法までの説明を行います。
 
-## ① AWS Lambda に LLRT ランタイム実行環境を構築する
+## ① まずAWS Lambda に LLRT ランタイム実行環境を構築する
 
 通常だと AWS Lambda => 関数 から「関数を作成」で `nodejs` の関数を作成する形となりますが、今回説明する `LLRT` 環境の AWS Lambda 関数を作成する場合は、作成方法が複雑になります。
 
@@ -45,7 +45,7 @@ URL: https://github.com/awslabs/llrt/releases
 
 これで AWS Lambd の関数を作成します。
 
-- 関数名: 任意で（例: testLLRT)
+- 関数名: 任意で（例: mintoTest)
 - ランタイム: Amazon Linux 2023
 - アーキテクチャー: arm64
 - それ以外(任意)
@@ -73,10 +73,10 @@ URL: https://github.com/awslabs/llrt/releases
 ## ⑥ LLRT Lambdaに URL Function などの環境設定.
 
 Lambda関数のメニュー
-> `コード テスト モニタリング 設定 エイリアス バージョン`
+> `・コード ・テスト ・モニタリング ・設定 ・エイリアス ・バージョン`
 
 ここで「設定 => 一般設定 => 編集」で 
-  - 説明 - オプション： 任意
+  - 説明 - オプション： 必要な場合入れておくとわかりやすいです
   - メモリ: 128MB
   - エフェメラルストレージ: 512MB
   - タイムアウト: 15分 00秒
@@ -110,3 +110,6 @@ Lambda関数のメニュー
 
 あとは先程の URL Function で発行されたURLを、ブラウザで読み込む事で、確認が出来ます。
 
+## EOF
+
+これで minto ローカル閑居内容を lambda 化することが出来ました。

@@ -121,8 +121,11 @@ const res = crypto.createHash('sha256').update(key)ret.digest(mode);
 
 興味を持ちましたら、以下ドキュメント内容を見ていただき、利用していただければ幸いです。
 
-- セットアップ: https://github.com/maachang/minto/blob/main/docs/setup.md
-- Howto: https://github.com/maachang/minto/blob/main/docs/howto.md
-- lambda デプロイ: https://github.com/maachang/minto/blob/main/docs/lambda.md
+- ローカル環境:
+  - mintoをローカル環境にセットアップ: https://github.com/maachang/minto/blob/main/docs/setup.md
+  - mintoのローカル開発説明(Howto): https://github.com/maachang/minto/blob/main/docs/howto.md
+
+- Lambda生成 デプロイ
+  - mintoのローカル環境の AWS Lambda デプロイ: https://github.com/maachang/minto/blob/main/docs/lambda.md
 
 以上ありがとうございました。
