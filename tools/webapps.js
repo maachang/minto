@@ -14,6 +14,9 @@
     // jhtml.
     const jhtml = require("./jhtml.js");
 
+    // 乱数.
+    const xor128 = require("./xor128.js");
+
     // サーバータイムアウト(30秒).
     const TIMEOUT = 30 * 1000;
 
@@ -28,6 +31,9 @@
 
     // Webサーバ名.
     const _SERVER_NAME = "minto";
+
+    // uuid生成乱数オブジェクト.
+    const _UUID_RAND_GEN = xor128.random();
 
     // メインパス.
     let mainPath = null;
@@ -140,6 +146,19 @@
         }
     }
 
+    // ユニークリクエストID.
+    let _uniqueRequestId = null;
+
+    // Lambda実行時のユニークリクエストIDを取得.
+    // 戻り値: ユニークなUUIDが返却されます.
+    _g.$requestId = function () {
+        // 未設定の場合はUUIDをセット.
+        if (_uniqueRequestId == null) {
+            _uniqueRequestId = _UUID_RAND_GEN.getUUID();
+        }
+        return _uniqueRequestId;
+    }
+
     // スタートアップ処理.
     // path メインパスを設定します.
     // port bindPortを設定します.
@@ -226,7 +245,9 @@
             }
         }
         // lambda.index のキャッシュクリア.
-        mintoLambdaIndex.clearCacle();
+        mintoLambdaIndex.clearCache();
+        // ユニークリクエストIDをクリア
+        _uniqueRequestId = null;
     }
 
     // (http)mintoLambda実行処理.
@@ -338,7 +359,7 @@
         try {
             // mintoMainLambda実行処理.
             const result = await mintoLambdaIndex.handler(
-                _getEvent(req, body));
+                _getEvent(req, body), {});
             // mintoMainLambdaから返却された内容をresponse.
             _resultMinto(res, result);
         } catch (err) {

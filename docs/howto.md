@@ -255,6 +255,24 @@ const s3client = $loadLib("s3client.js")
 
 ただ、通常は `nodejs標準モジュール利用以外` で利用する事は無いので、気にする必要は無いかも知れないです。
 
+### 4. $requestId
+
+AWS Lambda では URL Function のリクエスト毎に ユニークなUUIDが設定されます。
+- context.awsRequestId
+
+この値が返却されます。
+
+また、ローカル実行でも同様にリクエスト単位でのユニークなUUIDが返却されます。
+
+### 5. $getNow
+
+このメソッドでは
+- Date.now() + "_" + nanoTime(process.hrtime())
+
+が返却されます。
+
+これらと `$requestId()` を合わせる事で、強固なユニークな文字列が作成出来ます。
+
 ## ⑤minto用 $request 説明
 
 minto環境では 以下HTTPに対応するため

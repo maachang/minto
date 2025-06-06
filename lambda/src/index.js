@@ -12,6 +12,7 @@
 
     // 初期化条件.
     let _event = null;
+    let _context = null;
     let _c_request = null;
     let _c_response = null;
     let _c_mime = null;
@@ -37,13 +38,15 @@
     const _FAVICON_ICO = "favicon.ico";
 
     // lambda main.
-    exports.handler = async function (event) {
+    exports.handler = async function (event, context) {
         // イベント11超えでメモリーリーク対応.警告が出るのでこれを排除.
         events.EventEmitter.defaultMaxListeners = 0;
         // 初期化処理.
         _event = event;
+        _context = context;
         _c_request = null;
         _c_response = null;
+
         // favicon.icoを取得.
         if (event.rawPath.endsWith("/" + _FAVICON_ICO)) {
             // favicon.ico はフィルタを介さないで返却.
@@ -130,12 +133,27 @@
     }
 
     // キャッシュ関連情報をクリア(local実行専用).
-    exports.clearCacle = function () {
+    exports.clearCache = function () {
         _event = null;
+        _context = null;
         _c_request = null;
         _c_response = null;
         _c_mime = null;
         _c_etag = null;
+    }
+
+    // 実行中のミリ秒 + ナノ秒を取得.
+    _g.$getNow = function () {
+        const d = Date.now().toString(16);
+        const b = process.hrtime()[1].toString(16);
+        return "0x" + d +
+            "00000000".substring(b.length) + b;
+    }
+
+    // Lambda実行時のユニークリクエストIDを取得.
+    // 戻り値: ユニークなUUIDが返却されます.
+    _g.$requestId = function () {
+        return _context["awsRequestId"];
     }
 
     // ライブラリをロード処理.
