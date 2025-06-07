@@ -142,12 +142,26 @@
         _c_etag = null;
     }
 
+    // _toString64の文字列.
+    const _CODE64 = "+/0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+    // 数字を _CODE64 で表現.
+    const _toString64 = function (num) {
+        let a;
+        let ret = "";
+        while (num != 0) {
+            a = num & 0x03f;
+            num = (num - a) / 64;
+            ret = _CODE64[a] + ret;
+        }
+        return ret;
+    }
+
     // 実行中のミリ秒 + ナノ秒を取得.
     _g.$getNow = function () {
-        const d = Date.now().toString(16);
-        const b = process.hrtime()[1].toString(16);
-        return "0x" + d +
-            "00000000".substring(b.length) + b;
+        const d = _toString64(Date.now());
+        const b = _toString64(process.hrtime()[1]);
+        return d + "00000".substring(b.length) + b;
     }
 
     // Lambda実行時のユニークリクエストIDを取得.
