@@ -143,7 +143,7 @@
     }
 
     // _toString64の文字列.
-    const _CODE64 = "+/0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    const _CODE64 = "+0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~";
 
     // 数字を _CODE64 で表現.
     const _toString64 = function (num) {
