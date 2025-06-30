@@ -294,7 +294,22 @@
         response, region, bucket, key, body, credential) {
         if (typeof (key) != "string" || key.length == 0) {
             throw new Error("key does not exist.");
+        }
+        // keyがディレクトリ生成の場合.
+        if (key.endsWith("/")) {
+            if (body == undefined || body == null) {
+                // 空Bodyをセット.
+                body = "";
+            } else {
+                // Bodyが存在する場合はエラー返却.
+                throw new Error(
+                    "The specified S3:PutObject has a Body set " +
+                    "for the specified directory(" +
+                    "bucket: " + buclet + " key: " + key);
+            }
         } else if (body == undefined || body == null) {
+            // ディレクトリ生成以外でBodyが設定されていない場合.
+            // エラー返却する.
             throw new Error("body does not exist.");
         }
         // bucket, keyをencodeURL.
@@ -314,6 +329,7 @@
         }
         // ヘッダ追加.
         headers["content-length"] = "" + body.length;
+        // スタンダード生成.
         headers["x-amz-storage-class"] = PUT_S3_MODE_STANDARD;
 
         // putの場合パスの先頭にbucket名をセットする.
@@ -690,6 +706,8 @@
         // params {Bucket: string, Prefix: string}
         //         - [必須]Bucket 対象のbucket名を設定します.
         //         - [必須]Prefix 対象のprefix名を設定します.
+        //         - [任意]noError これを設定した場合エラーが発生した場合
+        //                         警告ログ出力と戻り値 null が返却されます.
         //         - [任意]MaxKeys 最大取得数を設定します(1 - 1000).
         //         - [任意]Delimiter 取得階層の範囲を設定します.
         //                          "/" を設定した場合は指定prefixが"/"の階層の範囲を
@@ -730,6 +748,12 @@
                 options, credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                if (params.noError == true) {
+                    console.warn("status: " + response.status +
+                        " getList bucket: " + bucket +
+                        " prefix: " + params.Prefix);
+                    return null;
+                }
                 throw new Error("[ERROR: " + response.status +
                     "]getList bucket: " + bucket +
                     " prefix: " + params.Prefix);
@@ -759,6 +783,8 @@
         // params {Bucket: string, Key: string}
         //         - [必須]Bucket 対象のbucket名を設定します.
         //         - [必須]Key 対象のkey名を設定します.
+        //         - [任意]noError これを設定した場合エラーが発生した場合
+        //                         警告ログ出力と戻り値 null が返却されます.
         //        またparams.responseが設定されます.
         //        {status: number, headers: object}
         // 戻り値: {lastModified: string, size: number}
@@ -774,6 +800,12 @@
                 response, region, bucket, params.Key, credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                if (params.noError == true) {
+                    console.warn("status: " + response.status +
+                        " headObject bucket: " + bucket +
+                        " key: " + params.Key);
+                    return null;
+                }
                 throw new Error("[ERROR: " + response.status +
                     "]headObject bucket: " + bucket + " key: " +
                     params.Key);
@@ -785,6 +817,8 @@
         // params {Bucket: string, Key: string, resultType: string}
         //         - [必須]Bucket 対象のbucket名を設定します.
         //         - [必須]Key 対象のkey名を設定します.
+        //         - [任意]noError これを設定した場合エラーが発生した場合
+        //                         警告ログ出力と戻り値 null が返却されます.
         //         - [任意]resultType Body結果の変換条件を設定します.
         //           - text: 文字列で返却します.
         //           - json: jsonで返却します.
@@ -805,6 +839,12 @@
                 credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                if (params.noError == true) {
+                    console.warn("status: " + response.status +
+                        " getObject bucket: " + bucket +
+                        " key: " + params.Key);
+                    return null;
+                }
                 throw new Error("[ERROR: " + response.status +
                     "]getObject bucket: " + bucket + " key: " +
                     params.Key);
@@ -817,6 +857,8 @@
         //         - [必須]Bucket 対象のbucket名を設定します.
         //         - [必須]Key 対象のkey名を設定します.
         //         - [必須]Body 対象のbody情報を設定します.
+        //         - [任意]noError これを設定した場合エラーが発生した場合
+        //                         警告ログ出力と戻り値 false が返却されます.
         //        またparams.responseが設定されます.
         //        {status: number, headers: object}
         // 戻り値: trueの場合、正常に設定されました.
@@ -831,6 +873,12 @@
                 params.Body, credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                if (params.noError == true) {
+                    console.warn("status: " + response.status +
+                        " putObject bucket: " + bucket +
+                        " key: " + params.Key);
+                    return false;
+                }
                 throw new Error("[ERROR: " + response.status +
                     "]putObject bucket: " + bucket + " key: " +
                     params.Key);
@@ -838,10 +886,53 @@
             return response.status <= 299;
         }
 
+        // 条件を指定してS3Bucket+Keyのディレクトリを生成.
+        // params {Bucket: string, Key: string}
+        //         - [必須]Bucket 対象のbucket名を設定します.
+        //         - [必須]Key 対象のkey名を設定します.
+        //         - [任意]noError これを設定した場合エラーが発生した場合
+        //                         警告ログ出力と戻り値 false が返却されます.
+        //        またparams.responseが設定されます.
+        //        {status: number, headers: object}
+        // 戻り値: trueの場合、正常に設定されました.
+        ret.createDirectory = async function (params) {
+            // バケット名を取得.
+            const bucket = _getBucketName(params.Bucket);
+            // bodyをput.
+            const response = {};
+            params.response = response;
+            // keyをディレクトリ形式にセット.
+            let key = params.Key;
+            if (!key.endsWith("/")) {
+                // 終端に / をセット.
+                key = key + "/";
+            }
+            // putObjectのkeyの最後に / を設定して
+            // Body＝０バイトを設定で、ディレクトリ作成が行える.
+            await putObject(
+                response, region, bucket, key,
+                undefined, credential);
+            // レスポンスステータスが400以上の場合エラー.
+            if (response.status >= 400) {
+                if (params.noError == true) {
+                    console.warn("status: " + response.status +
+                        " createDirectory bucket: " + bucket +
+                        " key: " + key);
+                    return false;
+                }
+                throw new Error("[ERROR: " + response.status +
+                    "]createDirectory bucket: " + bucket + " key: " +
+                    key);
+            }
+            return response.status <= 299;
+        }
+
         // 条件を指定してS3Bucket+Key情報を削除.
         // params {Bucket: string, Key: string}
-        //         - Bucket 対象のbucket名を設定します.
-        //         - Key 対象のkey名を設定します.
+        //         - [必須]Bucket 対象のbucket名を設定します.
+        //         - [必須:Key 対象のkey名を設定します.
+        //         - [任意]noError これを設定した場合エラーが発生した場合
+        //                         警告ログ出力と戻り値 false が返却されます.
         //        またparams.responseが設定されます.
         //        {status: number, headers: object}
         // 戻り値: trueの場合、正常に設定されました.
@@ -855,9 +946,53 @@
                 response, region, bucket, params.Key, credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                if (params.noError == true) {
+                    console.warn("status: " + response.status +
+                        " deleteObject bucket: " + bucket +
+                        " key: " + params.Key);
+                    return false;
+                }
                 throw new Error("[ERROR: " + response.status +
                     "]deleteObject bucket: " + bucket + " key: " +
                     params.Key + " message: " + Buffer.from(result).toString());
+            }
+            return response.status <= 299;
+        }
+
+        // 条件を指定してS3Bucket+Keyのディレクトリを削除.
+        // params {Bucket: string, Key: string}
+        //         - [必須]Bucket 対象のbucket名を設定します.
+        //         - [必須]Key 対象のディレクトリ名を設定します.
+        //         - [任意]noError これを設定した場合エラーが発生した場合
+        //                         警告ログ出力と戻り値 false が返却されます.
+        //        またparams.responseが設定されます.
+        //        {status: number, headers: object}
+        // 戻り値: trueの場合、正常に設定されました.
+        ret.deleteDirectory = async function (params) {
+            // バケット名を取得.
+            const bucket = _getBucketName(params.Bucket);
+            // オブジェクト取得.
+            const response = {};
+            params.response = response;
+            // keyをディレクトリ形式にセット.
+            let key = params.Key;
+            if (!key.endsWith("/")) {
+                // 終端に / をセット.
+                key = key + "/";
+            }
+            const result = await deleteObject(
+                response, region, bucket, key, credential);
+            // レスポンスステータスが400以上の場合エラー.
+            if (response.status >= 400) {
+                if (params.noError == true) {
+                    console.warn("status: " + response.status +
+                        " deleteDirectory bucket: " + bucket +
+                        " key: " + key);
+                    return false;
+                }
+                throw new Error("[ERROR: " + response.status +
+                    "]deleteDirectory bucket: " + bucket + " key: " +
+                    Key + " message: " + Buffer.from(result).toString());
             }
             return response.status <= 299;
         }

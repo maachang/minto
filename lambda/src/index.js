@@ -143,7 +143,8 @@
     }
 
     // _toString64の文字列.
-    const _CODE64 = "+0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~";
+    const _CODE64 =
+        "+0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~";
 
     // 数字を _CODE64 で表現.
     const _toString64 = function (num) {
@@ -154,6 +155,10 @@
             num = (num - a) / 64;
             ret = _CODE64[a] + ret;
         }
+        // num == 0 の場合.
+        if (ret == "") {
+            ret = "+";
+        }
         return ret;
     }
 
@@ -161,7 +166,8 @@
     _g.$getNow = function () {
         const d = _toString64(Date.now());
         const b = _toString64(process.hrtime()[1]);
-        return d + "00000".substring(b.length) + b;
+        return "++++++++".substring(d.length) + d
+            + "+++++".substring(b.length) + b;
     }
 
     // Lambda実行時のユニークリクエストIDを取得.

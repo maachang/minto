@@ -34,6 +34,4 @@
         }
         return value.substring(0, p);
     }
-
-
 })();

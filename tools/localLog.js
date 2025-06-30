@@ -191,11 +191,6 @@
                 // [{yyyy-MM-dd hh:mm:ss.sss}] {mode}{message}\n
                 , "[" + ymdhms + "] " + mode + msg + "\n"
             );
-            // ファイル追加出力(非同期実行).
-            //fs.appendFile(baseLogOutFile + "." + ymd + LOG_EXTENTION
-            //, "[" + ymdhms + "] " + mode + msg + "\n"
-            //, function () { }
-            //);
         }
         // 元のコンソール出力
         _g[SRC_CONSOLE_NAME][srcMode](msg);
