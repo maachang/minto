@@ -669,7 +669,7 @@
         // bodyが存在して、header.content-lengthが存在しない.
         if (options.body != undefined && options.headers["content-length"] == undefined &&
             options.headers["transfer-encoding"] != "chunked") {
-            options.headers["content-length"] = Buffer.byteLength(body);
+            options.headers["content-length"] = Buffer.byteLength(options.body);
         }
         // hostにhttps://が存在する場合は除外.
         if (options["directURL"] != true && host.startsWith("https://")) {
@@ -690,7 +690,7 @@
             // fetch実行.
             const response = await fetch(url, options);
             // optionにresponseをセット.
-            if (options.response != undefined && options.respons != null) {
+            if (options.response != undefined && options.response != null) {
                 // statusとheaderをセット.
                 options.response["status"] = response["status"];
                 options.response["headers"] = response["headers"]
