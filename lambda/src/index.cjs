@@ -122,7 +122,7 @@
     }
 
     // jhtml変換実行Function.
-    // jhtmlをこのindex.js 内で処理する場合に変換処理
+    // jhtmlをこのindex.cjs 内で処理する場合に変換処理
     //  > jhtml.convert
     // を設定します.
     let _jhtmlConvFunc = null;
@@ -212,7 +212,7 @@
     // 基本 mt.jsや jhtml.js の場合、require が利用できない.
     // そのための代替え手段として $require を利用する.
     // また利用方法として "fs" などの 標準ライブラリ利用か
-    // lambda index.js が存在するパスをカレントパスとした
+    // lambda index.cjs が存在するパスをカレントパスとした
     // 位置から require 対象の js ファイルを設定します.
     // name: requireで設定する文字列を設定します.
     // 戻り値: require結果が返却されます.

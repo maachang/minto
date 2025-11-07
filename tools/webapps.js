@@ -6,7 +6,7 @@
     'use strict';
 
     // mintoメイン.
-    const mintoLambdaIndex = require("../lambda/src/index.js");
+    const mintoLambdaIndex = require("../lambda/src/index.cjs");
 
     // mintoUtil.
     const mintoUtil = require("./mintoUtil.js");
@@ -117,7 +117,7 @@
     // 基本 mt.jsや jhtml.js の場合、require が利用できない.
     // そのための代替え手段として $require を利用する.
     // また利用方法として "fs" などの 標準ライブラリ利用か
-    // lambda index.js が存在するパスをカレントパスとした
+    // lambda index.cjs が存在するパスをカレントパスとした
     // 位置から require 対象の js ファイルを設定します.
     // name: requireで設定する文字列を設定します.
     // 戻り値: require結果が返却されます.
@@ -564,9 +564,9 @@
         return event;
     }
 
-    // minto(lambda index.js)で返却されたresult内容を送信.
+    // minto(lambda index.cjs)で返却されたresult内容を送信.
     // res Httpレスポンスを設定します.
-    // result index.jsで返却されたresultを設定します.
+    // result index.cjsで返却されたresultを設定します.
     const _resultMinto = function (res, result) {
         // result = {
         //   statusCode: number,

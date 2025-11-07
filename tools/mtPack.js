@@ -25,7 +25,7 @@
     const args = require("./args.js");
 
     // mintoメイン.
-    require("../lambda/src/index.js");
+    require("../lambda/src/index.cjs");
 
     // コマンド名.
     const COMMAND_NAME = "mtpk";
@@ -364,9 +364,9 @@
             });
     }
 
-    // lambda index.js をPack処理.
-    const packIndexJs = function (opt) {
-        const fileName = "index.js";
+    // lambda index.cjs をPack処理.
+    const packIndexCjs = function (opt) {
+        const fileName = "index.cjs";
         const indexDirName = _LAMBDA_INDEX_PATH;
         const destDirName = _WORK_DIR;
         p("# copy: " + indexDirName + fileName);
@@ -426,8 +426,8 @@
         // currentPublic 処理.
         packPublic(opt, _CURRENT_PUBLIC_PATH);
 
-        // index.js 処理.
-        packIndexJs(opt);
+        // index.cjs 処理.
+        packIndexCjs(opt);
 
         // etags.json を出力.
         outputFileHashConf(opt);

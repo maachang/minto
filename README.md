@@ -85,7 +85,7 @@ hogehoge	"testHogehoge"
 
 ## mintoの機能と利用想定
 
-正直言えば「minto=index.js １つのファイルがあれば、URL Function の実行対応ができる」レベルのもので「機能としては、最低限」レベルのWebアプリ機能しか実装されていないです。
+正直言えば「minto=index.cjs １つのファイルがあれば、URL Function の実行対応ができる」レベルのもので「機能としては、最低限」レベルのWebアプリ機能しか実装されていないです。
 
 一応
 - mt.js
@@ -122,8 +122,8 @@ const res = crypto.createHash('sha256').update(key)ret.digest(mode);
 興味を持ちましたら、以下ドキュメント内容を見ていただき、利用していただければ幸いです。
 
 - ローカル環境:
-  - mintoをローカル環境にセットアップ: https://github.com/maachang/minto/blob/main/docs/setup.md
-  - mintoのローカル開発説明(Howto): https://github.com/maachang/minto/blob/main/docs/howto.md
+  - mintoをローカル環境セットアップ: https://github.com/maachang/minto/blob/main/docs/setup.md
+  - mintoのローカル開発説明: https://github.com/maachang/minto/blob/main/docs/howto.md
 
 - Lambda生成 デプロイ
   - mintoのローカル環境の AWS Lambda デプロイ: https://github.com/maachang/minto/blob/main/docs/lambda.md

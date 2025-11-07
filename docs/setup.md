@@ -1,8 +1,12 @@
 # minto ローカル検証環境セットアップ説明
 
-mintoはそもそも AWS Lambad 上の URL Function を利用するけど、この場合「非常に開発環境として適していない」です。
+mintoは AWS Lambad 上の URL Function を利用するけど、この場合「非常に開発環境として適していない」と言えます。
 
-なので「mintoではローカル環境での検証環境」を提供する事で、開発効率よい環境を提供します。
+その理由は「aws lambda に毎回ソースコードをアップロード or lambda のエディターで変更 + deploy」が必要だからです。
+
+また「ログを見る ＝ cloud watch ＝ 見づらい」わけで、正直面倒だと言えます。
+
+一方で「mintoではローカル環境での検証環境」が提供されており、これにより開発効率よい環境を提供します。
 
 そのためここではローカル環境に検証用の環境を構築する説明を行います。
 
@@ -185,6 +189,6 @@ minto
 一旦ローカルセットアップについての説明は以上となります。
 
 よろしければ
-- Howto: https://github.com/maachang/minto/blob/main/docs/howto.md
+- howto: https://github.com/maachang/minto/blob/main/docs/howto.md
 
 で、実際の利用方法を元にお試しをお願いいたします。

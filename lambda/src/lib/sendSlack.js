@@ -7,8 +7,8 @@
     'use strict';
 
     // signatureVersion4.
-    // requestだけを利用する.
-    const asv4 = require("./asv4.js");
+    // request(httpClient)だけを利用する.
+    const { request } = require("./asv4.js");
 
     // SlackAppメッセージ送信URL.
     const BASE_URI = "slack.com";
@@ -51,15 +51,15 @@
         }
         // body送信.
         option.method = "POST";
-        // tokenセット.
-        body.token = access_token;
         // resultType = json返却.
         option["resultType"] = "json";
         // json変換(text).
         option.body = JSON.stringify(body);
         option.headers["content-type"] = "application/json";
+        // tokenセット.
+        body.token = access_token;
         option.headers["authorization"] = "Bearer " + access_token;
-        const res = await asv4.request(BASE_URI, BASE_API_PATH + rpcMethod, option);
+        const res = await request(BASE_URI, BASE_API_PATH + rpcMethod, option);
         // 処理結果を返却.
         return res;
     }
@@ -92,7 +92,7 @@
             message = n;
         }
         // 基本送信データ.
-        options.text = message;
+        options["text"] = message;
         // 送信先チャンネルが設定されている場合は、optionsにセット.
         if (typeof (channel) == "string" && channel.length > 0) {
             // slackチャンネル名に変換.
@@ -132,7 +132,7 @@
         return sendPost("chat.postMessage", access_token, json);
     }
 
-    // 複数メッセージ送信用オブジェクトを作成.
+    // 複数メッセージを１度のSlack送信メッセージで作成する用のオブジェクトを取得.
     // ここでは、１つのSlackメッセージ出力で、複数の処理結果のメッセージを送信する
     // ためのオブジェクトを生成します.
     // channel [必須]:送信先チャンネルを設定します.

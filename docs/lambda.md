@@ -68,9 +68,40 @@ URL: https://github.com/awslabs/llrt/releases
 
 これによって LLRTランタイムの起動環境が作成できました。
 
+次に llrt動作確認のための対応を行います。
+
+## ⑥ Amazon Linux 2023 に対する ハンドラを設定して「llrtの動作確認」を行う
+
+次にやることとして以下を行います。
+1. Amazon Linux 2023 用に作られた内容を全削除(実行できるかの確認用).
+2. Amazon Linux 2023 のハンドラの設定(index.handler)
+3. ソースコード(index.cjs)を作成して、試しに実行してみる
+
+まず、設定したllrtが実行できるかの確認として、一旦「Amazon Linux 2023で作成された sh や md ファイルなど」を削除します。
+
+削除が終わったら「コード」の「ランタイム設定」を編集して
+- ハンドラ = index.handler
+
+に設定します。
+
+最後に「コード」で index.cjs ファイルを作成して、以下の内容をコピペします。
+~~~js
+exports.handler = async function(event, context, callback) {
+    console.log("hogehoge")
+    return;
+}
+~~~
+
+そしてこれを実行して「テスト」で「デフォルト条件に名前をつけて保存」で作成して「テスト実行」を行います.
+~~~sh
+Status: Succeeded
+~~~
+
+これが出たら「llrtのレイヤーが実行出来てる事」が確認出来ました。
+
 次より 環境設定を行い URL Function を有効して、サーバレス環境を作成します。
 
-## ⑥ LLRT Lambdaに URL Function などの環境設定.
+## ⑦ LLRT Lambdaに URL Function などの環境設定.
 
 Lambda関数のメニュー
 > `・コード ・テスト ・モニタリング ・設定 ・エイリアス ・バージョン`
@@ -96,7 +127,7 @@ Lambda関数のメニュー
 
 の設定ができました。
 
-## ⑦ ローカルminto でデプロイした zip をアップロードする
+## ⑧ ローカルminto でデプロイした zip をアップロードする
 
 Lambda関数のメニュー
 > `コード テスト モニタリング 設定 エイリアス バージョン`
