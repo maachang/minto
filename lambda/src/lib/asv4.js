@@ -374,6 +374,39 @@
         return sigV4;
     }
 
+    // AWSシグニチャーをセット.
+    // service AWSサービス名を設定します.
+    // credential AWSクレデンシャルを設定します.
+    //   {accessKey: string, secretAccessKey: string,
+    //     sessionToken: string}
+    //   - accessKey アクセスキーが返却されます.
+    //   - secretAccessKey シークレットアクセスキーが返却されます.
+    //   - sessionToken セッショントークンが返却されます.
+    //                  状況によっては空の場合があります.
+    // region 対象のリージョンを設定します.
+    // key 取得対象のS3キー名を設定します.
+    // method HTTPメソッドを設定します.
+    // headers リクエストヘッダを設定します.
+    // queryParams クエリーパラメータを設定します.
+    // payload リクエストBodyを設定します.
+    const setSignature = function (
+        service, credential, region, key, method, headers, queryParams,
+        payload) {
+        // クレデンシャルが指定されてない場合は
+        // 環境変数からクレデンシャルを取得.
+        if (credential == undefined || credential == null) {
+            credential = getCredential();
+        }
+
+        // シグニチャーV4を作成.
+        let s1 = signatureV4Step1(
+            credential, method, key, queryParams, headers, payload);
+        let s2 = signatureV4Step2(
+            headers, region, service, s1);
+        signatureV4Final(
+            headers, credential, region, service, s1, s2);
+    }
+
     /////////////////////
     // queryParam系処理.
     /////////////////////
@@ -615,6 +648,23 @@
         return ret;
     }
 
+    // body返却関数.
+    const _resultBody = function (type, response) {
+        // 戻りBody型に応じて返却.
+        if (type == "text") {
+            // text.
+            return response.text();
+        } else if (type == "json") {
+            // json.
+            return response.json();
+        } else if (type == "blob") {
+            // blob.
+            return response.blob();
+        }
+        // binary.
+        return response.arrayBuffer();
+    }
+
     // httpClient.
     // host 対象のホスト名を設定します.
     // path 対象のパス名を設定します.
@@ -630,22 +680,37 @@
     //    HTTPS接続先ポート番号を設定します.
     //  - urlParams(string or object)
     //    urlパラメータを設定します.
+    //  - directURL(boolean)
+    //    trueを設定した場合、host = URLになります.
     //  - response({})
     //    レスポンスステータスやレスポンスヘッダが返却されます.
+    //    ただしresponseが設定されない場合はこの値が戻り値として
+    //    返却されます.
     //    response = {
     //      status: number,
     //      headers: object,
+    //      body: async function(type)
     //    }
-    //  - directURL(boolean)
-    //    trueを設定した場合、host = URLになります.
     //  - resultType(string)
     //    戻りBodyの型を設定します.
     //    - text: 文字列で返却します.
     //    - json: JSON形式で返却します.
     //    - blob: blob形式で返却します.
-    //    - それ以外: ArrayBuffer形式で返却します.
-    //    設定しない場合は `text` になります.
-    // 戻り値: bodyが返却されます.
+    //    - 設定なしかそれ以外: async function(type) のBody取得用関数が返却されます.
+    // 戻り値: 以下の条件に従った内容が返却されます.
+    //  - response({})が設定された場合.
+    //    - resultType(string) が設定された場合.
+    //      対象resultTypeに合わせたBodyが返却されます.
+    //      有効な条件が設定されない場合は、Body取得用の async function(type) が返却されます.
+    //    - resultType(string) が設定されていない場合.
+    //       Body取得用の async function(type) が返却されます.
+    //  - response({})が設定されない場合.
+    //    戻り値: {
+    //      status: number,
+    //      headers: object,
+    //      body: async function(type)
+    //    }
+    //    の内容が返却されます.
     const request = async function (host, path, options) {
         // optionsが存在しない場合.
         if (options == undefined || options == null) {
@@ -676,9 +741,10 @@
             host = host.substring(8).trim();
         }
         // 戻りBody型を取得.
-        let resultType = options["resultMode"];
+        let resultType = options["resultType"];
         if (resultType == undefined || resultType == null) {
-            resultType = "text";
+            // 存在しない場合はnull設定.
+            resultType = null;
         }
         // クロスアカウント許可.
         options["mode"] = "cors";
@@ -689,25 +755,36 @@
                 host : getUrl(host, path, port, urlParams);
             // fetch実行.
             const response = await fetch(url, options);
-            // optionにresponseをセット.
-            if (options.response != undefined && options.response != null) {
-                // statusとheaderをセット.
-                options.response["status"] = response["status"];
-                options.response["headers"] = response["headers"]
+            // options.responseが存在しない場合.
+            if (options.response == undefined || options.response == null) {
+                // resultTypeが存在する場合は処理結果のbody情報返却.
+                if (resultType != null) {
+                    // resultTypeが設定されている場合はそのまま返却.
+                    return _resultBody(resultType, response);
+                }
+                // fetch結果のresponseを返却する.
+                return {
+                    status: response["status"],
+                    headers: response["headers"],
+                    body: function (type) {
+                        return _resultBody(type, response);
+                    }
+                }
             }
-            // 戻りBody型に応じて返却.
-            if (resultType == "text") {
-                // text.
-                return await response.text();
-            } else if (resultType == "json") {
-                // json.
-                return await response.json();
-            } else if (resultType == "blob") {
-                // blob.
-                return await response.blob();
+            // optionにresponseが存在する場合はfetch結果のresponseをセット.
+            options.response["status"] = response["status"];
+            options.response["headers"] = response["headers"];
+            options.response["body"] = function (type) {
+                return _resultBody(type, response);
+            };
+            // resultType に対する情報返却.
+            if (resultType != null) {
+                // resultTypeが設定されている場合はそのまま返却.
+                return _resultBody(resultType, response);
             }
-            // binary.
-            return await response.arrayBuffer();
+            // resultTypeが設定されていない場合は
+            // body取得関数を返却.
+            return options.response["body"];
         } catch (err) {
             console.error(
                 "[error]medhot: " + options.method +
@@ -725,6 +802,7 @@
     exports.signatureV4Step1 = signatureV4Step1;
     exports.signatureV4Step2 = signatureV4Step2;
     exports.signatureV4Final = signatureV4Final;
+    exports.setSignature = setSignature;
     exports.signatureV4QueryParameter = signatureV4QueryParameter;
     exports.request = request;
 

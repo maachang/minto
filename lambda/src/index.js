@@ -10,14 +10,6 @@
     // path.
     const pathLib = require("path");
 
-    // 初期化条件.
-    let _event = null;
-    let _context = null;
-    let _c_request = null;
-    let _c_response = null;
-    let _c_mime = null;
-    let _c_etag = null;
-
     // 実行対象拡張子(js).
     const _RUN_JS = ".mt.js";
     // 実行対象拡張子(jhtml-js).
@@ -37,6 +29,14 @@
     // icon.
     const _FAVICON_ICO = "favicon.ico";
 
+    // 初期化条件.
+    let _event = null;          // lambda handler(event) パラメータ.
+    let _context = null;        // lambda handler(context) パラメータ.
+    let _c_request = null;      // minto の requestオブジェクト.
+    let _c_response = null;     // minto の responseオブジェクト.
+    let _c_mime = null;         // minto の mimeオブジェクト.
+    let _c_etag = null;         // minto の etag情報.
+
     // lambda main.
     exports.handler = async function (event, context) {
         // イベント11超えでメモリーリーク対応.警告が出るのでこれを排除.
@@ -46,6 +46,8 @@
         _context = context;
         _c_request = null;
         _c_response = null;
+        _c_mime = null;
+        _c_etag = null;
 
         // favicon.icoを取得.
         if (event.rawPath.endsWith("/" + _FAVICON_ICO)) {
@@ -69,21 +71,19 @@
         if (_existsSync(_FILTER_PATH())) {
             // フィルタ実行.
             const resultFilter = await _runFilter(ext);
-            // filter実行を通過した場合 or filterなし.
+            // filterで処理を終了返却する場合.
             if (resultFilter != true) {
-                // filter返却.
                 return resultFilter;
             }
         }
-        // 静的ファイルの場合.
-        if (ext != "jhtml" && ext != "") {
-            // 静的ファイルの返却.
-            return await _responseStaticFile(
+        // 動的ファイル処理.
+        if (ext == "jhtml" || ext == "") {
+            // 動的ファイルの実行.
+            return await _responseRunJs(
                 event.rawPath, ext);
         }
-        // 動的ファイル処理.
-        // 動的ファイルの実行.
-        return await _responseRunJs(
+        // 静的ファイルの返却.
+        return await _responseStaticFile(
             event.rawPath, ext);
     }
 
@@ -235,7 +235,7 @@
         }
     }
 
-    // requestを取得.
+    // requestオブジェクトを取得.
     // 戻り値: request情報が返却されます.
     _g.$request = function () {
         if (_c_request == null) {
@@ -244,7 +244,7 @@
         return _c_request;
     }
 
-    // responseを取得.
+    // responseオブジェクトを取得.
     // 戻り値: response情報が返却されます.
     _g.$response = function () {
         if (_c_response == null) {
@@ -278,6 +278,7 @@
     const fs = require("fs");
 
     // mime(最低限).
+    // よく使うと思われるものをピックアップ.
     const _MIME = {
         /** プレーンテキスト. **/
         txt: { type: "text/plain", gz: true }
@@ -308,6 +309,7 @@
     }
 
     // [mimeType]octet-stream.
+    // ダウンロードファイルはこれを利用する.
     const _OCTET_STREAM = "application/octet-stream";
 
     // 対象拡張子のMimeTypeを取得.

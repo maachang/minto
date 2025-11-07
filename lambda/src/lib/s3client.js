@@ -15,9 +15,6 @@
 (function () {
     'use strict'
 
-    // [ENV]メインS3Bucket名.
-    const ENV_MAIN_S3_BUCKET = "MAIN_S3_BUCKET";
-
     // signatureVersion4.
     const asv4 = require("./asv4.js");
 
@@ -29,6 +26,18 @@
 
     // 署名URLExpireデフォルト値(1分).
     const PRE_SIGNED_URL_EXPIRE = 60;
+
+    // [ENV]メインS3Bucket名.
+    let ENV_MAIN_S3_BUCKET = "MAIN_S3_BUCKET";
+
+    // デフォルトメインS3Bucket環境変数名を設定.
+    const setEnvMainS3Bucket = function (name) {
+        if (typeof (name) == "string") {
+            ENV_MAIN_S3_BUCKET = name;
+        } else {
+            ENV_MAIN_S3_BUCKET = "MAIN_S3_BUCKET";
+        }
+    }
 
     // リージョンを取得.
     // region 対象のregionを設定します.
@@ -79,38 +88,6 @@
         return {
             "Host": host
         };
-    }
-
-    // AWSシグニチャーをセット.
-    // credential AWSクレデンシャルを設定します.
-    //   {accessKey: string, secretAccessKey: string,
-    //     sessionToken: string}
-    //   - accessKey アクセスキーが返却されます.
-    //   - secretAccessKey シークレットアクセスキーが返却されます.
-    //   - sessionToken セッショントークンが返却されます.
-    //                  状況によっては空の場合があります.
-    // region 対象のリージョンを設定します.
-    // key 取得対象のS3キー名を設定します.
-    // method HTTPメソッドを設定します.
-    // headers リクエストヘッダを設定します.
-    // queryParams クエリーパラメータを設定します.
-    // payload リクエストBodyを設定します.
-    const setSignature = function (
-        credential, region, key, method, headers, queryParams,
-        payload) {
-        // クレデンシャルが指定されてない場合は
-        // 環境変数からクレデンシャルを取得.
-        if (credential == undefined || credential == null) {
-            credential = asv4.getCredential();
-        }
-
-        // シグニチャーV4を作成.
-        let s1 = asv4.signatureV4Step1(
-            credential, method, key, queryParams, headers, payload);
-        let s2 = asv4.signatureV4Step2(
-            headers, region, SERVICE, s1);
-        asv4.signatureV4Final(
-            headers, credential, region, SERVICE, s1, s2);
     }
 
     // xmlの１つの要素内容を取得.
@@ -336,7 +313,7 @@
         key = bucket + "/" + key;
 
         // シグニチャーを生成.
-        setSignature(credential, region, key,
+        asv4.setSignature(SERVICE, credential, region, key,
             method, headers, null, body);
 
         // HTTPSクライアント問い合わせ.
@@ -383,7 +360,8 @@
         }
 
         // シグニチャーを生成.
-        setSignature(credential, region, key, method, headers);
+        asv4.setSignature(
+            SERVICE, credential, region, key, method, headers);
 
         // HTTPSクライアント問い合わせ.
         await asv4.request(host, key, {
@@ -435,7 +413,8 @@
         }
 
         // シグニチャーを生成.
-        setSignature(credential, region, key, method, headers);
+        asv4.setSignature(
+            SERVICE, credential, region, key, method, headers);
 
         // HTTPSクライアント問い合わせ.
         return await asv4.request(host, key, {
@@ -481,7 +460,8 @@
         }
 
         // シグニチャーを生成.
-        setSignature(credential, region, key, method, headers);
+        asv4.setSignature(
+            SERVICE, credential, region, key, method, headers);
 
         // HTTPSクライアント問い合わせ.
         await asv4.request(host, key, {
@@ -584,7 +564,8 @@
         //urlParams = asv4.convertUrlParams(urlParams);
 
         // シグニチャーを生成.
-        setSignature(credential, region, "", method, headers,
+        asv4.setSignature(
+            SERVICE, credential, region, "", method, headers,
             urlParams);
 
         // HTTPSクライアント問い合わせ.
@@ -746,17 +727,19 @@
             const ret = await listObject(
                 response, region, bucket, params.Prefix,
                 options, credential);
+
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                const msg = await response.body("text");
                 if (params.noError == true) {
                     console.warn("status: " + response.status +
-                        " getList bucket: " + bucket +
-                        " prefix: " + params.Prefix);
+                        " listObjects bucket: " + bucket +
+                        " prefix: " + params.Prefix + " message: " + msg);
                     return null;
                 }
                 throw new Error("[ERROR: " + response.status +
-                    "]getList bucket: " + bucket +
-                    " prefix: " + params.Prefix);
+                    "]listObjects bucket: " + bucket +
+                    " prefix: " + params.Prefix + " message: " + msg);
             }
             // リストの続きが存在する場合.
             let nextMarker = null;
@@ -800,15 +783,16 @@
                 response, region, bucket, params.Key, credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                const msg = await response.body("text");
                 if (params.noError == true) {
                     console.warn("status: " + response.status +
                         " headObject bucket: " + bucket +
-                        " key: " + params.Key);
+                        " key: " + params.Key + " message: " + msg);
                     return null;
                 }
                 throw new Error("[ERROR: " + response.status +
                     "]headObject bucket: " + bucket + " key: " +
-                    params.Key);
+                    params.Key + " message: " + msg);
             }
             return ret;
         };
@@ -839,15 +823,16 @@
                 credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                const msg = await response.body("text");
                 if (params.noError == true) {
                     console.warn("status: " + response.status +
                         " getObject bucket: " + bucket +
-                        " key: " + params.Key);
+                        " key: " + params.Key + " message: " + msg);
                     return null;
                 }
                 throw new Error("[ERROR: " + response.status +
                     "]getObject bucket: " + bucket + " key: " +
-                    params.Key);
+                    params.Key + " message: " + msg);
             }
             return ret;
         };
@@ -861,7 +846,7 @@
         //                         警告ログ出力と戻り値 false が返却されます.
         //        またparams.responseが設定されます.
         //        {status: number, headers: object}
-        // 戻り値: trueの場合、正常に設定されました.
+        // 戻り値: params.response が返却されます.
         ret.putObject = async function (params) {
             // バケット名を取得.
             const bucket = _getBucketName(params.Bucket);
@@ -873,17 +858,18 @@
                 params.Body, credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                const msg = await response.body("text");
                 if (params.noError == true) {
                     console.warn("status: " + response.status +
                         " putObject bucket: " + bucket +
-                        " key: " + params.Key);
-                    return false;
+                        " key: " + params.Key + " message: " + msg);
+                    return null;
                 }
                 throw new Error("[ERROR: " + response.status +
                     "]putObject bucket: " + bucket + " key: " +
-                    params.Key);
+                    params.Key + " message: " + msg);
             }
-            return response.status <= 299;
+            return response;
         }
 
         // 条件を指定してS3Bucket+Keyのディレクトリを生成.
@@ -914,15 +900,16 @@
                 undefined, credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                const msg = await response.body("text");
                 if (params.noError == true) {
                     console.warn("status: " + response.status +
                         " createDirectory bucket: " + bucket +
-                        " key: " + key);
-                    return false;
+                        " key: " + params.Key + " message: " + msg);
+                    return null;
                 }
                 throw new Error("[ERROR: " + response.status +
                     "]createDirectory bucket: " + bucket + " key: " +
-                    key);
+                    params.Key + " message: " + msg);
             }
             return response.status <= 299;
         }
@@ -935,28 +922,29 @@
         //                         警告ログ出力と戻り値 false が返却されます.
         //        またparams.responseが設定されます.
         //        {status: number, headers: object}
-        // 戻り値: trueの場合、正常に設定されました.
+        // 戻り値: params.response が返却されます.
         ret.deleteObject = async function (params) {
             // バケット名を取得.
             const bucket = _getBucketName(params.Bucket);
             // オブジェクト取得.
             const response = {};
             params.response = response;
-            const result = await deleteObject(
+            await deleteObject(
                 response, region, bucket, params.Key, credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                const msg = await response.body("text");
                 if (params.noError == true) {
                     console.warn("status: " + response.status +
                         " deleteObject bucket: " + bucket +
-                        " key: " + params.Key);
-                    return false;
+                        " key: " + params.Key + " message: " + msg);
+                    return null;
                 }
                 throw new Error("[ERROR: " + response.status +
                     "]deleteObject bucket: " + bucket + " key: " +
-                    params.Key + " message: " + Buffer.from(result).toString());
+                    params.Key + " message: " + msg);
             }
-            return response.status <= 299;
+            return response;
         }
 
         // 条件を指定してS3Bucket+Keyのディレクトリを削除.
@@ -980,19 +968,20 @@
                 // 終端に / をセット.
                 key = key + "/";
             }
-            const result = await deleteObject(
+            await deleteObject(
                 response, region, bucket, key, credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {
+                const msg = await response.body("text");
                 if (params.noError == true) {
                     console.warn("status: " + response.status +
                         " deleteDirectory bucket: " + bucket +
-                        " key: " + key);
-                    return false;
+                        " key: " + params.Key + " message: " + msg);
+                    return null;
                 }
                 throw new Error("[ERROR: " + response.status +
                     "]deleteDirectory bucket: " + bucket + " key: " +
-                    Key + " message: " + Buffer.from(result).toString());
+                    params.Key + " message: " + msg);
             }
             return response.status <= 299;
         }
@@ -1017,8 +1006,8 @@
     /////////////////////////////////////////////////////
     // 外部定義.
     /////////////////////////////////////////////////////
-    // restAPI用.
     exports.NEXT_MARKER_NAME = NEXT_MARKER_NAME;
+    exports.setEnvMainS3Bucket = setEnvMainS3Bucket;
     exports.putObject = putObject;
     exports.deleteObject = deleteObject;
     exports.getObject = getObject;

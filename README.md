@@ -2,9 +2,9 @@
 
 ## 概要
 
-mintoとは(minimize to=最小化する)を目指す、AWS Lambda での URL Function(関数URL)での「超軽量実行環境」をcjsで作るためのプロジェクトです。
+mintoとは(minimize to=[AWS lambda関数URL実行を]最小化する)を目指す、AWS Lambda での URL Function(関数URL)での「超軽量実行環境」をcjsで作るためのプロジェクトです。
 
-またminto では llrt(Low Latency Runtime) のnodejs の代替えランタイムを利用して実行することを「前提」としたものです。
+またminto では AWS lambda関数URL実行を最小化するための llrt(Low Latency Runtime) のnodejs の代替えランタイムを利用して実行することを「前提」としたものです。
 - llrt: https://github.com/awslabs/llrt
 
 あと llrtランタイムを利用前提とする事で、AWS Lambda の最小環境＝メモリ128mb で「コールドスタートで高速に動作」させる事を目指します。
@@ -15,7 +15,7 @@ mintoとは(minimize to=最小化する)を目指す、AWS Lambda での URL Fun
 - アーキテクチャー: arm64
 - メモリ: 128mb
 - ランタイム: Amazon Linux 2023
-- llrt(レイヤー): llrt v0.5.1-beta no-sdk(https://github.com/awslabs/llrt/releases)
+- llrt(レイヤー): llrt v0.5.1-beta(Commits on Feb 9, 2025) no-sdk(https://github.com/awslabs/llrt/releases)
 
 - AWS lambda URL Function実行結果(コールドスタート)
   > REPORT RequestId: 82c60798-6ea5-4f3d-befd-5957174db2c0 Duration: 103.77 ms Billed Duration: 158 ms Memory Size: 128 MB Max Memory Used: 24 MB Init Duration: 53.69 ms

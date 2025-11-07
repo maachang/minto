@@ -1,10 +1,16 @@
 # minto コマンド利用方法.
 
-## まず以下の対応を行ないます.
+mintoコマンドは、以下のコマンドが存在します.
+- minto
+  ローカル環境でmintoを実行・確認するためのコマンド
+- mtpk
+  ローカルmintoをデプロイして aws lambda 用の zip ファイル化するためのコマンド
 
-### 1. MINTO_HOME パスを定義します
+まずこれらコマンドを利用するための設定を行うための説明を行います.
 
-~/.bashrc などに
+## 1. MINTO_HOME パスを定義します
+
+~/.bashrc などに以下のように設定を行います.
 
 ~~~sh
 export MINTO_HOME={minto 対象ディレクトリを設定}
@@ -18,21 +24,21 @@ export MINTO_HOME=~/project/minto
 
 を設定します.
 
-### 2. MINTO_HOME/bin/ 以下を PATH設定する.
+## 2. MINTO_HOME/bin/ 以下を PATH設定する.
 
-~/.bashrc などに
+~/.bashrc などに以下のように設定を行います.
 
 ~~~sh
 export PATH=${MINTO_HOME}/bin:${PATH}
 ~~~
 
-これを設定します.
-
 これにより、minto のコマンドが利用できます.
 
 # 各コマンド説明.
 
-## mintoコマンド
+次にmintoが提供するローカル実行向けのコマンドについて説明します.
+
+## mintoローカル実行用コマンド
 
 ~~~sh
 > cd {mintoによるWebアプリ実装ディレクトリ}
@@ -54,6 +60,8 @@ mintoによるWebアプリ実装ディレクトリ:
     +-- conf: minto 実行に対する conf ファイル(json) 配置先.
 ~~~
 
+※ 以下対応は不要かも
+<<開始>>
 また このコマンド利用に対して `aws-sdk-v3(nodejs)` をインストールして利用可能にする必要があります.
 
 - S3Client利用の場合は以下の形でグローバルインストール
@@ -65,14 +73,15 @@ mintoによるWebアプリ実装ディレクトリ:
 ~~~sh
 export NODE_PATH=`npm root -g`
 ~~~
+<<終了>>
 
-※ ちなみに llrt だと http or https モジュールが利用できないようなので、minto=nodeしか利用できない.
+※ ちなみに llrt だと http or https モジュールが利用できないようなので、minto=nodeしか利用できません.
 
 ## mtpk コマンド
 
 リリース対象の minto 環境を zip 化して、デプロイ可能にするためのコマンドです.
 
-これも `minto` コマンドと同じように、対象のディレクトリに移動してから、このコマンドを実行する事で lambda にデプロイ可能な zip ファイル形式で固められます.
+これも `minto` コマンドと同じように、対象の `mintoによるWebアプリ実装ディレクトリ` に移動してから、このコマンドを実行する事で lambda にデプロイ可能な zip ファイル形式で固められます.
 
 ~~~sh
 > cd {mintoによるWebアプリ実装ディレクトリ}
