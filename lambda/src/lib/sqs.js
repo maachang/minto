@@ -119,10 +119,13 @@
     }
 
     // メッセージ送信用JSONを生成.
-    const createSendMessageJson = function (url, msg) {
-        // 日本語が入ったメッセージだと403になるので
-        // messageはbase64変換して渡す.
-        msg = Buffer.from(msg).toString("utf-8");
+    const createSendMessageJson = function (url, noBase64, msg) {
+        // base64変換を行う場合.
+        if (noBase64 != true) {
+            // 日本語が入ったメッセージだと403になるので
+            // messageはbase64変換して渡す.
+            msg = Buffer.from(msg).toString("base64");
+        }
         if (!url.endsWith("/")) {
             url = url + "/";
         }
@@ -159,6 +162,8 @@
     //   - message 対象メッセージを設定します.
     //             string設定の場合はそのまま送信します.
     //             それ以外はJSON変換された文字列がメッセージとして出力されます.
+    //   - noBase64 messageをbase64変換しない場合は true.
+
     // 戻り値: response情報が返却されます.
     //         {status, headers, result}
     //          - status HTTPレスポンスステータスが返却されます.
@@ -171,6 +176,7 @@
         if (awsId == undefined || awsId == null) {
             throw new Error("The AWSID required for sqs is not set.");
         }
+        const noBase64 = (params.noBase64 || false) == true;
         let queueName = params.name || params.queueName;
         if (queueName == undefined || queueName == null) {
             throw new Error("The required QueueName is not set in sqs.");
@@ -190,7 +196,7 @@
         // URLを生成.
         const url = "https://" + urlInfo.host + "/" + urlInfo.path;
         // bodyを生成.
-        const body = createSendMessageJson(url, msg);
+        const body = createSendMessageJson(url, noBase64, msg);
         // シグニチャーを生成.
         asv4.setSignature(SERVICE, credential, region, urlInfo.path,
             PUT_MSG_METHOD, headers, null, body);
@@ -219,23 +225,29 @@
     // SQSトリガーのメッセージを取得.
     // event: index.handler で渡される第一引数を設定します.
     // no: 取得データ位置を設定します.
+    // noBase64: 返却Bodyをbase64変換しない場合は true.
     // 戻り値: SQSに渡されたメッセージ(string))が返却されます.
-    const getSqsTriggerMessage = function (event, no) {
+    const getSqsTriggerMessage = function (event, no, noBase64) {
         let ret = null;
         // sqsから渡されるBodyを取得.
         // https://qiita.com/ybsh2891/items/c137660f72007b73dbe1
         ret = event["Records"][no]["body"];
+        // base64変換しない場合.
+        if (noBase64 == true) {
+            return ret;
+        }
         // base64化されているので戻す.
-        return Buffer.from(ret, "base64").toString("utf-8")
+        return Buffer.from(ret, "base64").toString("utf-8");
     }
 
     // SQSトリガーのJSON結果を取得.
     // event: index.handler で渡される第一引数を設定します.
     // no: 取得データ位置を設定します.
+    // noBase64: 返却Bodyをbase64変換しない場合は true.
     // 戻り値: SQSに渡されたメッセージ(json)が返却されます.
-    const getSqsTriggerJson = function (event, no) {
+    const getSqsTriggerJson = function (event, no, noBase64) {
         // jsonパース内容を返却.
-        return JSON.parse(getSqsTriggerMessage(event, no));
+        return JSON.parse(getSqsTriggerMessage(event, no, noBase64));
     }
 
     /////////////////////////////////////////////////////
