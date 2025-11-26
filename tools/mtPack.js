@@ -224,11 +224,11 @@
     const getOptions = function () {
         const ret = {};
         // jsMin.
-        ret["min"] = args.isValue("-m", "--min", "--all");
+        ret["min"] = args.isValue("-m", "--min", "-all", "--all");
         // etag.
-        ret["etag"] = args.isValue("-e", "--etag", "--all");
+        ret["etag"] = args.isValue("-e", "--etag", "-all", "--all");
         // gz.
-        ret["gz"] = args.isValue("-z", "--gz", "--all");
+        ret["gz"] = args.isValue("-z", "--gz", "-all", "--all");
         return ret;
     }
 
@@ -450,7 +450,7 @@
         p("    Enables etag caching for contents.")
         p("  -z or --gz:");
         p("    The contents will be gz-compressed if gz is enabled.")
-        p("  --all:");
+        p("  -all or --all:");
         p("    Enables the min, etag, and gz options.")
         p("");
     }

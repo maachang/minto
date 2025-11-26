@@ -1266,4 +1266,44 @@
     }
     _g.HttpError = HttpError;
 
+    // xor128ランダム関数を生成.
+    const createRandom = function (seed) {
+        // xor128用変数を設定.
+        let _a = 123456789;
+        let _b = 362436069;
+        let _c = 521288629;
+        let _d = 88675123;
+        // seed条件が設定されていない場合は
+        // ミリ秒+ナノ秒をセット.
+        seed = seed || Date.now() +
+            parseInt((process.hrtime()[0] * 10000000) +
+                (process.hrtime()[1] / 1000));
+        // seed条件をxor128用変数に反映.
+        if (!isNaN(parseInt(seed))) {
+            let hs = ((seed / 1812433253) | 0) + 1;
+            let ls = ((seed % 1812433253) | 0) - 1;
+            if ((ls & 0x01) == 0) {
+                hs = (~hs) | 0;
+            }
+            _a = hs = (((_a * (ls)) * hs) + 1) | 0;
+            if ((_a & 0x01) == 1) {
+                _c = (((_c * (hs)) * ls) - 1) | 0;
+            }
+        }
+        // 乱数関数返却.
+        return function () {
+            let t = _a; let r = t;
+            t = (t << 11); t = (t ^ r);
+            r = t; r = (r >> 8); t = (t ^ r);
+            r = _b; _a = r; r = _c; _b = r;
+            r = _d; _c = r; t = (t ^ r);
+            r = (r >> 19); r = (r ^ t); _d = r;
+            return r;
+        };
+    };
+    // グローバル化: createRandom.
+    _g.createRandom = createRandom;
+    // デフォルトランダム生成機を生成.
+    _g.rand = createRandom();
+
 })(global);

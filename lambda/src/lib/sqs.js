@@ -120,6 +120,9 @@
 
     // メッセージ送信用JSONを生成.
     const createSendMessageJson = function (url, msg) {
+        // 日本語が入ったメッセージだと403になるので
+        // messageはbase64変換して渡す.
+        msg = Buffer.from(msg).toString("utf-8");
         if (!url.endsWith("/")) {
             url = url + "/";
         }
@@ -202,6 +205,39 @@
         return response;
     }
 
+    // SQSトリガーのデータ件数を取得.
+    // event: index.handler で渡される第一引数を設定します.
+    // 戻り値: SQSトリガー件数が返却されます.
+    //         -1 の場合SQSトリガーのデータ件数は存在しません.
+    const getSqsTriggerLength = function (event) {
+        if (event["Records"] != undefined) {
+            return event["Records"].length;
+        }
+        return -1;
+    }
+
+    // SQSトリガーのメッセージを取得.
+    // event: index.handler で渡される第一引数を設定します.
+    // no: 取得データ位置を設定します.
+    // 戻り値: SQSに渡されたメッセージ(string))が返却されます.
+    const getSqsTriggerMessage = function (event, no) {
+        let ret = null;
+        // sqsから渡されるBodyを取得.
+        // https://qiita.com/ybsh2891/items/c137660f72007b73dbe1
+        ret = event["Records"][no]["body"];
+        // base64化されているので戻す.
+        return Buffer.from(ret, "base64").toString("utf-8")
+    }
+
+    // SQSトリガーのJSON結果を取得.
+    // event: index.handler で渡される第一引数を設定します.
+    // no: 取得データ位置を設定します.
+    // 戻り値: SQSに渡されたメッセージ(json)が返却されます.
+    const getSqsTriggerJson = function (event, no) {
+        // jsonパース内容を返却.
+        return JSON.parse(getSqsTriggerMessage(event, no));
+    }
+
     /////////////////////////////////////////////////////
     // 外部定義.
     /////////////////////////////////////////////////////
@@ -209,5 +245,9 @@
     exports.setRegion = setRegion;
     exports.setAwsId = setAwsId;
     exports.putMessage = putMessage;
+    exports.getSqsTriggerLength = getSqsTriggerLength;
+    exports.getSqsTriggerMessage = getSqsTriggerMessage;
+    exports.getSqsTriggerJson = getSqsTriggerJson;
+
 
 })(this);

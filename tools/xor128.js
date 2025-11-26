@@ -117,6 +117,76 @@
                 _z2(((d & 0x000000ff)).toString(16));
         }
 
+        // String.prototype.charCodeAt(index): 対象位置の文字列をバイナリ数字に変換.
+        // String.fromCharCode(no): 指定no の内容から文字列生成.
+        /*
+        // これでパスワード生成用の条件をセット.
+        codeList = function(startEnd) {
+            const start = startEnd.charCodeAt(0);
+            const end = startEnd.charCodeAt(1);
+            let str = "";
+            const len = end - start;
+            for(let i = 0; i <= len; i ++) {
+                str += String.fromCharCode(start + i);
+            }
+            console.log(str);
+        }
+        */
+
+        // パスワード合成文字列.
+        const _NUM_LIST = "0123456789";
+        const _ENGB = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const _ENGS = "abcdefghijklmnopqrstuvwxyz";
+        const _SIMBOLA = "-_/*+.,!#$%&()~|@^=";
+
+        // パスワードを取得.
+        // size: パスワード長を設定します.
+        //      0以下を設定した場合は "" が返却されます.
+        //      9999を超えた設定の場合は null が返却されます.
+        // num: 数字を有効にする場合は true.
+        // engb: 英字(大文字)を有効にする場合は true.
+        // engs: 英字(子文字)を有効にする場合は true.
+        // symbolAll: 有効なすべてのシンボルをONにする場合は true.
+        // customSymbol: 有効にする個別のシンボルを１文字で文字列連結して設定.
+        //               また有効な文字は "-_/*+.,!#$%&()~|@^=" となります.
+        // 戻り値: パスワードが返却されます.
+        const getPassword = function (size, num, engb, engs, symbolAll, customSymbol) {
+            size = size | 0;
+            if (size <= 0) {
+                return "";
+            } else if (size > 9999) {
+                return null;
+            }
+            let arrayCode = "";
+            if (num == true) {
+                arrayCode += _NUM_LIST;
+            }
+            if (engb == true) {
+                arrayCode += _ENGB;
+            }
+            if (engs == true) {
+                arrayCode += _ENGS;
+            }
+            if (symbolAll == true) {
+                _SIMBOLA += _ENGS;
+            } else if (typeof (customSymbol) == "string" && customSymbol.length > 0) {
+                let n;
+                const len = customSymbol.length;
+                for (let i = 0; i < len; i++) {
+                    n = customSymbol[i];
+                    if (_SIMBOLA.indexOf(n) != -1) {
+                        arrayCode += n;
+                    }
+                }
+            }
+            const len = arrayCode.length + 1;
+            let ret = "";
+            for (let i = 0; i < size; i++) {
+                ret += arrayCode[next() % len];
+            }
+            return ret;
+        }
+
         // 初期乱数のコードをセット.
         if (seed != undefined) {
             setSeed(seed);
@@ -127,7 +197,8 @@
             nextInt: next,
             getBytes: getBytes,
             getArray: getArray,
-            getUUID: getUUID
+            getUUID: getUUID,
+            getPassword: getPassword
         }
     };
     // 指定条件を設定してランダムジェネレーターを生成します.

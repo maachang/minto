@@ -180,6 +180,11 @@
         ret.useMessage = function () {
             return msgBuffer.length > 0;
         }
+        // ユーザ名を変更.
+        ret.setUserName = function (name) {
+            userName = name;
+            return ret;
+        }
         // (await)slackに出力.
         ret.flush = function () {
             // 送信メッセージが存在しない場合は送信しない.
