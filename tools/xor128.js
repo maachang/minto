@@ -168,7 +168,7 @@
                 arrayCode += _ENGS;
             }
             if (symbolAll == true) {
-                _SIMBOLA += _ENGS;
+                arrayCode += _SIMBOLA;
             } else if (typeof (customSymbol) == "string" && customSymbol.length > 0) {
                 let n;
                 const len = customSymbol.length;
@@ -179,7 +179,7 @@
                     }
                 }
             }
-            const len = arrayCode.length + 1;
+            const len = arrayCode.length;
             let ret = "";
             for (let i = 0; i < size; i++) {
                 ret += arrayCode[next() % len];
