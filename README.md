@@ -97,27 +97,20 @@ hogehoge	"testHogehoge"
 
 minto の想定としては「小規模の社内Webアプリの作成」ぐらいを想定しており、更に「memory 128MB＝安価な環境＋S3KVS＝安価なデータベース環境」で利用できる事を想定しています。
 
-## llrtの制限
+## llrtの機能制限について
 
-llrtは nodejs ライクな利用がAWS Lambda において利用できますが、制限と言うか「AWS Lambda に不要な機能や非推奨な機能が利用できない」などの問題があります。
+llrtは nodejs ライクな利用が利用できますが、一方で「node.js で不要と位置づけられた機能や非推奨な機能が利用できない」などの問題があります。
 
-ただ「現在もベータ版(2025/05時点)」ですが、一旦は AWS Lambda の 関数URLが利用できる」など「他にもクセ」がありますが、一応利用できる形です。
+ただ「現在もベータ版(2025/12月時点)」ですが、一旦は AWS Lambda の 関数URLが利用できる」などですが、関数URLなど、普通に利用できました。
 
-また細かい部分で nodejs だと動くけど llrt だとエラーになるとかの「微妙なコード実装結果」もあるわけで、それがたとえば以下
+また「node.js で非推奨(deprecate)」のものは、大体実装されていなかったりするので、そのためそのまま AWS Lambdabでの Node.js のソースコードが動くのかと言うのは、実際にやってみないとわからないかと言えます。
 
-~~~js
-const crypto = require('crypto');
-const key = "hoge";
-const mode = undefined;
-const res = crypto.createHash('sha256').update(key)ret.digest(mode);
-~~~
+あと https などのモジュールが利用出来ませんが、一方で node.js だと
+- fetch
 
-- nodejs=ok
-- llrt=error
+が使えるので、httpClient機能はこれを利用する事で対応が可能となります。
 
-エラー原因は `digest(mode)` の mode=undefined だと llrt だとエラーになってしまうが、一方の nodejs だとmode指定なしとして正常実行となります。
-
-ただ「全体的に AWS Lambda で利用するにおいては、かなりご完成が高い」とも言えるので、あんまり問題にならないかと思いました。
+## EOF
 
 興味を持ちましたら、以下ドキュメント内容を見ていただき、利用していただければ幸いです。
 
