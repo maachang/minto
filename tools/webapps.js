@@ -6,7 +6,7 @@
     'use strict';
 
     // mintoメイン.
-    const mintoLambdaIndex = require("../lambda/src/index.cjs");
+    const mintoLambdaIndex = require("../lambda/src/index.js");
 
     // mintoUtil.
     const mintoUtil = require("./mintoUtil.js");
@@ -60,8 +60,32 @@
         //return mintoUtil.getRequireResolvePath(require.resolve("./")) + "/";
     })();
 
-    // lambdaライブラリ.
-    const _LAMBDA_LIB_PATH = _DIR_NAME + "../lambda/src/lib/"
+    // modulesパス.
+    const _MODULES_PATH = _DIR_NAME + "../modules/";
+
+    // modules以下ディレクトリキャッシュ.
+    let _MODULES_DIRS_CACHE = undefined;
+
+    // modules以下ディレクトリのライブラリ呼び出し処理.
+    const _requireModules = function (name) {
+        let mod = _MODULES_DIRS_CACHE;
+        // モジュール以下ディレクトリキャッシュが存在しない場合.
+        if (mod == undefined) {
+            // モジュール以下ディレクトリキャッシュ生成.
+            _MODULES_DIRS_CACHE = mintoUtil.listDir(_MODULES_PATH);
+            mod = _MODULES_DIRS_CACHE;
+        }
+        // モジュール以下ディレクトリから、対象モジュールを取得.
+        const len = mod.length;
+        let libPath;
+        for (let i = 0; i < len; i++) {
+            libPath = mod[i] + name;
+            if (mintoUtil.existsFileSync(libPath)) {
+                return require(libPath);
+            }
+        }
+        return null;
+    }
 
     // [書き換え]$loadLib処理.
     // name: 対象のJSファイル等を設定します.
@@ -71,18 +95,30 @@
         if (name[0] == "/") {
             name = name.substring(1)
         }
-        // lambda.lib 内容を参照.
-        let libPath = _LAMBDA_LIB_PATH + name;
-        if (mintoUtil.existsSync(libPath)) {
+        // currentディレクトリの lib 配下.
+        const libPath = mainPath + "lib/" + name;
+        if (mintoUtil.existsFileSync(libPath)) {
             return require(libPath);
         }
-        // currentディレクトリの lib 配下.
-        libPath = mainPath + "lib/" + name;
-        if (mintoUtil.existsSync(libPath)) {
-            return require(libPath);
+        // modules内容からライブラリを検索.
+        // キャッシュ状況を取得(true=キャッシュあり).
+        const cchk = _MODULES_DIRS_CACHE != undefined;
+        // modules配下のライブラリを取得.
+        let ret = _requireModules(name);
+        if (ret != null) {
+            return ret;
+        }
+        // キャッシュ済み検索で失敗の場合はキャッシュ解除で再検索.
+        if (cchk) {
+            // キャッシュクリアでmodules配下のライブラリを取得.
+            _MODULES_DIRS_CACHE = undefined
+            ret = _requireModules(name);
+            if (ret != null) {
+                return ret;
+            }
         }
         // 取得できない場合はエラー.
-        throw new Error("Failed to load lib: " + name);
+        throw new Error("Failed to $loadLib: " + name);
     }
 
     // lambdaコンフィグ.
@@ -98,12 +134,12 @@
         }
         // lambda.conf 内容を参照.
         let confPath = _LAMBDA_CONF_PATH + name;
-        if (mintoUtil.existsSync(confPath)) {
+        if (mintoUtil.existsFileSync(confPath)) {
             return require(confPath);
         }
         // currentディレクトリの conf 配下.
         confPath = mainPath + "conf/" + name;
-        if (mintoUtil.existsSync(confPath)) {
+        if (mintoUtil.existsFileSync(confPath)) {
             return require(confPath);
         }
         // 取得失敗の場合は null.
@@ -117,7 +153,7 @@
     // 基本 mt.jsや jhtml.js の場合、require が利用できない.
     // そのための代替え手段として $require を利用する.
     // また利用方法として "fs" などの 標準ライブラリ利用か
-    // lambda index.cjs が存在するパスをカレントパスとした
+    // lambda index.js が存在するパスをカレントパスとした
     // 位置から require 対象の js ファイルを設定します.
     // name: requireで設定する文字列を設定します.
     // 戻り値: require結果が返却されます.
@@ -130,12 +166,12 @@
             }
             // lambdaカレントパス以下を対象とする.
             let currentPath = _LAMBDA_CURRENT_PATH + name;
-            if (mintoUtil.existsSync(currentPath)) {
+            if (mintoUtil.existsFileSync(currentPath)) {
                 return require(currentPath);
             }
             // currentディレクトリの直下.
             currentPath = mainPath + name;
-            if (mintoUtil.existsSync(currentPath)) {
+            if (mintoUtil.existsFileSync(currentPath)) {
                 return require(currentPath);
             }
             // 取得できない場合はエラー.
@@ -564,9 +600,9 @@
         return event;
     }
 
-    // minto(lambda index.cjs)で返却されたresult内容を送信.
+    // minto(lambda index.js)で返却されたresult内容を送信.
     // res Httpレスポンスを設定します.
-    // result index.cjsで返却されたresultを設定します.
+    // result index.jsで返却されたresultを設定します.
     const _resultMinto = function (res, result) {
         // result = {
         //   statusCode: number,

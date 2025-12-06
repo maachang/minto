@@ -16,7 +16,7 @@
     const { execSync } = require("child_process");
 
     // mintoUtil.
-    //const mintoUtil = require("./mintoUtil.js");
+    const mintoUtil = require("./mintoUtil.js");
 
     // jhtml.
     const jhtml = require("./jhtml.js");
@@ -25,14 +25,15 @@
     const args = require("./args.js");
 
     // mintoメイン.
-    require("../lambda/src/index.cjs");
+    require("../lambda/src/index.js");
 
     // コマンド名.
     const COMMAND_NAME = "mtpk";
 
-    // このファイルが存在するディレクトリ.
-    // __dirname と同じ.
-    const _DIR_NAME = (function () {
+    // このファイルが存在するディレクトリで `__dirname` と同じ.
+    //  - $MINTO_HOME/tools/
+    // が返却される.
+    const __DIR_NAME = (function () {
         // MINTO_HOMEの環境変数を対象とする.
         let ret = process.env["MINTO_HOME"];
         if (ret != undefined) {
@@ -42,8 +43,6 @@
             return ret + "tools/";
         }
         throw new Error("The MINTO_HOME environment variable is not set.");
-        // 環境変数が存在しない場合は、requireから取得.
-        //return mintoUtil.getRequireResolvePath(require.resolve("./")) + "/";
     })();
 
     // 実行対象拡張子(js).
@@ -52,11 +51,18 @@
     // jhtmlファイル拡張子.
     const JHTML_NAME = ".mt.html";
 
+    // modulesディレクトリ.
+    const _MODULES_PATH = path.resolve(__DIR_NAME + "../modules") + "/";
+
+    // modules以下のディレクトリ一覧(辞書型).
+    // ここに利用可能なライブラリが入ってる.
+    const _MODULES_DICT = mintoUtil.listDir(_MODULES_PATH, true);
+
     // lambda.index path.
-    const _LAMBDA_INDEX_PATH = path.resolve(_DIR_NAME + "../lambda/src") + "/";
+    const _LAMBDA_INDEX_PATH = path.resolve(__DIR_NAME + "../lambda/src") + "/";
 
     // lambda.lib.
-    const _LAMBDA_LIB_PATH = _LAMBDA_INDEX_PATH + "lib/";
+    //const _LAMBDA_LIB_PATH = _LAMBDA_INDEX_PATH + "lib/";
 
     // lambda.conf.
     const _LAMBDA_CONF_PATH = _LAMBDA_INDEX_PATH + "conf/";
@@ -204,7 +210,7 @@
             } else {
                 // dir: 再帰実行.
                 targetDirLoop(
-                    type, srcBaseDir, destBaseDir, dirName + content.name, callOptions,
+                    srcBaseDir, destBaseDir, dirName + content.name, callOptions,
                     callback);
             }
         }
@@ -260,6 +266,79 @@
             rmvFile(target);
             // 元のファイルに移動.
             mvFile(target + ".min", target);
+        }
+    }
+
+    // パラメータが all指定
+    const isAllModules = function () {
+        const target = args.get("-t", "--target");
+        if (target == "all") {
+            return true;
+        }
+        return false;
+    }
+
+    // 全てのの modulesディレクトリ定義の取り込み処理.
+    const packAllModules = function (opt) {
+        p("# [all modules]");
+        let srcPath;
+        for (let target in _MODULES_DICT) {
+            // 対象モジュール名が存在する場合.
+            srcPath = _MODULES_DICT[target];
+            // 指定されたモジュール内容をコピーする.
+            p("  # modules(" + target + "): " + srcPath);
+            targetDirLoop(srcPath, _WORK_DIR + "lib", srcPath, opt,
+                function (srcBaseDir, destBaseDir, dirName, destDirName, fileName, callOpt) {
+                    p("   > copy: " + dirName + fileName);
+                    // コピー先のディレクトリ名を生成.
+                    createDir(destDirName);
+                    // ファイルコピー.
+                    cpFile(dirName + fileName, destDirName + fileName);
+                    // lib = js関連.
+                    if (fileName.endsWith(".js")) {
+                        _convMinJs(destDirName + fileName, opt);
+                    }
+                });
+        }
+    }
+
+    // minto modulesディレクトリに対する指定pack処理.
+    // この指定処理は条件指定で取り込み処理を行います.
+    const packTargetModules = function (opt) {
+        p("# [target modules]");
+        let cnt = 0;
+        // モジュール(modulesディレクトリ内のディレクトリ名指定)
+        // これの条件を取得して処理する.
+        let target, srcPath;
+        for (let i = 0; ; i++) {
+            // 指定パラメータのモジュール内容をコピーする.
+            target = args.next(i, "-t", "--target");
+            if (target == null) {
+                if (cnt == 0) {
+                    p("  # no modules");
+                }
+                return;
+            }
+            // 対象モジュール名が存在する場合.
+            srcPath = _MODULES_DICT[target];
+            if (srcPath == undefined) {
+                continue;
+            }
+            // 指定されたモジュール内容をコピーする.
+            p("  # modules(" + target + "): " + srcPath);
+            targetDirLoop(srcPath, _WORK_DIR + "lib", srcPath, opt,
+                function (srcBaseDir, destBaseDir, dirName, destDirName, fileName, callOpt) {
+                    p("   > copy: " + dirName + fileName);
+                    // コピー先のディレクトリ名を生成.
+                    createDir(destDirName);
+                    // ファイルコピー.
+                    cpFile(dirName + fileName, destDirName + fileName);
+                    // lib = js関連.
+                    if (fileName.endsWith(".js")) {
+                        _convMinJs(destDirName + fileName, opt);
+                    }
+                });
+            cnt++;
         }
     }
 
@@ -364,16 +443,19 @@
             });
     }
 
-    // lambda index.cjs をPack処理.
-    const packIndexCjs = function (opt) {
-        const fileName = "index.cjs";
-        const indexDirName = _LAMBDA_INDEX_PATH;
-        const destDirName = _WORK_DIR;
-        p("# copy: " + indexDirName + fileName);
+    // lambdaソース元の index.js ファイル名.
+    const _SRC_INDEX_JS = "index.js";
+
+    // lambdaにデプロイする時の index.js ファイル名.
+    const _DEPLOY_INDEX_JS = "index.cjs";
+
+    // lambda index.js をPack処理.
+    const packIndexJs = function (opt) {
+        p("# copy: " + _LAMBDA_INDEX_PATH + _SRC_INDEX_JS);
         // ファイルコピー.
-        cpFile(indexDirName + fileName, destDirName + fileName);
+        cpFile(_LAMBDA_INDEX_PATH + _SRC_INDEX_JS, _WORK_DIR + _DEPLOY_INDEX_JS);
         // jsMin.
-        _convMinJs(destDirName + fileName, opt);
+        _convMinJs(_WORK_DIR + _DEPLOY_INDEX_JS, opt);
     }
 
     // FileHashが利用対象の場合は conf/etags.json に出力.
@@ -411,8 +493,14 @@
         removeDir(_WORK_DIR);
         createDir(_WORK_DIR);
 
-        // lambda lib 処理.
-        packLib(opt, _LAMBDA_LIB_PATH);
+        // 全てのモジュールpack指定の場合.
+        if (isAllModules()) {
+            // 全 modules 処理.
+            packAllModules(opt);
+        } else {
+            // 個別 modules 処理.
+            packTargetModules(opt);
+        }
 
         // current Lib 処理.
         packLib(opt, _CURRENT_LIB_PATH);
@@ -426,8 +514,8 @@
         // currentPublic 処理.
         packPublic(opt, _CURRENT_PUBLIC_PATH);
 
-        // index.cjs 処理.
-        packIndexCjs(opt);
+        // index.js 処理.
+        packIndexJs(opt);
 
         // etags.json を出力.
         outputFileHashConf(opt);
@@ -452,6 +540,10 @@
         p("    The contents will be gz-compressed if gz is enabled.")
         p("  -all or --all:");
         p("    Enables the min, etag, and gz options.")
+        p("  -t or --target:")
+        p("    Packs a module by specifying the target module name.")
+        p("    To pack all modules, set it to `-t all` or `--target all`.")
+        p("    Also, this parameter has no relation to the parameter -all or --all.")
         p("");
     }
 

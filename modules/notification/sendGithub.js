@@ -6,10 +6,6 @@
 (function () {
     'use strict';
 
-    // signatureVersion4.
-    // request(httpClient)だけを利用する.
-    const { request } = require("./asv4.js");
-
     // issue作成対象のURLを取得.
     const _getURL = function (oganization, repository) {
         let path;
@@ -23,6 +19,21 @@
         return {
             host: "api.github.com",
             path: path
+        }
+    }
+
+    // [(await)httpClient]POSTリクエスト実行.
+    const _requetPost = async function (host, path, options) {
+        option.method = "POST";
+        options.headers["content-length"] = Buffer.byteLength(options.body);
+        const response = await fetch(
+            "https://" + host + "/" + path, options);
+        return {
+            status: response["status"],
+            headers: response["headers"],
+            body: function () {
+                return response.json();
+            }
         }
     }
 
@@ -63,17 +74,12 @@
             labels: labels
         });
 
-        // 送信処理.
-        const response = {};
-        let result = await request(
+        // POST送信処理.
+        const response = await _requetPost(
             url.host, url.path,
             {
-                method: "POST",
                 headers: headers,
-                body: payload,
-                response: response,
-                // resultType = json返却.
-                resultType: "json"
+                body: payload
             }
         );
         // responseのstatusが400以上の場合.
@@ -83,6 +89,8 @@
                 response.status + " error occurred: " +
                 JSON.stringify(url, null, "  "));
         }
+        // json返却値を取得.
+        const result = response.body();
         return {
             url: result.html_url,
             title: result.title,

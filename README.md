@@ -85,7 +85,7 @@ hogehoge	"testHogehoge"
 
 ## mintoの機能と利用想定
 
-正直言えば「minto=index.cjs １つのファイルがあれば、URL Function の実行対応ができる」レベルのもので「機能としては、最低限」レベルのWebアプリ機能しか実装されていないです。
+正直言えば「minto=index.js １つのファイルがあれば、URL Function の実行対応ができる」レベルのもので「機能としては、最低限」レベルのWebアプリ機能しか実装されていないです。
 
 一応
 - mt.js

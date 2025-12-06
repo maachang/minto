@@ -16,7 +16,7 @@
     'use strict'
 
     // signatureVersion4.
-    const asv4 = require("./asv4.js");
+    const asv4 = $loadLib("./asv4.js");
 
     // サービス名.
     const SERVICE = 's3';

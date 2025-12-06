@@ -6,10 +6,6 @@
 (function () {
     'use strict';
 
-    // signatureVersion4.
-    // request(httpClient)だけを利用する.
-    const { request } = require("./asv4.js");
-
     // SlackAppメッセージ送信URL.
     const BASE_URI = "slack.com";
     const BASE_API_PATH = "api/";
@@ -37,11 +33,26 @@
         return access_token;
     }
 
+    // [(await)httpClient]POSTリクエスト実行.
+    const _requetPost = async function (host, path, options) {
+        options.method = "POST";
+        options.headers["content-length"] = Buffer.byteLength(options.body);
+        const response = await fetch(
+            "https://" + host + "/" + path, options);
+        return {
+            status: response["status"],
+            headers: response["headers"],
+            body: function () {
+                return response.json();
+            }
+        }
+    }
+
     // (await)postメッセージ送信.
-    const sendPost = async function (rpcMethod, access_token, body, option) {
+    const sendPost = async function (rpcMethod, access_token, body, options) {
         body = body || {};
-        option = option || {};
-        option.headers = option.headers || {}
+        options = options || {};
+        options.headers = options.headers || {}
         if (body["channel"] == undefined) {
             throw new Error("The channel setting is required.")
         }
@@ -49,17 +60,13 @@
         if (access_token == null || access_token == undefined || access_token.length <= 0) {
             throw new Error("no credential access_token.");
         }
-        // body送信.
-        option.method = "POST";
-        // resultType = json返却.
-        option["resultType"] = "json";
-        // json変換(text).
-        option.body = JSON.stringify(body);
-        option.headers["content-type"] = "application/json";
-        // tokenセット.
-        body.token = access_token;
-        option.headers["authorization"] = "Bearer " + access_token;
-        const res = await request(BASE_URI, BASE_API_PATH + rpcMethod, option);
+        // [body]json変換(text).
+        options.body = JSON.stringify(body);
+        options.headers["content-type"] = "application/json";
+        // [header]tokenセット.
+        options.headers["authorization"] = "Bearer " + access_token;
+        // post送信.
+        const res = await _requetPost(BASE_URI, BASE_API_PATH + rpcMethod, options);
         // 処理結果を返却.
         return res;
     }

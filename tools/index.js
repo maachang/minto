@@ -17,7 +17,7 @@
     const _initLog = function () {
         // log設定を読み込む.
         const confPath = _CURRENT_PATH + "conf/log.conf";
-        if (mintoUtil.existsSync(confPath)) {
+        if (mintoUtil.existsFileSync(confPath)) {
             const conf = mintoUtil.loadJson(confPath);
             localLog.setting(conf);
         } else {
@@ -38,13 +38,22 @@
 
         // MINTO-config.
         const _MINTO_CONF = _CURRENT_PATH + "conf/minto.json";
-
-        // bindPortを取得(mint.json)
         let mintoConf = undefined;
-        if (mintoUtil.existsSync(_MINTO_CONF)) {
+        if (mintoUtil.existsFileSync(_MINTO_CONF)) {
             mintoConf = mintoUtil.loadJson(_MINTO_CONF);
+            // bindPortを取得.
             if (mintConf.bindPort != undefined) {
                 bindPort = mintConf.bindPort;
+            }
+        }
+
+        // ENV-config.
+        const _ENV_CONF = _CURRENT_PATH + "conf/env.json";
+        if (mintoUtil.existsFileSync(_ENV_CONF)) {
+            const envConf = mintoUtil.loadJson(_ENV_CONF);
+            // 環境変数に定義条件を割り当てる.
+            for (let key in envConf) {
+                prcess.env[key] = envConf[key];
             }
         }
 

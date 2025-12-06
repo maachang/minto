@@ -8,7 +8,7 @@
     'use strict';
 
     // signatureVersion4.
-    const asv4 = require("./asv4.js");
+    const asv4 = $loadLib("./asv4.js");
 
     // サービス名.
     const SERVICE = "sqs";
@@ -260,6 +260,5 @@
     exports.getSqsTriggerLength = getSqsTriggerLength;
     exports.getSqsTriggerMessage = getSqsTriggerMessage;
     exports.getSqsTriggerJson = getSqsTriggerJson;
-
 
 })(this);
