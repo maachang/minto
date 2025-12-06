@@ -15,7 +15,7 @@ mintoとは(minimize to=[AWS lambda関数URL実行を]最小化する)を目指�
 - アーキテクチャー: arm64
 - メモリ: 128mb
 - ランタイム: Amazon Linux 2023
-- llrt(レイヤー): llrt v0.5.1-beta(Commits on Feb 9, 2025) no-sdk(https://github.com/awslabs/llrt/releases)
+- llrt(レイヤー): llrt v0.7.0-beta(Commits on Feb 9, 2025) no-sdk(https://github.com/awslabs/llrt/releases)
 
 - AWS lambda URL Function実行結果(コールドスタート)
   > REPORT RequestId: 82c60798-6ea5-4f3d-befd-5957174db2c0 Duration: 103.77 ms Billed Duration: 158 ms Memory Size: 128 MB Max Memory Used: 24 MB Init Duration: 53.69 ms
@@ -63,7 +63,7 @@ hogehoge	"testHogehoge"
 - fetch(https)でS3Client実装
 
 で実施されてるのですが、これを
-- llrt v0.5.1-beta full(AWS-SDK-V3 Full)
+- llrt v0.7.0-beta full(AWS-SDK-V3 Full)
 
 使った環境で同じくS3Client(AWS-SDK-V3)を使った場合の「コールドスタート実行結果」は以下のものとなります。
 

@@ -16,18 +16,16 @@ mintoによるWebアプリ実装ディレクトリ:
     +-- conf: minto 実行に対する conf ファイル(json) 配置先.
 ~~~
 
-mintoローカル実行を行なうための環境を作成するために、以下のようにディレクトリを作成します。
+mintoローカル実行を行なうための環境を作成します.
 ~~~cmd
-mkdir {mintoプロジェクト名など}
-cd {mintoプロジェクト名など}
-mkdir public
-mkdir lib
-mkdir conf
+cd {mintoプロジェクトを作成するディレクトリ名}
+mkmt {mintoプロジェクト名}
+cd {mintoプロジェクト名}
 echo "test" >> public/index.html
 minto
 ~~~
 
-ためしに上のコマンド実行を行い、ブラウザを起動して
+上のコマンド実行を行い、ブラウザを起動して
 - URL: http://127.0.0.1:3210/
 
 上のURLを実行する事でブラウザに `test` と画面に表示されれば、成功です。

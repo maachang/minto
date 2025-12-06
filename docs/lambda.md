@@ -28,7 +28,7 @@ URL: https://github.com/awslabs/llrt/releases
 上記の流れで Lambda レイヤー作成を行います。
 
 - 名前: llrt
-- 説明 - オプション: llrt v0.5.1-beta no-sdk
+- 説明 - オプション: llrt v0.7.0-beta no-sdk
 - zipファイルをアップロード -> ファイルを選択(llrt-lambda-arm64-no-sdk.zip を選択)
 - 互換性のあるアーキテクチャー オプション: arm64
 - 互換性のあるランタイム- オプション: Amazon Linux 2023
