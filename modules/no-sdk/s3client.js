@@ -819,7 +819,7 @@
             const response = {};
             params.response = response;
             const ret = await getObject(
-                response, region, bucket, params.Key, params.gzip,
+                response, region, bucket, params.Key, params.resultType,
                 credential);
             // レスポンスステータスが400以上の場合エラー.
             if (response.status >= 400) {

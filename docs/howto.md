@@ -179,7 +179,17 @@ exports.handler = async function () {
 それ以外のmimeサポート定義は
 - /conf/mime.json
 
-で定義することで利用範囲が広がります。
+で定義することで、MimeTypeを追加することができます.
+
+また定義内容は以下のように行います.
+
+~~~json
+{
+  "ファイル拡張子": "MimeType",
+  "ファイル拡張子": "MimeType",
+  "ファイル拡張子": "MimeType"
+}
+~~~
 
 ## ④実装モジュールや定義関連の利用について
 
