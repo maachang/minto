@@ -27,7 +27,8 @@ const s3 = $loadLib("s3client.js");
 exports.handler = async function () {
     let text = "";
     const s3cl = s3.create();
-    text = await s3cl.getObject({ Bucket: "test-minto", Key: "test/hogehoge" });
+    text = await s3cl.getObject(
+        { Bucket: "test-minto", Key: "test/hogehoge", resultType: "text" });
     return { "hoge": 100, "hogehoge": text }
 }
 ~~~
@@ -43,7 +44,7 @@ hogehoge	"testHogehoge"
 2. JSON結果を返却している
 
 だけの処理ですが、これの「コールドスタート実行」の結果が
-- Duration: 103.77 ms
+- Billed Duration: 158 ms
 - Used: 24 MB
 
 こんな感じで「コールドスタート」に対しての速度が「aws lambda と思えないほど高速に実行」されます。
@@ -53,7 +54,7 @@ hogehoge	"testHogehoge"
 - AWS lambda URL Function実行結果(ウォームスタート)
   > REPORT RequestId: a5465a5b-94d2-4b7e-badb-e21690211f9a Duration: 14.69 ms Billed Duration: 15 ms Memory Size: 128 MB Max Memory Used: 24 MB 
 
-  - Duration: 14.69 ms
+  - Billed Duration: 15 ms
   - Used: 24 MB
 
 このように「かなり高速で実行」されます。
@@ -69,7 +70,7 @@ hogehoge	"testHogehoge"
 
 > REPORT RequestId: 3851698e-8163-4f38-a9f6-3d943a064465 Duration: 190.13 ms Billed Duration: 258 ms Memory Size: 128 MB Max Memory Used: 31 MB Init Duration: 67.85 ms
 
-- Duration: 190.13 ms
+- Billed Duration: 258 ms
 - Used: 31 MB
 
 これでも「全然速い」ので、AWSのS3以外の他のサービスを利用する場合は、こちらでも問題ないかと思います。
@@ -78,7 +79,7 @@ hogehoge	"testHogehoge"
 
 > REPORT RequestId: 828f62d0-ddf7-4f81-81d6-b3bd777bfd72 Duration: 4801.02 ms Billed Duration: 4802 ms Memory Size: 128 MB Max Memory Used: 97 MB Init Duration: 156.66 ms
 
-- Duration: 4802 ms
+- Billed Duration: 4802 ms
 - Memory Used: 97 MB
 
 正に llrtランタイムがかなり軽量で実行されることがよくわかります。
