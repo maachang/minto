@@ -37,7 +37,7 @@
     let _c_mime = null;         // minto の mimeオブジェクト.
     let _c_etag = null;         // minto の etag情報.
 
-    // lambda main.
+    // lambda main(３番目の引数 callbackはサポートしない).
     exports.handler = async function (event, context) {
         // イベント11超えでメモリーリーク対応.警告が出るのでこれを排除.
         events.EventEmitter.defaultMaxListeners = 0;
@@ -49,16 +49,17 @@
         _c_mime = null;
         _c_etag = null;
 
-        // favicon.icoを取得.
-        if (event.rawPath.endsWith("/" + _FAVICON_ICO)) {
+        // favicon.icoのアクセス.
+        const rawPath = event.rawPath;
+        if (rawPath.endsWith("/" + _FAVICON_ICO)) {
             // favicon.ico はフィルタを介さないで返却.
             return faviconIco();
         }
         // ファイル拡張子を取得.
-        let ext = _extends(event.rawPath);
+        let ext = _extends(rawPath);
         // 指定実行対象の末尾が[/filter]パスの場合.
         // .mt.js や .jhtml.js も直接指定はエラー.
-        if (isFilterPath(event.rawPath) || isMintoJs(event.rawPath)) {
+        if (isFilterPath(rawPath) || isMintoJs(rawPath)) {
             // 拡張子がjsの場合(mintoJs).
             if (ext == "js") {
                 ext = "";
@@ -80,11 +81,11 @@
         if (ext == "jhtml" || ext == "") {
             // 動的ファイルの実行.
             return await _responseRunJs(
-                event.rawPath, ext);
+                rawPath, ext);
         }
         // 静的ファイルの返却.
         return await _responseStaticFile(
-            event.rawPath, ext);
+            rawPath, ext);
     }
 
     // [default]Baseパス名.
@@ -463,6 +464,10 @@
         };
     }
 
+    // 静的 index.html ファイル名定義.
+    const _STATIC_HTML = "index.html";
+    const _STATIC_HTM = "index.htm";
+
     // 静的なローカルファイルをレスポンス返却.
     const _responseStaticFile = async function (path, ext) {
         try {
@@ -476,13 +481,15 @@
             if (targetFile.endsWith("/")) {
                 // index.html or index.htm として処理する.
                 // index.html.gz も同時にチェックする.
-                if (_existsSync(targetFile + "index.html") ||
-                    _existsSync(targetFile + "index.html" + _PUBLIC_CONTENTS_GZ)) {
-                    targetFile += "index.html";
-                    path = "index.html";
+                if (_existsSync(targetFile + _STATIC_HTML) ||
+                    _existsSync(targetFile + _STATIC_HTML + _PUBLIC_CONTENTS_GZ)) {
+                    // index.html を対象とする.
+                    targetFile += _STATIC_HTML;
+                    path = _STATIC_HTML;
                 } else {
-                    targetFile += "index.htm";
-                    path = "index.htm";
+                    // index.htm を対象とする.
+                    targetFile += _STATIC_HTM;
+                    path = _STATIC_HTM;
                 }
                 ext = "html";
             }
