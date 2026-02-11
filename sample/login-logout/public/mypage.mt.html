@@ -1,0 +1,119 @@
+<%#
+// ************************************************************
+// public/mypage.mt.html
+// マイページ (ログイン後)
+// ************************************************************
+%>
+<%
+    // セッション取得.
+    const session = $loadLib("session.js");
+    const sid = $request().cookie("minto_sid");
+    const user = await session.get(sid);
+
+    // 未ログイン → リダイレクト.
+    if (user == null) {
+        $response().redirect("/index");
+        return _$outString;
+    }
+
+    // ユーザー詳細取得.
+    const userStore = $loadLib("userStore.js");
+    const detail = await userStore.getUser(user.userId);
+%>
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>minto - マイページ</title>
+    <link rel="stylesheet" href="/assets/style.css">
+</head>
+
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <div class="nav-brand">minto App</div>
+            <div class="nav-right">
+                <span class="nav-user">
+                    <%= user.name %>
+                    <% if (user.role === "admin") { %>
+                    <span class="badge badge-admin">Admin</span>
+                    <% } else { %>
+                    <span class="badge badge-user">User</span>
+                    <% } %>
+                </span>
+                <a href="/logout" class="btn btn-sm btn-outline">ログアウト</a>
+            </div>
+        </nav>
+
+        <div class="card mypage-card">
+            <h1>マイページ</h1>
+            <p>ようこそ、<strong>${ user.name }</strong> さん!</p>
+
+            <div class="info-table">
+                <table>
+                    <tr>
+                        <th>ユーザーID</th>
+                        <td><%= user.userId %></td>
+                    </tr>
+                    <tr>
+                        <th>表示名</th>
+                        <td>${ user.name }</td>
+                    </tr>
+                    <tr>
+                        <th>ロール</th>
+                        <td><%= user.role %></td>
+                    </tr>
+                    <tr>
+                        <th>登録日時</th>
+                        <td><%= detail ? detail.createdAt : "-" %></td>
+                    </tr>
+                    <tr>
+                        <th>リクエストID</th>
+                        <td class="mono"><%= $requestId() %></td>
+                    </tr>
+                    <tr>
+                        <th>アクセス時刻</th>
+                        <td><%= new Date().toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }) %></td>
+                    </tr>
+                </table>
+            </div>
+
+            <%# === 管理者セクション === %>
+            <% if (user.role === "admin") { %>
+            <div class="admin-section">
+                <h2>管理者メニュー</h2>
+                <%
+                const sessCount = await session.count();
+                const allUsers = await userStore.listUsers();
+            %>
+                <p>アクティブセッション数: <strong><%= sessCount %></strong></p>
+                <p>登録ユーザー数: <strong><%= allUsers.length %></strong></p>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>ユーザーID</th>
+                            <th>表示名</th>
+                            <th>ロール</th>
+                            <th>登録日時</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% for (let i = 0; i < allUsers.length; i++) { %>
+                        <tr>
+                            <td><%= allUsers[i].userId %></td>
+                            <td><%= allUsers[i].name %></td>
+                            <td><%= allUsers[i].role %></td>
+                            <td><%= allUsers[i].createdAt %></td>
+                        </tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+            <% } %>
+        </div>
+    </div>
+</body>
+
+</html>

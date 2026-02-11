@@ -1,0 +1,7 @@
+{
+    "s3Bucket": "my-minto-app-bucket",
+    "sessionPrefix": "sessions/",
+    "userPrefix": "users/",
+    "sessionTimeoutMin": 30,
+    "region": "ap-northeast-1"
+}

@@ -51,6 +51,17 @@ aws lamba だとソースコードを変更する度に
 
 に対するソースコードです。
 
+詳しくは [このリンク](https://github.com/maachang/minto/blob/main/tools/mtPack.md) を参照してください。
+
+## makeMt.js
+
+この js ファイルは
+- mtmt コマンド
+
+に対するソースコードです。
+
+詳しくは [このリンク](https://github.com/maachang/minto/blob/main/tools/makeMt.md) を参照してください。
+
 ## localLog.js
 
 この js ファイルは
@@ -58,11 +69,20 @@ aws lamba だとソースコードを変更する度に
 
 これのローカルファイル出力関連のlog出力 wrapper 実装となります。
 
+これにより
+~~~js
+console.log("test");
+~~~
+
+このような実装でログがローカルに出力されます.
+
 ## jhtml.js
 
 minto での jhtml テンプレート 実装内容となります。
 
-jhtml テンプレートは、比較的単純な テンプレート で、ローカルテスト用のWebアプリでは、この jhtml テンプレートファイルを読み込んで実行されます。
+jhtml テンプレートは、超シンプルで最低限の テンプレートエンジン で、ローカルテスト用のWebアプリでは、この jhtml テンプレートファイルを読み込んで実行されます。
+
+詳しくは [このリンク](https://github.com/maachang/minto/blob/main/tools/jhtml.md) を参照してください。
 
 ## mintoUtil.js
 
