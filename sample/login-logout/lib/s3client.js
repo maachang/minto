@@ -17,11 +17,15 @@
 
     // StreamをStringに変換.
     const _streamToString = async function (stream) {
-        const chunks = [];
+        // TypeError: not a function at _streamToString エラーになる
+        // ので、恐らく llrt が この構文非対応の可能性がある.
+        // ここの for await 部分を書き換える.
+        /*const chunks = [];
         for await (const chunk of stream) {
             chunks.push(chunk);
         }
-        return Buffer.concat(chunks).toString("utf-8");
+        return Buffer.concat(chunks).toString("utf-8");*/
+        return await stream.transformToString("urf-8");
     };
 
     // S3からJSON取得.

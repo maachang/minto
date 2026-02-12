@@ -50,7 +50,7 @@
         _c_etag = null;
 
         // favicon.icoのアクセス.
-        const rawPath = event.rawPath;
+        let rawPath = event.rawPath;
         if (rawPath.endsWith("/" + _FAVICON_ICO)) {
             // favicon.ico はフィルタを介さないで返却.
             return faviconIco();
@@ -75,6 +75,36 @@
             // filterで処理を終了返却する場合.
             if (resultFilter != true) {
                 return resultFilter;
+            }
+        }
+        // rawPathのファイル指定が空の場合.
+        if (rawPath.endsWith("/")) {
+            // 静的ファイル(html or htm など)が存在する場合.
+            const staticPath = _PUBLIC_PATH() + rawPath;
+            if (_existsSync(staticPath + _STATIC_HTML) ||
+                _existsSync(staticPath + _STATIC_HTML + _PUBLIC_CONTENTS_GZ)) {
+                // index.html ファイルが存在する場合.
+                rawPath = rawPath + _STATIC_HTML;
+                ext = "html";
+                // 静的ファイルの返却.
+                return await _responseStaticFile(
+                    rawPath, ext);
+            } else if (_existsSync(staticPath + _STATIC_HTM) ||
+                _existsSync(staticPath + _STATIC_HTM + _PUBLIC_CONTENTS_GZ)) {
+                // index.htm ファイルが存在する場合.
+                rawPath = rawPath + _STATIC_HTM;
+                ext = "htm";
+                // 静的ファイルの返却.
+                return await _responseStaticFile(
+                    rawPath, ext);
+            } else {
+                // staticなファイルが存在しない場合.
+                // 動的ファイルを対象とする.
+                rawPath += "index";
+                ext = "";
+                // 動的ファイルの実行.
+                return await _responseRunJs(
+                    rawPath, ext);
             }
         }
         // 動的ファイル処理.
@@ -228,6 +258,11 @@
             if (_existsSync(_BASE_PATH + name)) {
                 return require(_BASE_PATH + name);
             }
+            try {
+                // 標準ライブラリとして呼び出す.
+                // @aws-sdk/client-s3 などの / が入るケースがあるため.
+                return require(name);
+            } catch (e) { }
             // 取得できない場合はエラー.
             throw new Error("Failed to load require: " + name);
         } else {
@@ -608,6 +643,23 @@
         }
         // publicディレクトリ.
         path = _PUBLIC_PATH() + path;
+
+        // 拡張子が空の場合
+        // *.mt.js: js実行(こちらが優先).
+        // *.jhtml.js: jhtml実行.
+        // の解釈をする.
+        if (ext == "") {
+            // js実行でない場合.
+            if (!_existsSync(path + _RUN_JS)) {
+                // jhtml.js か mt.html の場合.
+                if (_existsSync(path + _RUN_JHTML) ||
+                    _existsSync(path + _JHTML_SRC_EXTENSION)) {
+                    ext = "jhtml"; // 拡張子を jhtmlにする.
+                    path += ".jhtml"; // パスに jhtml 拡張子をセット.
+                }
+            }
+        }
+        // 動的処理実行.
         try {
             let convFunc = null;
             if (ext == "jhtml") {
