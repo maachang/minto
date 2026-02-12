@@ -1,5 +1,5 @@
 {
-    "s3Bucket": "my-minto-app-bucket",
+    "s3Bucket": "test-minto-llo-bucket",
     "sessionPrefix": "sessions/",
     "userPrefix": "users/",
     "sessionTimeoutMin": 30,
