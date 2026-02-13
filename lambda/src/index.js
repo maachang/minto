@@ -34,8 +34,8 @@
     let _context = null;        // lambda handler(context) パラメータ.
     let _c_request = null;      // minto の requestオブジェクト.
     let _c_response = null;     // minto の responseオブジェクト.
-    let _c_mime = null;         // minto の mimeオブジェクト.
-    let _c_etag = null;         // minto の etag情報.
+    let _c_mime = null;         // minto の mimeオブジェクト(ウォームスタート対応).
+    let _c_etag = null;         // minto の etag情報(ウォームスタート対応).
 
     // lambda main(３番目の引数 callbackはサポートしない).
     exports.handler = async function (event, context) {
@@ -46,8 +46,6 @@
         _context = context;
         _c_request = null;
         _c_response = null;
-        _c_mime = null;
-        _c_etag = null;
 
         // favicon.icoのアクセス.
         let rawPath = event.rawPath;
@@ -61,7 +59,7 @@
         // .mt.js や .jhtml.js も直接指定はエラー.
         if (isFilterPath(rawPath) || isMintoJs(rawPath)) {
             // 拡張子がjsの場合(mintoJs).
-            if (ext == "js") {
+            if (ext === "js") {
                 ext = "";
             }
             // 直接パス実行出来ない: 403エラー.
@@ -108,7 +106,7 @@
             }
         }
         // 動的ファイル処理.
-        if (ext == "jhtml" || ext == "") {
+        if (ext === "jhtml" || ext === "") {
             // 動的ファイルの実行.
             return await _responseRunJs(
                 rawPath, ext);
@@ -158,7 +156,7 @@
     // を設定します.
     let _jhtmlConvFunc = null;
     exports.setJHTMLConvFunc = function (func) {
-        if (typeof (func) == "function") {
+        if (typeof (func) === "function") {
             _jhtmlConvFunc = func;
         }
     }
@@ -171,6 +169,9 @@
         _c_response = null;
         _c_mime = null;
         _c_etag = null;
+        // キャッシュ情報.
+        _existsCache.clear();
+        _jsCache.clear();
     }
 
     // _toString64の文字列.
@@ -181,13 +182,13 @@
     const _toString64 = function (num) {
         let a;
         let ret = "";
-        while (num != 0) {
+        while (num !== 0) {
             a = num & 0x03f;
             num = (num - a) / 64;
             ret = _CODE64[a] + ret;
         }
         // num == 0 の場合.
-        if (ret == "") {
+        if (ret === "") {
             ret = "+";
         }
         return ret;
@@ -212,7 +213,8 @@
     // 戻り値: require結果が返却されます.
     _g.$loadLib = function (name) {
         name = ("" + name).trim();
-        if (name[0] == "/") {
+        //if (name[0] === "/") {
+        if (name.charCodeAt(0) === 47) {
             name = name.substring(1)
         }
         // "/lib" 以下のファイルを require.
@@ -228,7 +230,8 @@
     // 戻り値: require結果が返却されます.
     _g.$loadConf = function (name) {
         name = ("" + name).trim();
-        if (name[0] == "/") {
+        //if (name[0] === "/") {
+        if (name.charCodeAt(0) === 47) {
             name = name.substring(1)
         }
         if (_existsSync(_CONF_PATH() + name)) {
@@ -250,8 +253,9 @@
     _g.$require = function (name) {
         name = ("" + name).trim();
         // カレントパスからのアクセスを行なう.
-        if (name.indexOf("/") != -1) {
-            if (name[0] == "/") {
+        if (name.indexOf("/") !== -1) {
+            //if (name[0] === "/") {
+            if (name.charCodeAt(0) === 47) {
                 name = name.substring(1);
             }
             // カレントパスを絶対パスとして取得.
@@ -274,7 +278,7 @@
     // requestオブジェクトを取得.
     // 戻り値: request情報が返却されます.
     _g.$request = function () {
-        if (_c_request == null) {
+        if (_c_request === null) {
             _createRequest(_event);
         }
         return _c_request;
@@ -283,7 +287,7 @@
     // responseオブジェクトを取得.
     // 戻り値: response情報が返却されます.
     _g.$response = function () {
-        if (_c_response == null) {
+        if (_c_response === null) {
             _createResponse();
         }
         return _c_response;
@@ -298,13 +302,13 @@
         const ret = _getMime(ext);
         // mime定義全体を取得の場合.
         if (all == true) {
-            if (ret == undefined) {
+            if (ret === undefined) {
                 return null;
             }
             return ret;
         }
         // mimeTypeのみ取得の場合.
-        if (ret == undefined) {
+        if (ret === undefined) {
             return _OCTET_STREAM;
         }
         return ret.type;
@@ -351,10 +355,10 @@
     // 対象拡張子のMimeTypeを取得.
     const _getMime = function (ext) {
         let mime = _MIME[ext];
-        if (mime == undefined) {
-            if (_c_mime == null) {
+        if (mime === undefined) {
+            if (_c_mime === null) {
                 _c_mime = _g.$loadConf(_MIME_CONF);
-                if (_c_mime == null) {
+                if (_c_mime === null) {
                     _c_mime = {};
                 }
             }
@@ -396,7 +400,7 @@
                 return true;
             }
             // $responseが利用されている場合.
-            if (_c_response != null) {
+            if (_c_response !== null) {
                 // $response内容を取得.
                 return _resultFilter(_c_response._$get(), ext);
             }
@@ -411,7 +415,7 @@
 
     // filter実行結果を生成.
     const _resultFilter = function (res, ext) {
-        if (res == undefined || res == null) {
+        if (res === undefined || res === null) {
             // filter実行で処理中断の場合は
             // 通常403返却を行なう.
             return _errorStaticResult(403, ext);
@@ -423,10 +427,10 @@
     // 指定リクエストのetagが etags.json と一致するかチェック.
     const _httpRequestEtag = function (outEtag, path) {
         // キャッシュ条件が生成されていない場合.
-        if (_c_etag == null) {
+        if (_c_etag === null) {
             // 対象パスのetag情報のファイルを取得.
             const etagConf = $loadConf(_ETAGS_CONF_FILE);
-            if (etagConf == null) {
+            if (etagConf === null) {
                 // 空生成.
                 _c_etag = {};
                 // 存在しない場合.
@@ -440,7 +444,7 @@
         }
         // 対象パスの定義etagを取得.
         const srcEtag = _c_etag[path];
-        if (srcEtag == undefined) {
+        if (srcEtag === undefined) {
             // 存在しない場合.
             return false;
         }
@@ -459,7 +463,7 @@
         // etagを取得.
         const etagCache = _httpRequestEtag(srcEtag, "/" + _FAVICON_ICO);
         // etagレスポンスが必要な場合.
-        if (srcEtag[0] != null) {
+        if (srcEtag[0] !== null) {
             // etagが存在する場合はresponseヘッダにセット.
             headers["etag"] = srcEtag[0];
         }
@@ -507,7 +511,8 @@
     const _responseStaticFile = async function (path, ext) {
         try {
             // パスを取得.
-            if (path[0] == "/") {
+            //if (path[0] === "/") {
+            if (path.charCodeAt(0) === 47) {
                 path = path.substring(1)
             }
             let targetFile = _PUBLIC_PATH() + path;
@@ -534,7 +539,7 @@
             const srcEtag = [null];
             const etagCache = _httpRequestEtag(srcEtag, path);
             // etagレスポンスが必要な場合.
-            if (srcEtag[0] != null) {
+            if (srcEtag[0] !== null) {
                 // etagが存在する場合はresponseヘッダにセット.
                 headers["etag"] = srcEtag[0];
             }
@@ -542,7 +547,7 @@
             // mimeを取得.
             let gz = false;
             let mime = _getMime(ext);
-            if (mime == undefined) {
+            if (mime === undefined) {
                 mime = _OCTET_STREAM;
             } else {
                 gz = mime.gz;
@@ -584,7 +589,7 @@
             // 圧縮処理.
             if (gz) {
                 // gzip処理.
-                body = await _convGZIP(body);
+                body = _convGZIP(body);
                 headers["content-encoding"] = "gzip";
             }
             // 返却処理.
@@ -601,17 +606,11 @@
         }
     }
 
-    // gzip圧縮(promise = async).
+    // gzip圧縮.
+    let _ZLIB = null;
     const _convGZIP = function (body) {
-        return new Promise((resolve, reject) => {
-            require('zlib').gzip(body, function (err, result) {
-                if (err != undefined) {
-                    reject(err);
-                    return;
-                }
-                resolve(result);
-            });
-        });
+        _ZLIB = _ZLIB || require("zlib");
+        return _ZLIB.gzipSync(body);
     }
 
     // (静的ファイル)エラー返却.
@@ -619,7 +618,7 @@
         let mime = _getMime(ext);
         let headers = {};
         let body = ""
-        if (mime == undefined) {
+        if (mime === undefined) {
             headers["content-type"] = "text/plain";
             body = "error: " + status;
         } else {
@@ -638,7 +637,8 @@
 
     // 動的jsを実行.
     const _responseRunJs = async function (path, ext) {
-        if (path[0] == "/") {
+        //if (path[0] === "/") {
+        if (path.charCodeAt(0) === 47) {
             path = path.substring(1).trim();
         }
         // publicディレクトリ.
@@ -648,7 +648,7 @@
         // *.mt.js: js実行(こちらが優先).
         // *.jhtml.js: jhtml実行.
         // の解釈をする.
-        if (ext == "") {
+        if (ext === "") {
             // js実行でない場合.
             if (!_existsSync(path + _RUN_JS)) {
                 // jhtml.js か mt.html の場合.
@@ -662,9 +662,9 @@
         // 動的処理実行.
         try {
             let convFunc = null;
-            if (ext == "jhtml") {
+            if (ext === "jhtml") {
                 // jhtml->js変換用のfunctionが設定されている場合.
-                if (_jhtmlConvFunc != null) {
+                if (_jhtmlConvFunc !== null) {
                     // jhtmlソースパス変換.
                     path = path.substring(0, path.length - (ext.length + 1)) + _JHTML_SRC_EXTENSION;
                     convFunc = _jhtmlConvFunc; // jhtml変換function.
@@ -679,7 +679,7 @@
             // 対象のファイルが存在しない場合.
             if (!_existsSync(path)) {
                 console.warn("[warning] not RunJs file: " + path);
-                return _errorStaticResult(404, (ext == "jhtml") ? "html" : "js");
+                return _errorStaticResult(404, (ext === "jhtml") ? "html" : "js");
             }
             // 実行jsを取得.
             let runJs = _loadJs(path, convFunc);
@@ -688,7 +688,7 @@
             runJs = undefined;
             let response = null;
             // $responseが利用されている場合.
-            if (_c_response != null) {
+            if (_c_response !== null) {
                 // $response内容を取得.
                 response = _c_response._$get();
             } else {
@@ -703,7 +703,7 @@
                 }
             }
             // 実行jsから body が直接設定されている場合.
-            if (body != undefined && body != null) {
+            if (body !== undefined && body !== null) {
                 // 返却情報のBodyをセット.
                 response["body"] = body;
             }
@@ -719,11 +719,11 @@
     // レスポンスヘッダにキャッシュなしをセット.
     const _setResponseNoCacheHeaders = function (resHeader) {
         // レスポンスヘッダにキャッシュなしをセット.
-        if (resHeader["last-modified"] != undefined) {
+        if (resHeader["last-modified"] !== undefined) {
             // キャッシュ返却は削除.
             delete resHeader["last-modified"];
         }
-        if (resHeader["etag"] != undefined) {
+        if (resHeader["etag"] !== undefined) {
             // キャッシュ返却は削除.
             delete resHeader["etag"];
         }
@@ -740,10 +740,10 @@
         let body = response.body;
         const tof = typeof (body);
         // 文字列.
-        if (tof == "string") {
+        if (tof === "string") {
             // コンテンツタイプが設定されていない場合.
-            if (contentType == undefined) {
-                if (ext == "jhtml") {
+            if (contentType === undefined) {
+                if (ext === "jhtml") {
                     response.headers["content-type"] = "text/html";
                 } else {
                     response.headers["content-type"] = "application/json";
@@ -754,7 +754,7 @@
             body = body.toString("base64");
             base64 = true;
             // コンテンツタイプが設定されていない場合.
-            if (contentType == undefined) {
+            if (contentType === undefined) {
                 response.headers["content-type"] = _OCTET_STREAM;
             }
         } else if (ArrayBuffer.isView(body) || body instanceof ArrayBuffer) {
@@ -762,14 +762,14 @@
             body = Buffer.from(body).toString('base64')
             base64 = true;
             // コンテンツタイプが設定されていない場合.
-            if (contentType == undefined) {
+            if (contentType === undefined) {
                 response.headers["content-type"] = _OCTET_STREAM;
             }
-        } else if (tof == "object") {
+        } else if (tof === "object") {
             // json返却.
             body = JSON.stringify(body);
             // コンテンツタイプが設定されていない場合.
-            if (contentType == undefined) {
+            if (contentType === undefined) {
                 response.headers["content-type"] = "application/json";
             }
             // それ以外の場合.
@@ -777,13 +777,13 @@
             // 空文字をセット.
             body = "";
             // コンテンツタイプが設定されていない場合.
-            if (contentType == undefined) {
+            if (contentType === undefined) {
                 response.headers["content-type"] = "text/plain";
             }
         }
         // cookie変換.
         let cookies = [];
-        if (response.cookies != undefined && response.cookies != null) {
+        if (response.cookies !== undefined && response.cookies !== null) {
             // cookiesが１つでも存在する場合処理を行なう.
             for (let k in response.cookies) {
                 cookies = _responseCookies(response.cookies)
@@ -793,8 +793,8 @@
         // キャッシュなしを設定.
         _setResponseNoCacheHeaders(response.headers);
         // status message が設定されていない場合.
-        if (response.message == undefined || response.message == null ||
-            response.message == "") {
+        if (response.message === undefined || response.message === null ||
+            response.message === "") {
             // status message なしで返却.
             return {
                 statusCode: response.status
@@ -828,7 +828,7 @@
             message = e.getMessage();
         }
         // エラーレスポンス返却.
-        if (ext == "jhtml") {
+        if (ext === "jhtml") {
             headers["content-type"] = "text/html";
             body = "" + message;
         } else {
@@ -848,20 +848,21 @@
     }
 
     // サーバーサイドで実行処理.
+    // JS読み込み＋実行 (キャッシュ対応).
+    const _jsCache = new Map();
     const _loadJs = function (path, convFunc) {
-        // ファイルを読み込む.
-        let jsBody = fs.readFileSync(path).toString();
-        // convFuncが設定されている場合.
-        if (convFunc != undefined && convFunc != null) {
-            // 変換処理.
-            jsBody = convFunc(jsBody);
+        // convFunc がある場合はキャッシュしない.
+        if (!convFunc) {
+            const cached = _jsCache.get(path);
+            if (cached) return cached;
         }
+        const jsBody = fs.readFileSync(path, "utf8");
+        const src = convFunc ? convFunc(jsBody) : jsBody;
         const exp = {};
-        Function("exports", "module", jsBody)(
-            exp, { exports: exp }
-        );
+        Function("exports", "module", src)(exp, { exports: exp });
+        if (!convFunc) _jsCache.set(path, exp);
         return exp;
-    }
+    };
 
     // formパラメータ解析.
     const _analysisFormParams = function (n) {
@@ -871,7 +872,7 @@
         for (var i = 0; i < len; i++) {
             n = list[i].split("=");
             n[0] = decodeURIComponent(n[0]);
-            if (n.length == 1) {
+            if (n.length === 1) {
                 ret[n[0]] = "";
             } else {
                 ret[n[0]] = decodeURIComponent(n[1]);
@@ -890,7 +891,7 @@
         let p = path.lastIndexOf("/");
         const ex = path.substring(p);
         p = ex.lastIndexOf(".");
-        if (p == -1) {
+        if (p === -1) {
             return "";
         }
         return ex.substring(p + 1)
@@ -898,14 +899,19 @@
     }
 
     // existsSyncをstatSyncで代用(existsSync=Deprecated)
+    const _existsCache = new Map();
     const _existsSync = function (name) {
+        let r = _existsCache.get(name);
+        if (r !== undefined) return r;
         try {
             fs.statSync(name);
-            return true;
-        } catch (e) {
-            return false;
+            r = true;
+        } catch (_) {
+            r = false;
         }
-    }
+        _existsCache.set(name, r);
+        return r;
+    };
 
     // 登録されたCookie情報をレスポンス用headerに設定.
     // 戻り値: cookieリストが返却されます.
@@ -920,9 +926,9 @@
                 "=" + encodeURIComponent(em.value);
             for (let n in em) {
                 // valueのkey名は設定済みなので飛ばす.
-                if (n == "value") {
+                if (n === "value") {
                     continue;
-                } else if (n == "samesite") {
+                } else if (n === "samesite") {
                     sameSite = true;
                     // 単一設定[Secureなど].
                 } else if (em[n] == true) {
@@ -956,7 +962,7 @@
         let _path = null;
         o.path = function () {
             // cache.
-            if (_path != null) {
+            if (_path !== null) {
                 return _path;
             }
             const path = event.rawPath;
@@ -971,7 +977,7 @@
         let _extends = null;
         o.extends = function () {
             // cache.
-            if (_extends != null) {
+            if (_extends !== null) {
                 return _extends;
             }
             _extends = _extends(o.path());
@@ -980,7 +986,7 @@
         // HTTPメソッドを取得.
         let _method = null;
         o.method = function () {
-            if (_method != null) {
+            if (_method !== null) {
                 return _method;
             }
             _method = event.requestContext.http.method.toUpperCase();
@@ -989,12 +995,12 @@
         // httpヘッダ.
         let _headers = null;
         o.headers = function () {
-            if (_headers != null) {
+            if (_headers !== null) {
                 return _headers;
             }
             const ret = {};
             const h = event.headers;
-            if (h != undefined && h != null) {
+            if (h !== undefined && h !== null) {
                 for (let k in h) {
                     ret[k] = h[k]; // lambdaでは keyは全て小文字変換されてる.
                 }
@@ -1005,11 +1011,11 @@
         // 指定keyのheaderを取得.
         o.header = function (key) {
             const kv = o.headers();
-            if (kv == undefined) {
+            if (kv === undefined) {
                 return null;
             }
             const ret = kv[key];
-            if (ret == undefined) {
+            if (ret === undefined) {
                 return null;
             }
             return ret;
@@ -1017,18 +1023,18 @@
         // httpヘッダ(cookies).
         let _cookies = null;
         o.cookies = function () {
-            if (_cookies != null) {
+            if (_cookies !== null) {
                 return _cookies;
             }
             const ret = {};
             const c = event.cookies;
-            if (c != undefined && c != null) {
+            if (c !== undefined && c !== null) {
                 let p, value;
                 const len = c.length;
                 for (let i = 0; i < len; i++) {
                     value = decodeURIComponent(c[i])
                     p = value.indexOf("=");
-                    if (p == -1) {
+                    if (p === -1) {
                         ret[value] = true;
                     } else {
                         ret[value.substring(0, p)] = value.substring(p + 1);
@@ -1041,11 +1047,11 @@
         // 指定keyのcookieを取得.
         o.cookie = function (key) {
             const kv = o.cookies();
-            if (kv == undefined) {
+            if (kv === undefined) {
                 return null;
             }
             const ret = kv[key];
-            if (ret == undefined) {
+            if (ret === undefined) {
                 return null;
             }
             return ret;
@@ -1057,7 +1063,7 @@
         // URLParams.
         o.urlParams = function () {
             const ret = event.queryStringParameters;
-            if (ret == undefined || ret == null) {
+            if (ret === undefined || ret === null) {
                 return {};
             }
             return ret;
@@ -1065,10 +1071,10 @@
         // パラメータを取得.
         let _params = null;
         o.params = function () {
-            if (_params != null) {
+            if (_params !== null) {
                 return _params;
             }
-            if (o.method() == "GET") {
+            if (o.method() === "GET") {
                 // urlParams.
                 _params = o.urlParams();
                 return _params;
@@ -1084,14 +1090,14 @@
                 isBinary = false;
             }
             const contentType = o.headers()["content-type"];
-            if (contentType == "application/json") {
+            if (contentType === "application/json") {
                 // json.
                 if (isBinary) {
                     body = body.toString();
                     isBinary = false;
                 }
                 _params = JSON.parse(body);
-            } else if (contentType == "application/x-www-form-urlencoded") {
+            } else if (contentType === "application/x-www-form-urlencoded") {
                 // form-data.
                 if (isBinary) {
                     body = body.toString();
@@ -1109,7 +1115,7 @@
         }
         // body情報を取得.
         o.body = function () {
-            if (o.method() == "GET") {
+            if (o.method() === "GET") {
                 return null;
             }
             if (event.isBase64Encoded == true) {
@@ -1130,7 +1136,7 @@
         let _state = 200;
         let _state_msg = "";
         o.status = function (status, message) {
-            if (message == null || messaeg == undefined) {
+            if (message === null || message === undefined) {
                 message = null;
             }
             _state = status;
@@ -1158,7 +1164,7 @@
             },
             remove: function (key) {
                 key = ("" + key).trim().toLowerCase();
-                if (_headers[key] != undefined) {
+                if (_headers[key] !== undefined) {
                     delete _headers[key];
                 }
             }
@@ -1174,18 +1180,18 @@
         const _cookies = {}
         o.cookie = function (key, value) {
             const vparams = {};
-            if (typeof (value) == "string") {
+            if (typeof (value) === "string") {
                 // 文字列から {} に変換.
                 let n;
                 const list = value.split(";");
                 const len = list.length;
                 for (let i = 0; i < len; i++) {
                     n = list[i].trim();
-                    if (i == 0) {
+                    if (i === 0) {
                         vparams.value = n;
                     } else {
                         const p = n.indexOf("=");
-                        if (p == -1) {
+                        if (p === -1) {
                             vparams[n] = true;
                         } else {
                             vparams[n.substring(0, p)] = n.substring(p + 1);
@@ -1212,14 +1218,14 @@
         }
         // contentType.
         o.contentType = function (mime, charset) {
-            if (typeof (charset) == "string" && charset.length > 0) {
+            if (typeof (charset) === "string" && charset.length > 0) {
                 mime += "; charset=" + charset;
             }
             _headers["content-type"] = mime;
         }
         // リダイレクト.
         o.redirect = function (url, params, status) {
-            if (status == undefined) {
+            if (status === undefined) {
                 status = 301;
             } else {
                 const srcStatus = status;
@@ -1228,16 +1234,16 @@
                         srcStatus + " is not a number.");
                 }
             }
-            if (typeof (url) != "string") {
+            if (typeof (url) !== "string") {
                 throw new Error("No redirect URL specified");
             }
-            if (params != undefined) {
+            if (params !== undefined) {
                 // パラメータが存在する場合セット.
-                if (typeof (params) != "string") {
+                if (typeof (params) !== "string") {
                     let cnt = 0
                     let pms = "";
                     for (let k in params) {
-                        if (cnt != 0) {
+                        if (cnt !== 0) {
                             pms += "&";
                         }
                         pms += decodeURIComponent(k) + "=" +
@@ -1247,7 +1253,7 @@
                     params = pms;
                 }
                 // パラメータを追加.
-                if (url.indexOf("?") != -1) {
+                if (url.indexOf("?") !== -1) {
                     url += "&";
                 } else {
                     url += "?";
@@ -1279,18 +1285,18 @@
         #error;
         // コンストラクタ.
         constructor(args) {
-            if (args == undefined || args == null) {
+            if (args === undefined || args === null) {
                 args = {};
             }
-            if (args.status == undefined) {
+            if (args.status === undefined) {
                 args.status = 500;
             }
-            if (args.message == undefined) {
-                if (args.status == 500) {
+            if (args.message === undefined) {
+                if (args.status === 500) {
                     args.message = "Internal Server Error";
                 }
             }
-            if (args.error == undefined) {
+            if (args.error === undefined) {
                 args.error = undefined;
             }
             this.#status = args.status;
@@ -1341,11 +1347,11 @@
         if (!isNaN(parseInt(seed))) {
             let hs = ((seed / 1812433253) | 0) + 1;
             let ls = ((seed % 1812433253) | 0) - 1;
-            if ((ls & 0x01) == 0) {
+            if ((ls & 0x01) === 0) {
                 hs = (~hs) | 0;
             }
             _a = hs = (((_a * (ls)) * hs) + 1) | 0;
-            if ((_a & 0x01) == 1) {
+            if ((_a & 0x01) === 1) {
                 _c = (((_c * (hs)) * ls) - 1) | 0;
             }
         }
