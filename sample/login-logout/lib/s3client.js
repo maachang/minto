@@ -15,8 +15,9 @@
     const _REGION = _conf.region || "ap-northeast-1";
     const _s3 = new S3Client({ region: _REGION });
 
-    // StreamをStringに変換.
-    const _streamToString = async function (stream) {
+    // [async]StreamをStringに変換.
+    //const _streamToString = async function (stream) {
+    const _streamToString = function (stream) {
         // TypeError: not a function at _streamToString エラーになる
         // ので、恐らく llrt が この構文非対応の可能性がある.
         // ここの for await 部分を書き換える.
@@ -25,7 +26,7 @@
             chunks.push(chunk);
         }
         return Buffer.concat(chunks).toString("utf-8");*/
-        return await stream.transformToString("urf-8");
+        return stream.transformToString("urf-8");
     };
 
     // S3からJSON取得.
