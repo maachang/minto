@@ -100,7 +100,6 @@
         return ret;
     }
 
-    // ${ ... } を <% ... %>変換する.
     // jhtml 変換対象のjhtml内容を設定します.
     // 戻り値: 変換された内容が返却されます.
     const analysis$braces = function (jhtml) {
@@ -137,20 +136,31 @@
                         $pos = -1;
                     }
                 }
-                // ${ ... }の開始位置を検出.
+                // \${ の場合はリテラルとして扱う（エスケープ）.
             } else if (c == "$" && i + 1 < len && jhtml[i + 1] == "{") {
-                $pos = i;
+                if (by) {
+                    // 直前がバックスラッシュなら、先に追加した '\' を除去して
+                    // リテラル '${' として出力.
+                    ret = ret.substring(0, ret.length - 1);
+                    ret += "${";
+                    i++; // '{' をスキップ.
+                } else {
+                    $pos = i;
+                }
                 // それ以外.
             } else {
                 ret += c;
             }
-            // 円マークの場合.
+            // バックスラッシュフラグ更新.
             by = (c == "\\");
+        }
+        // 閉じられていない ${ が残っている場合、そのまま出力する.
+        if ($pos != -1) {
+            ret += jhtml.substring($pos);
         }
         return ret;
     }
 
-    // jhtmlを解析して実行可能なjs変換を行う.
     // jhtml 対象のjhtmlを設定します.
     // out jhtmlを出力するためのメソッド名を設定します.
     // 戻り値: 実行可能なjs形式の情報が返却されます.
@@ -160,18 +170,45 @@
         bef = 0;
         start = -1;
         ret = "";
+
+        // タグ内部のクォーテーション追跡用.
+        let tagQt = undefined;  // 現在のクォーテーション文字（ " or ' or `）
+        let tagBy = false;      // 直前がバックスラッシュかどうか
+
         for (let i = 0; i < len; i++) {
             c = jhtml[i];
             if (start != -1) {
-                if (c == "%" && i + 1 < len && jhtml[i + 1] == ">") {
-                    if (ret.length != 0) {
-                        ret += "\n";
+                // <% %> タグ内部の解析.
+
+                // クォーテーション内の場合.
+                if (tagQt != undefined) {
+                    if (!tagBy && c == tagQt) {
+                        // クォーテーション終端.
+                        tagQt = undefined;
                     }
+                    tagBy = (c == "\\");
+                    continue;
+                }
+
+                // クォーテーション開始の検出.
+                if (c == "\"" || c == "\'" || c == "\`") {
+                    tagQt = c;
+                    tagBy = false;
+                    continue;
+                }
+
+                // %> の検出（クォーテーション外でのみ有効）.
+                if (c == "%" && i + 1 < len && jhtml[i + 1] == ">") {
+                    // HTML部分を出力（空でなければ）.
                     n = jhtml.substring(bef, start);
-                    n = indentEnter(n);
-                    n = indentQuote(n, true);
-                    // HTML部分を出力.
-                    ret += out + "(\"" + n + "\");\n";
+                    if (n.length > 0) {
+                        if (ret.length != 0) {
+                            ret += "\n";
+                        }
+                        n = indentEnter(n);
+                        n = indentQuote(n, true);
+                        ret += out + "(\"" + n + "\");\n";
+                    }
                     bef = i + 2;
 
                     // 実行処理部分を実装.
@@ -182,26 +219,40 @@
                         if (n.endsWith(";")) {
                             n = n.substring(0, n.length - 1).trim();
                         }
+                        if (ret.length != 0) {
+                            ret += "\n";
+                        }
                         ret += out + "(" + n + ");\n";
                     } else if (n == "#") {
                         // コメントなので、何もしない.
                     } else {
                         // 出力なしの実行部分.
+                        if (ret.length != 0) {
+                            ret += "\n";
+                        }
                         ret += jhtml.substring(start + 2, i).trim() + "\n";
                     }
                     start = -1;
+                    tagQt = undefined;
+                    tagBy = false;
+                    i++; // '>' をスキップ.
                 }
             } else if (c == "<" && i + 1 < len && jhtml[i + 1] == "%") {
                 start = i;
                 i += 1;
             }
         }
-        // のこりのHTML部分を出力.
+
+        // 残りのHTML部分を出力（空でなければ）.
         n = jhtml.substring(bef);
-        n = indentEnter(n);
-        n = indentQuote(n, true);
-        // HTML部分を出力.
-        ret += out + "(\"" + n + "\");\n";
+        if (n.length > 0) {
+            n = indentEnter(n);
+            n = indentQuote(n, true);
+            if (ret.length != 0) {
+                ret += "\n";
+            }
+            ret += out + "(\"" + n + "\");\n";
+        }
 
         return ret;
     }
