@@ -123,7 +123,7 @@
     // baseパスを設定.
     // basePath 対象のbaseパスを設定します.
     exports.setBasePath = function (basePath) {
-        _basePath = _basePath.trim();
+        basePath = basePath.trim();
         if (basePath.endsWith("/")) {
             _basePath = basePath;
         } else {
@@ -974,18 +974,19 @@
             return _path;
         };
         // パスの拡張子を取得.
-        let _extends = null;
+        let _ext = null;
         o.extends = function () {
             // cache.
-            if (_extends !== null) {
-                return _extends;
+            if (_ext !== null) {
+                return _ext;
             }
-            _extends = _extends(o.path());
-            return _extends;
+            _ext = _extends(o.path());
+            return _ext;
         }
         // HTTPメソッドを取得.
         let _method = null;
         o.method = function () {
+            // cache.
             if (_method !== null) {
                 return _method;
             }
