@@ -47,8 +47,12 @@
         _c_request = null;
         _c_response = null;
 
-        // favicon.icoのアクセス.
         let rawPath = event.rawPath;
+        // 不正なパスが設定されている場合はエラーにする.
+        if (rawPath.indexOf("/../") != -1) {
+            throw new HttpError(400, "不正なパスを検知しました")
+        }
+        // favicon.icoのアクセス.
         if (rawPath.endsWith("/" + _FAVICON_ICO)) {
             // favicon.ico はフィルタを介さないで返却.
             return faviconIco();

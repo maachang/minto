@@ -5,6 +5,7 @@
 - `no-sdk`: llrt-lambda-{cpu名}-no-sdk.zip を利用する場合の aws-sdk(AWS Signature(version4)) を利用する場合のライブラリ群.
 - `sdk`:  llrt-lambda-{cpu名}-full-sdk.zip を利用する場合の aws-sdk-V3を利用するライブラリ群.
 - `notification`: よく使う slack通知やgithubリポジトリのissue作成を行うライブラリ群.
+- `csv`: CSVファイルのパーサーやCSVエクスポート系ライブラリ、メモリーテーブル機能.
 
 ## 利用方法(実装方法)
 
