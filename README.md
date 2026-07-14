@@ -106,8 +106,8 @@ llrtはNode.jsライクに利用できますが、以下のような制限があ
   - [mintoのローカル環境のAWS Lambdaデプロイ](https://github.com/maachang/minto/blob/main/docs/lambda.md)
 - 開発・動作確認
   - [mintoのテスト環境](https://github.com/maachang/minto/blob/main/docs/testing.md)
-- 設計検討中
-  - [S3行ファイル型データベース 設計ドキュメント（検討中・未実装）](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)
+- モジュール
+  - [S3行ファイル型データベース(s3IndexTable) 設計ドキュメント](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)
 
 以上、ありがとうございました。
 </content>

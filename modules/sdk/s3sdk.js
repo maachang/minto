@@ -228,6 +228,8 @@
     //        continuationToken: 次の開始位置のトークンを設定します.
     //                           この値はlist返却の{IsTruncated; true}の場合
     //                           {NextContinuationToken}この内容を設定します.
+    //        startAfter: 指定した文字列より後(排他的)のキーから一覧取得を
+    //                    開始します(範囲検索の開始位置指定に利用).
     // 戻り値: リスト内容が返却されます.
     //         {Contents:[]} 以下がリスト情報内容となります.
     exports.list = async function (bucket, prefix, options) {
@@ -248,6 +250,9 @@
         }
         if (options.continuationToken != undefined) {
             input["ContinuationToken"] = "" + options.continuationToken;
+        }
+        if (options.startAfter != undefined) {
+            input["StartAfter"] = "" + options.startAfter;
         }
         try {
             // リスト取得.

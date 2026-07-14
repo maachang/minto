@@ -4,6 +4,9 @@
 
 - `no-sdk`: llrt-lambda-{cpu名}-no-sdk.zip を利用する場合の aws-sdk(AWS Signature(version4)) を利用する場合のライブラリ群.
 - `sdk`:  llrt-lambda-{cpu名}-full-sdk.zip を利用する場合の aws-sdk-V3を利用するライブラリ群.
+  - `s3sdk.js`: 最低限のS3 put/get/delete/list操作.
+  - `s3db.js`: テーブル全体を1つのJSONとしてS3に保存するRDBMSライクなデータベース.
+  - `s3IndexTable.js`: 1行=1ファイルでS3に保存する行ファイル型データベース(書き込み競合が起きにくい代わりに、検索は事前定義したインデックス経由のみ・複合インデックスは先頭カラムのみ範囲検索可、という制約がある。1テーブル1万件程度の小規模利用を想定。詳細は[docs/s3-row-store-design.md](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)を参照).
 - `notification`: よく使う slack通知やgithubリポジトリのissue作成を行うライブラリ群.
 - `csv`: CSVファイルのパーサーやCSVエクスポート系ライブラリ、メモリーテーブル機能.
 - `auth`: パスワードハッシュ化、S3ベースのセッション管理、CORS共通ヘルパーなど認証まわりのライブラリ群(`sdk/s3sdk.js`に依存).
