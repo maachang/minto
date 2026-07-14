@@ -24,6 +24,9 @@
     // args.
     const args = require("./args.js");
 
+    // llrt互換性チェック.
+    const llrtCheck = require("./llrtCheck.js");
+
     // mintoメイン.
     require("../lambda/src/index.js");
 
@@ -240,6 +243,8 @@
         ret["etag"] = args.isValue("-e", "--etag", "-all", "--all");
         // gz.
         ret["gz"] = args.isValue("-z", "--gz", "-all", "--all");
+        // llrt互換性チェック.
+        ret["check"] = args.isValue("-c", "--check");
         return ret;
     }
 
@@ -496,6 +501,25 @@
         const opt = getOptions();
         p("# " + COMMAND_NAME + ": " + JSON.stringify(opt));
 
+        // llrt互換性チェックが有効な場合.
+        if (opt["check"] == true) {
+            p("# llrt compatibility check");
+            const result = llrtCheck.check(_CURRENT_PATH);
+            if (result.length == 0) {
+                p("  ... OK (no issues found)");
+            } else {
+                p("  ... " + result.length + " issue(s) found:");
+                const len = result.length;
+                for (let i = 0; i < len; i++) {
+                    p("  " + result[i].file + ":" + result[i].line +
+                        " - " + result[i].reason);
+                }
+                p("# " + COMMAND_NAME + " aborted due to llrt compatibility issues.");
+                process.exitCode = 1;
+                return;
+            }
+        }
+
         // 一時ディレクトリを削除+作成.
         removeDir(_WORK_DIR);
         createDir(_WORK_DIR);
@@ -551,6 +575,9 @@
         p("    Packs a module by specifying the target module name.")
         p("    To pack all modules, set it to `-t all` or `--target all`.")
         p("    Also, this parameter has no relation to the parameter -all or --all.")
+        p("  -c or --check:")
+        p("    Check for node.js APIs known to be unsupported by llrt,")
+        p("    before packing. Aborts packing if any issues are found.")
         p("");
     }
 
