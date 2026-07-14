@@ -15,7 +15,7 @@
      */
     const _createTable = function (table, columns) {
         // [[columns, ...]] の形で引数設定がされている場合.
-        if (columns.length == 1 && columns[0] instanceof Array) {
+        if (columns.length == 1 && Array.isArray(columns[0])) {
             // [columns, ...] に変換.
             columns = columns[0];
         }
@@ -1269,7 +1269,7 @@
 
     // b が配列ならその中に a が含まれるか
     const _fcall_in = function (a, b) {
-        if (b instanceof Array) {
+        if (Array.isArray(b)) {
             const len = b.length;
             for (let i = 0; i < len; i++) {
                 if (a == b[i]) return true;
@@ -1281,7 +1281,7 @@
 
     // b が配列ならその中に a が全て含まれないか
     const _fcall_ni = function (a, b) {
-        if (b instanceof Array) {
+        if (Array.isArray(b)) {
             const len = b.length;
             for (let i = 0; i < len; i++) {
                 if (a == b[i]) return false;
@@ -1293,7 +1293,7 @@
 
     // b が要素数2の配列なら、b[0] と b[1] の間に a が含まれるか
     const _fcall_between = function (a, b) {
-        if (b instanceof Array && b.length >= 2) {
+        if (Array.isArray(b) && b.length >= 2) {
             return a >= b[0] && a <= b[1];
         }
         return false;
@@ -1800,7 +1800,7 @@
                 find = find.result();
             }
             // 行番号の配列が渡された場合、ループして全て更新
-            if (find instanceof Array) {
+            if (Array.isArray(find)) {
                 let ret = false;
                 const len = find.length;
                 for (let i = 0; i < len; i++) {
@@ -1853,7 +1853,7 @@
             }
 
             // 配列（複数行指定）の場合
-            if (find instanceof Array) {
+            if (Array.isArray(find)) {
                 if (find.length === 0) return false;
 
                 const deleteCount = find.length;
@@ -1915,7 +1915,7 @@
                     find = find.result();
                 }
                 // 配列の場合は配列内容の行情報群を取得.
-                if (find instanceof Array) {
+                if (Array.isArray(find)) {
                     ret = [];
                     len = find.length;
                     for (let i = 0; i < len; i++) {
@@ -1952,7 +1952,7 @@
                 find = find.result();
             }
             // 配列の場合は配列数を返却.
-            if (find instanceof Array) {
+            if (Array.isArray(find)) {
                 return find.length;
             }
             // テーブル全体の件数を返却.
