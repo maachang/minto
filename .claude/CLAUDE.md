@@ -47,6 +47,8 @@ minto（llrtを使ったAWS Lambda軽量化） は、軽量化モジュール ll
 | modules | minto で AWS Lambda で実行時に利用可能（選択）なモジュール群 |
 | sample | サンプルソースコード |
 | tools | ローカル実行を行う場合、コマンド実行用の js プログラムが格納されている |
+| test | lambda/src・modules・tools の動作確認用テスト（node:test使用）。詳細は docs/testing.md 参照 |
+| package.json | `npm test`(= `node --test`)でテストを実行するためだけの最小構成ファイル。依存パッケージは定義していない |
 
 # 設計原則
 

@@ -104,6 +104,8 @@ llrtはNode.jsライクに利用できますが、以下のような制限があ
   - [mintoのローカル開発説明](https://github.com/maachang/minto/blob/main/docs/howto.md)
 - Lambda生成・デプロイ
   - [mintoのローカル環境のAWS Lambdaデプロイ](https://github.com/maachang/minto/blob/main/docs/lambda.md)
+- 開発・動作確認
+  - [mintoのテスト環境](https://github.com/maachang/minto/blob/main/docs/testing.md)
 
 以上、ありがとうございました。
 </content>
