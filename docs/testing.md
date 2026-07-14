@@ -53,7 +53,10 @@ test/
 │
 ├── modules/                modules/ 配下の単体テスト
 │   ├── csv.test.js
-│   └── auth-password.test.js
+│   ├── auth-password.test.js
+│   ├── auth-jwt.test.js
+│   ├── http-response.test.js
+│   └── validate.test.js
 │
 └── e2e/                     結合テスト(実際にローカルサーバーを起動して確認)
     ├── webapps.test.js
@@ -80,6 +83,9 @@ test/
 
 - **csv.test.js**: `modules/csv/csvReader.js`・`csvWriter.js`・`jsonb.js`・`memoryTable.js`について、README.mdに記載の使用例をベースにパース・書き出し・エンコード/デコード・検索/更新/削除・保存/復元を検証します
 - **auth-password.test.js**: `modules/auth/password.js`のPBKDF2-HMAC-SHA256によるパスワードハッシュ化・検証を検証します。`derive()`の出力がNode標準の`crypto.pbkdf2Sync`と完全に一致することも確認しています
+- **auth-jwt.test.js**: `modules/auth/jwt.js`のHS256署名/検証(sign/verify)を検証します。secret不一致・期限切れ(exp)・フォーマット不正時の検証失敗、`options.noError == false`時の例外throwも確認しています
+- **http-response.test.js**: `modules/http/response.js`のJSON/エラーレスポンス組み立て(`json`/`error`)を検証します。グローバルの`$response()`を呼び出し内容を記録するスタブに差し替えて検証しています
+- **validate.test.js**: `modules/validate/validate.js`のスキーマベース検証(`check`)を検証します。required/type/minLen・maxLen/min・max/pattern/enum/customの各ルール、default値補完、元データを変更しないことなどを確認しています
 
 ### e2e/
 
