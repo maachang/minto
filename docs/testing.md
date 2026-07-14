@@ -96,7 +96,7 @@ test/
 以下は実際のAWS/Slack/GitHubへの通信が発生するため、`fetch`のモック化などの追加設計が必要になります。今回は対象外としています。
 
 - `modules/no-sdk/*`(s3client.js, sqs.js, asv4.js)
-- `modules/sdk/*`(s3sdk.js, s3db.js)
+- `modules/sdk/*`(s3sdk.js, s3MasterTable.js)
 - `modules/notification/*`(sendSlack.js, sendGithub.js)
 - `modules/auth/session.js`(内部で`modules/sdk/s3sdk.js`を経由してS3にアクセスするため)
 

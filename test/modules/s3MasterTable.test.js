@@ -1,7 +1,7 @@
-// modules/sdk/s3db.js のテスト.
+// modules/sdk/s3MasterTable.js のテスト.
 // 実際のS3への通信は行わず、get/put/deleteをインメモリでエミュレートする
 // フェイクなs3sdkを $loadLib 経由で注入して検証する
-// (s3db.jsはlistを使用しないため、s3IndexTable.jsと異なりCRUD全体を
+// (s3MasterTable.jsはlistを使用しないため、s3IndexTable.jsと異なりCRUD全体を
 //  実際に動かして検証できる)。
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
@@ -35,17 +35,23 @@ global.$loadLib = function (name) {
     if (name === "s3sdk.js") {
         return makeFakeS3sdk();
     }
+    if (name === "csvReader.js") {
+        return require("../../modules/csv/csvReader.js");
+    }
+    if (name === "csvWriter.js") {
+        return require("../../modules/csv/csvWriter.js");
+    }
     throw new Error("unexpected $loadLib: " + name);
 };
 
-// s3db.js はrequireキャッシュされるため、テストごとに独立したフェイク
+// s3MasterTable.js はrequireキャッシュされるため、テストごとに独立したフェイク
 // S3state(=db)が欲しい場合は create() の bucket を変えて分離する。
-const s3db = require("../../modules/sdk/s3db.js");
+const s3MasterTable = require("../../modules/sdk/s3MasterTable.js");
 
 let bucketSeq = 0;
-const createDb = () => s3db.create({ bucket: "test-bucket-" + (bucketSeq++) });
+const createDb = () => s3MasterTable.create({ bucket: "test-bucket-" + (bucketSeq++) });
 
-test("s3db: createTable/dropTable/describeTable", async () => {
+test("s3MasterTable: createTable/dropTable/describeTable", async () => {
     const db = createDb();
     await db.createTable("users", {
         columns: {
@@ -60,13 +66,13 @@ test("s3db: createTable/dropTable/describeTable", async () => {
     await assert.rejects(() => db.describeTable("users"));
 });
 
-test("s3db: createTableは既存テーブルに対してエラーになる", async () => {
+test("s3MasterTable: createTableは既存テーブルに対してエラーになる", async () => {
     const db = createDb();
     await db.createTable("users", { columns: { id: { type: "int" } } });
     await assert.rejects(() => db.createTable("users", { columns: { id: { type: "int" } } }));
 });
 
-test("s3db: insert/selectの基本動作", async () => {
+test("s3MasterTable: insert/selectの基本動作", async () => {
     const db = createDb();
     await db.createTable("users", {
         columns: {
@@ -82,7 +88,7 @@ test("s3db: insert/selectの基本動作", async () => {
     assert.equal(rows.length, 2);
 });
 
-test("s3db: notNullを満たさないinsertはエラーになる", async () => {
+test("s3MasterTable: notNullを満たさないinsertはエラーになる", async () => {
     const db = createDb();
     await db.createTable("users", {
         columns: { name: { type: "string", notNull: true } }
@@ -90,7 +96,7 @@ test("s3db: notNullを満たさないinsertはエラーになる", async () => {
     await assert.rejects(() => db.insert("users", {}));
 });
 
-test("s3db: defaultは値省略時に適用される", async () => {
+test("s3MasterTable: defaultは値省略時に適用される", async () => {
     const db = createDb();
     await db.createTable("users", {
         columns: {
@@ -102,7 +108,7 @@ test("s3db: defaultは値省略時に適用される", async () => {
     assert.equal(row.role, "user");
 });
 
-test("s3db: autoIncrementは連番を振る", async () => {
+test("s3MasterTable: autoIncrementは連番を振る", async () => {
     const db = createDb();
     await db.createTable("users", {
         columns: { id: { type: "int", autoIncrement: true }, name: { type: "string" } }
@@ -113,7 +119,7 @@ test("s3db: autoIncrementは連番を振る", async () => {
     assert.equal(r2.id, 2);
 });
 
-test("s3db: unique/primaryKeyは重複をエラーにする", async () => {
+test("s3MasterTable: unique/primaryKeyは重複をエラーにする", async () => {
     const db = createDb();
     await db.createTable("users", {
         columns: { email: { type: "string", unique: true } }
@@ -122,13 +128,13 @@ test("s3db: unique/primaryKeyは重複をエラーにする", async () => {
     await assert.rejects(() => db.insert("users", { email: "a@example.com" }));
 });
 
-test("s3db: 型が一致しないinsertはエラーになる", async () => {
+test("s3MasterTable: 型が一致しないinsertはエラーになる", async () => {
     const db = createDb();
     await db.createTable("users", { columns: { age: { type: "int" } } });
     await assert.rejects(() => db.insert("users", { age: "not-a-number" }));
 });
 
-test("s3db: whereの演算子(eq/gte/lte/in/ni/between/regexp)が動作する", async () => {
+test("s3MasterTable: whereの演算子(eq/gte/lte/in/ni/between/regexp)が動作する", async () => {
     const db = createDb();
     await db.createTable("users", {
         columns: { id: { type: "int" }, name: { type: "string" }, age: { type: "int" } }
@@ -156,7 +162,7 @@ test("s3db: whereの演算子(eq/gte/lte/in/ni/between/regexp)が動作する", 
     assert.deepEqual(rows.map((r) => r.name), ["Alice"]);
 });
 
-test("s3db: orderBy/offset/limitが動作する", async () => {
+test("s3MasterTable: orderBy/offset/limitが動作する", async () => {
     const db = createDb();
     await db.createTable("users", {
         columns: { name: { type: "string" }, age: { type: "int" } }
@@ -171,7 +177,7 @@ test("s3db: orderBy/offset/limitが動作する", async () => {
     assert.deepEqual(rows.map((r) => r.name), ["Bob", "Alice"]);
 });
 
-test("s3db: groupBy/集計関数が動作する", async () => {
+test("s3MasterTable: groupBy/集計関数が動作する", async () => {
     const db = createDb();
     await db.createTable("orders", {
         columns: { userId: { type: "int" }, amount: { type: "int" } }
@@ -190,7 +196,7 @@ test("s3db: groupBy/集計関数が動作する", async () => {
     assert.equal(byUser[2].total, 50);
 });
 
-test("s3db: update/deleteが動作する", async () => {
+test("s3MasterTable: update/deleteが動作する", async () => {
     const db = createDb();
     await db.createTable("users", {
         columns: { id: { type: "int" }, age: { type: "int" } }
@@ -208,21 +214,96 @@ test("s3db: update/deleteが動作する", async () => {
     assert.equal(rows.length, 1);
 });
 
-test("s3db: date型はinsert時にDateを受け取りselect時にDateとして返す", async () => {
+test("s3MasterTable: date型はinsert時にDateを受け取りselect時にDateとして返す", async () => {
     const db = createDb();
     await db.createTable("events", {
         columns: { name: { type: "string" }, at: { type: "date" } }
     });
     const at = new Date("2026-01-01T00:00:00Z");
-    await db.insert("events", { name: "start", at: at });
+    await db.insert("events", [
+        { name: "start", at: at },
+        { name: "past", at: new Date("2020-01-01T00:00:00Z") }
+    ]);
 
-    const rows = await db.select("events", {});
+    const rows = await db.select("events", { where: { name: { eq: "start" } } });
     assert.equal(rows[0].at instanceof Date, true);
     assert.equal(rows[0].at.getTime(), at.getTime());
 
-    // where条件でもDateオブジェクトで比較できる.
+    // where条件でもDateオブジェクトで比較できる(gteが正しく機能し、
+    // 過去の日付(past)は除外されること).
     const filtered = await db.select("events", {
-        where: { at: { ge: new Date("2025-12-31T00:00:00Z") } }
+        where: { at: { gte: new Date("2025-12-31T00:00:00Z") } }
     });
     assert.equal(filtered.length, 1);
+    assert.equal(filtered[0].name, "start");
+});
+
+test("s3MasterTable: exportCsv はテーブル内容をCSV文字列で返す", async () => {
+    const db = createDb();
+    await db.createTable("users", {
+        columns: { id: { type: "int" }, name: { type: "string" }, age: { type: "int" } }
+    });
+    await db.insert("users", [
+        { id: 1, name: "Alice", age: 30 },
+        { id: 2, name: "Bob", age: 25 }
+    ]);
+    const csv = await db.exportCsv("users");
+    assert.match(csv, /id,name,age/);
+    assert.match(csv, /1,Alice,30/);
+    assert.match(csv, /2,Bob,25/);
+});
+
+test("s3MasterTable: importCsv はテーブル全体をCSVの内容で置き換える", async () => {
+    const db = createDb();
+    await db.createTable("users", {
+        columns: {
+            id: { type: "int", primaryKey: true, autoIncrement: true },
+            name: { type: "string", notNull: true },
+            age: { type: "int" }
+        }
+    });
+    await db.insert("users", { name: "Existing", age: 99 });
+
+    const csv = "id,name,age\n1,Alice,30\n2,Bob,25\n";
+    const count = await db.importCsv("users", csv);
+    assert.equal(count, 2);
+
+    const rows = await db.select("users", { orderBy: { id: "asc" } });
+    assert.deepEqual(rows.map((r) => r.name), ["Alice", "Bob"]);
+
+    // 既存データは完全に置き換わっている(Existingが残っていない).
+    assert.equal(rows.some((r) => r.name === "Existing"), false);
+
+    // autoIncrementSeqがインポートした最大値(2)に更新されているため、
+    // 次のinsertはid=3になる(1や2と衝突しない).
+    const [added] = await db.insert("users", { name: "Carol" });
+    assert.equal(added.id, 3);
+});
+
+test("s3MasterTable: importCsvはnotNull/unique違反があればエラーになる", async () => {
+    const db = createDb();
+    await db.createTable("users", {
+        columns: { name: { type: "string", notNull: true }, age: { type: "int" } }
+    });
+    // 2行目は name が空セル(notNull違反)。
+    const csv = "name,age\nAlice,30\n,10\n";
+    await assert.rejects(() => db.importCsv("users", csv));
+});
+
+test("s3MasterTable: exportCsv→importCsvで内容が往復する", async () => {
+    const db = createDb();
+    await db.createTable("users", {
+        columns: { id: { type: "int" }, name: { type: "string" }, age: { type: "int" } }
+    });
+    await db.insert("users", [
+        { id: 1, name: "Alice", age: 30 },
+        { id: 2, name: "Bob", age: 25 }
+    ]);
+    const csv = await db.exportCsv("users");
+    await db.importCsv("users", csv);
+    const rows = await db.select("users", { orderBy: { id: "asc" } });
+    assert.deepEqual(rows.map((r) => ({ id: r.id, name: r.name, age: r.age })), [
+        { id: 1, name: "Alice", age: 30 },
+        { id: 2, name: "Bob", age: 25 }
+    ]);
 });

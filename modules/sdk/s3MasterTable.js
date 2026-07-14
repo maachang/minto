@@ -1,9 +1,12 @@
 ///////////////////////////////////////////////
-// S3全体JSON型データベース(s3db).
+// S3全体JSON型データベース(s3MasterTable).
+// マスターデータのような「更新頻度が低いデータ」を対象とする.
 //
 // AIメモ:
-// 詳細は docs/s3db.md を参照。s3IndexTable.js(modules/sdk/s3IndexTable.js)
-// と対になるモジュールで、書き込み頻度が少なく読み込み頻度が多い用途向け.
+// 詳細は docs/s3MasterTable.md を参照。s3IndexTable.js
+// (modules/sdk/s3IndexTable.js)と対になるモジュールで、
+// 書き込み頻度が少なく読み込み頻度が多い用途向け.
+// (旧名: s3db.js. 用途(マスターデータ向け)を名前に反映して改名した).
 //
 // - テーブル全体を1つのJSON(table/{table名}/data.json)として
 //   読み込み→メモリ上でフィルタ・更新→丸ごと書き戻す方式.
@@ -131,7 +134,7 @@
     // テーブル操作本体.
     ///////////////////////////////////////////////
 
-    // s3dbオブジェクトを生成する.
+    // s3MasterTableオブジェクトを生成する.
     // options.bucket 対象のS3バケット名を設定します(必須).
     // options.prefix バケット内の格納先prefixを設定します(省略可).
     // options.region S3接続先リージョンを設定します.
@@ -442,6 +445,102 @@
             return cnt;
         };
 
+        // テーブル全体をCSV文字列としてエクスポートする.
+        // (マスターデータのバックアップ・Excel等での編集用途を想定).
+        // tableName 対象のテーブル名を設定します.
+        // 戻り値: CSV文字列が返却されます.
+        const exportCsv = async function (tableName) {
+            const csvWriter = $loadLib("csvWriter.js");
+            const schema = await _loadSchema(tableName);
+            const rows = await _loadRows(tableName);
+            const headers = Object.keys(schema.columns);
+            const writer = csvWriter.createCsvWriter(headers);
+            for (let i = 0; i < rows.length; i++) {
+                const row = _applyDateConversion(schema, rows[i]);
+                const out = {};
+                for (let j = 0; j < headers.length; j++) {
+                    const h = headers[j];
+                    let v = row[h];
+                    if (v instanceof Date) {
+                        v = v.toISOString();
+                    } else if (v != null && typeof v === "object") {
+                        v = JSON.stringify(v);
+                    }
+                    out[h] = v;
+                }
+                writer.putRow(out);
+                writer.next();
+            }
+            return writer.getWriteCsv();
+        };
+
+        // CSV文字列からテーブル全体を置き換える(インポート).
+        // 既存の行データは全て破棄され、CSVの内容で丸ごと置き換わる.
+        // notNull/default/primaryKey/unique/autoIncrement/型検証は
+        // insertと同様に適用される(一意性チェックはCSV内の行同士でも行う).
+        // tableName 対象のテーブル名を設定します.
+        // csvString インポート対象のCSV文字列を設定します.
+        // 戻り値: インポートされた行数(number)が返却されます.
+        const importCsv = async function (tableName, csvString) {
+            const csvReader = $loadLib("csvReader.js");
+            const schema = await _loadSchema(tableName);
+            const reader = csvReader.createCsvReader(csvString);
+            const newRows = [];
+            while (reader.hasNext()) {
+                const csvRow = reader.next();
+                const raw = {};
+                for (const colName in schema.columns) {
+                    if (!csvRow.contains(colName)) {
+                        continue;
+                    }
+                    // 空セルは「未設定」として扱い、default/notNull/
+                    // autoIncrementの通常ロジックに委ねる
+                    // (getNumber("")がNaNになる等の誤判定を避けるため).
+                    const rawStr = csvRow.getString(colName);
+                    if (rawStr == null || rawStr === "") {
+                        continue;
+                    }
+                    const def = schema.columns[colName];
+                    switch (def.type) {
+                        case "int":
+                        case "float":
+                            raw[colName] = csvRow.getNumber(colName);
+                            break;
+                        case "boolean":
+                            raw[colName] = csvRow.getBoolean(colName);
+                            break;
+                        case "date":
+                            raw[colName] = csvRow.getDate(colName);
+                            break;
+                        case "json":
+                            raw[colName] = csvRow.getJSON(colName);
+                            break;
+                        default:
+                            raw[colName] = csvRow.getString(colName);
+                    }
+                }
+                newRows.push(_prepareInsertRow(schema, newRows, raw));
+            }
+            await _saveRows(tableName, newRows);
+
+            // autoIncrementSeqを、インポートしたデータ中の最大値に合わせる
+            // (再インポート後の新規insertがID衝突しないようにするため).
+            for (const colName in schema.columns) {
+                if (schema.columns[colName].autoIncrement === true) {
+                    let maxVal = schema.autoIncrementSeq[colName] || 0;
+                    for (let i = 0; i < newRows.length; i++) {
+                        if (typeof newRows[i][colName] === "number" &&
+                            newRows[i][colName] > maxVal) {
+                            maxVal = newRows[i][colName];
+                        }
+                    }
+                    schema.autoIncrementSeq[colName] = maxVal;
+                }
+            }
+            await _saveSchema(tableName, schema);
+            return newRows.length;
+        };
+
         return {
             createTable: createTable,
             dropTable: dropTable,
@@ -449,7 +548,9 @@
             insert: insert,
             select: select,
             update: update,
-            delete: del
+            delete: del,
+            exportCsv: exportCsv,
+            importCsv: importCsv
         };
     };
 })();

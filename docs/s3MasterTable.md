@@ -1,4 +1,4 @@
-# s3db.js
+# s3MasterTable.js
 
 ## 概要
 
@@ -12,13 +12,13 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 
 あと「S3自身のストレージコスト＝1TBで25USD/月」であり、たとえば10MBのテーブルが10個=100MB の場合「0.00025USD/月=1ドル160円計算=0.04円」と超リーズナブルな価格となる。
 
-小規模なWebアプリとして LLRM + minto + 関数URL を利用する場合、この s3db.js を利用する事で、低コストなWebサービスが実現できるようになる。
+小規模なWebアプリとして LLRM + minto + 関数URL を利用する場合、この s3MasterTable.js を利用する事で、低コストなWebサービスが実現できるようになる。
 
 ## s3IndexTable.js との使い分け
 
 `modules/sdk/`配下には、S3をバックエンドにしたデータベースがもう1つ存在する（[modules/sdk/s3IndexTable.js](https://github.com/maachang/minto/blob/main/modules/sdk/s3IndexTable.js)、設計の詳細は[docs/s3-row-store-design.md](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)を参照）。用途に応じて使い分けること。
 
-| | `s3db.js`（本ドキュメント） | `s3IndexTable.js` |
+| | `s3MasterTable.js`（本ドキュメント） | `s3IndexTable.js` |
 |---|---|---|
 | データ格納単位 | テーブル全体で1つのJSON | 1行＝1ファイル |
 | 向いている用途 | **書き込み頻度が少なく、読み込み頻度が多い**もの | **書き込み頻度が多い**もの |
@@ -91,8 +91,8 @@ s3://bucket/prefix/table/users/data.json ← 行データ (JSON配列)
 ## 使い方（簡易説明）
 
 ```js
-const s3db = $loadLib("s3db.js");
-const db = s3db.create({ bucket: "my-bucket", prefix: "myapp/" });
+const s3MasterTable = $loadLib("s3MasterTable.js");
+const db = s3MasterTable.create({ bucket: "my-bucket", prefix: "myapp/" });
 
 // テーブル作成 → INSERT → SELECT の流れ
 await db.createTable("users", {
@@ -111,9 +111,9 @@ const rows = await db.select("users", { where: { name: { eq: "Alice" } } });
 // ════════════════════════════════════════════════════════════════
 //  Lambda ハンドラー例
 // ════════════════════════════════════════════════════════════════
-const s3db = $loadLib("s3db.js");
+const s3MasterTable = $loadLib("s3MasterTable.js");
 
-const db = s3db.create({ bucket: "my-data-bucket", prefix: "myapp/" });
+const db = s3MasterTable.create({ bucket: "my-data-bucket", prefix: "myapp/" });
 
 exports.handler = async (event) => {
     // ── CREATE TABLE ──

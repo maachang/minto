@@ -5,7 +5,7 @@
 ## 目次
 
 - [背景・目的](#背景目的)
-- [既存 modules/sdk/s3db.js との違い](#既存-modulessdks3dbjs-との違い)
+- [既存 modules/sdk/s3MasterTable.js との違い](#既存-modulessdks3mastertablejs-との違い使い分け)
 - [想定スケール](#想定スケール)
 - [ディレクトリ構成](#ディレクトリ構成)
 - [行ファイルの命名規則](#行ファイルの命名規則)
@@ -21,15 +21,15 @@
 
 ## 背景・目的
 
-既存の`modules/sdk/s3db.js`は、テーブル全体を1つのJSONファイルとしてS3に読み書きする設計になっている。この方式は実装がシンプルな反面、複数リクエストが同時に同じテーブルを更新しようとすると、テーブル全体のread-modify-writeが競合しやすい。
+既存の`modules/sdk/s3MasterTable.js`は、テーブル全体を1つのJSONファイルとしてS3に読み書きする設計になっている。この方式は実装がシンプルな反面、複数リクエストが同時に同じテーブルを更新しようとすると、テーブル全体のread-modify-writeが競合しやすい。
 
 そこで、**1行＝1ファイル**でS3に保存する方式にすることで、異なる行同士の同時書き込みがほぼ競合しないデータベースを新たに設計する。
 
-## 既存 modules/sdk/s3db.js との違い（使い分け）
+## 既存 modules/sdk/s3MasterTable.js との違い（使い分け）
 
-`s3db.js`（[docs/s3db.md](https://github.com/maachang/minto/blob/main/docs/s3db.md)）と`s3IndexTable.js`（本設計）は、どちらもS3をバックエンドにしたデータベースだが、**書き込み頻度**を軸に使い分ける。
+`s3MasterTable.js`（[docs/s3MasterTable.md](https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md)）と`s3IndexTable.js`（本設計）は、どちらもS3をバックエンドにしたデータベースだが、**書き込み頻度**を軸に使い分ける。
 
-| 項目 | s3db.js（既存） | s3IndexTable.js（本設計） |
+| 項目 | s3MasterTable.js（既存） | s3IndexTable.js（本設計） |
 |---|---|---|
 | 向いている用途 | **書き込み頻度が少なく、読み込み頻度が多い**もの | **書き込み頻度が多い**もの |
 | データ格納単位 | テーブル全体で1JSON | 1行＝1ファイル |
@@ -39,7 +39,7 @@
 
 ## 想定スケール
 
-このデータベースは、あくまで**小規模（1テーブルあたり1万件程度まで）を前提としたRDBMS的な使い勝手のツール**として設計する。「1行1ファイル」により、既存の`s3db.js`（テーブル全体1JSON）と比べてinsert/updateが扱いやすくなる、という程度の利便性を主目的とする。
+このデータベースは、あくまで**小規模（1テーブルあたり1万件程度まで）を前提としたRDBMS的な使い勝手のツール**として設計する。「1行1ファイル」により、既存の`s3MasterTable.js`（テーブル全体1JSON）と比べてinsert/updateが扱いやすくなる、という程度の利便性を主目的とする。
 
 大量データを扱いたい場合は素直にRDS等を使うべきであり、本設計はその代替を目指すものではない。そのため、以下は許容される既知のトレードオフとする。
 
@@ -145,7 +145,7 @@
 ## モジュール名・配置
 
 - モジュール名は `s3IndexTable.js` とする
-- 配置場所は、既存の`modules/sdk/s3db.js`と同じ系統（AWS-SDK-V3を使う`modules/sdk/`配下）に`modules/sdk/s3IndexTable.js`として追加する
+- 配置場所は、既存の`modules/sdk/s3MasterTable.js`と同じ系統（AWS-SDK-V3を使う`modules/sdk/`配下）に`modules/sdk/s3IndexTable.js`として追加する
 - `conf/{table名}.json`（テーブル定義・インデックス定義）はJSON形式とし、`createTable`に渡すオブジェクト形式をそのまま保存する
 
 ## クエリの制約
@@ -164,7 +164,7 @@
 
 ## API設計
 
-既存の`modules/sdk/s3db.js`・`modules/csv/memoryTable.js`のAPIスタイルを踏襲しつつ、本設計の制約（インデックス経由のみ検索・複合インデックスは先頭のみ範囲検索・updateは削除＋再作成）に合わせた形とする。
+既存の`modules/sdk/s3MasterTable.js`・`modules/csv/memoryTable.js`のAPIスタイルを踏襲しつつ、本設計の制約（インデックス経由のみ検索・複合インデックスは先頭のみ範囲検索・updateは削除＋再作成）に合わせた形とする。
 
 ### テーブル・インデックスのライフサイクル
 
@@ -211,7 +211,7 @@ await db.dropIndex("users", "byAge");
 
 インデックス対象カラムは、`json`型以外のいずれかを使う前提とする。
 
-カラムのオプションは`notNull`（必須項目）と`default`（省略時のデフォルト値、関数も指定可）の2つのみサポートする。既存の`modules/sdk/s3db.js`が持つ`primaryKey`/`unique`/`autoIncrement`は、本設計では**提供しない**。
+カラムのオプションは`notNull`（必須項目）と`default`（省略時のデフォルト値、関数も指定可）の2つのみサポートする。既存の`modules/sdk/s3MasterTable.js`が持つ`primaryKey`/`unique`/`autoIncrement`は、本設計では**提供しない**。
 
 - `primaryKey`/`unique`の一意性制約は、挿入時に「既に同じ値が無いか」を確認してから書き込む必要があるが、複数リクエストが同時に走ると確認と書き込みの間に競合（TOCTOU）が起きるため保証できない
 - `autoIncrement`（連番管理）はロック無しでは競合するため、この設計とは相性が悪い。行の一意性は「UnixTime+ナノ秒+LambdaID+乱数」による行ファイル名で担保する方針のままとする
