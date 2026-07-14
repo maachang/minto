@@ -12,6 +12,8 @@
   - `snsSdk.js`: Amazon SNSの通知送信ラッパー。既存トピックへのpublishのみ提供(トピック作成・購読管理は対象外).
   - `secretsManagerSdk.js`: AWS Secrets Managerの取得ラッパー。getのみ提供、TTL付きメモリキャッシュ(デフォルト60秒)を内蔵.
   - `parameterStoreSdk.js`: AWS Systems Manager Parameter Storeの取得ラッパー。getのみ提供、TTL付きメモリキャッシュ(デフォルト60秒)を内蔵.
+  - `sesSdk.js`: Amazon SESのメール送信ラッパー。sendのみ提供(text/html本文のシンプル送信、添付ファイル非対応).
+  - `kmsSdk.js`: AWS KMSのエンベロープ暗号化ラッパー。encrypt/decryptを提供。ローカルのAES-256-GCM暗号化にはllrtの制約上crypto.subtle(WebCrypto)を使用.
 - `notification`: よく使う slack通知やgithubリポジトリのissue作成を行うライブラリ群.
 - `csv`: CSVファイルのパーサーやCSVエクスポート系ライブラリ、メモリーテーブル機能.
 - `auth`: パスワードハッシュ化、S3ベースのセッション管理、CORS共通ヘルパーなど認証まわりのライブラリ群(`sdk/s3sdk.js`に依存).
