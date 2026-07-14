@@ -16,7 +16,8 @@
   - `kmsSdk.js`: AWS KMSのエンベロープ暗号化ラッパー。encrypt/decryptを提供。ローカルのAES-256-GCM暗号化にはllrtの制約上crypto.subtle(WebCrypto)を使用.
 - `notification`: よく使う slack通知やgithubリポジトリのissue作成を行うライブラリ群.
 - `csv`: CSVファイルのパーサーやCSVエクスポート系ライブラリ、メモリーテーブル機能.
-- `auth`: パスワードハッシュ化、S3ベースのセッション管理、CORS共通ヘルパーなど認証まわりのライブラリ群(`sdk/s3sdk.js`に依存).
+- `auth`: パスワードハッシュ化、S3ベースのセッション管理、CORS共通ヘルパー、JWT署名/検証(HS256のみ)など認証まわりのライブラリ群(`session.js`は`sdk/s3sdk.js`に依存).
+- `http`: `$response()`のJSON/エラーレスポンス組み立てを共通化するヘルパー群.
 
 ## 利用方法(実装方法)
 
