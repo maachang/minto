@@ -48,7 +48,25 @@ test("s3IndexTable: encodeFloat は浮動小数点を数値順と一致する文
 
 test("s3IndexTable: encodeString はS3キーセーフな文字列を返す", () => {
     const encoded = s3IndexTable.encodeString("hello! world/with?unsafe#chars");
-    assert.match(encoded, /^[A-Za-z0-9_-]+$/);
+    assert.match(encoded, /^[0-9a-f]+$/);
+});
+
+test("s3IndexTable: encodeString は通常の文字列比較(辞書順)と一致する", () => {
+    const pairs = [
+        ["Ab", "B"], ["ab", "abc"], ["apple", "banana"], ["Zoo", "apple"]
+    ];
+    for (const [a, b] of pairs) {
+        const normal = a < b;
+        const encoded = s3IndexTable.encodeString(a) < s3IndexTable.encodeString(b);
+        assert.equal(encoded, normal, `"${a}" と "${b}" の比較結果が一致しない`);
+    }
+});
+
+test("s3IndexTable: encodeString は255バイトを超えるとエラーになる", () => {
+    const longStr = "a".repeat(256);
+    assert.throws(() => s3IndexTable.encodeString(longStr));
+    // 255バイトちょうどはエラーにならない.
+    assert.doesNotThrow(() => s3IndexTable.encodeString("a".repeat(255)));
 });
 
 test("s3IndexTable: encodeBoolean は t/f を返す", () => {
@@ -61,7 +79,7 @@ test("s3IndexTable: null値はNULL_TOKENにエンコードされる", () => {
     assert.equal(s3IndexTable.encodeFloat(null), s3IndexTable.NULL_TOKEN);
     assert.equal(s3IndexTable.encodeString(null), s3IndexTable.NULL_TOKEN);
     assert.equal(s3IndexTable.encodeBoolean(null), s3IndexTable.NULL_TOKEN);
-    // NULL_TOKENは "~" を含み、通常のエンコード結果(base64url/hex)には
+    // NULL_TOKENは "~" を含み、通常のエンコード結果(hex)には
     // 出現しない文字であること.
     assert.match(s3IndexTable.NULL_TOKEN, /~/);
 });
@@ -72,11 +90,11 @@ test("s3IndexTable: encodeDate はDateオブジェクトと数値の両方を受
     assert.equal(s3IndexTable.encodeDate(d.getTime()), s3IndexTable.encodeInt(d.getTime()));
 });
 
-test("s3IndexTable: isRangeSupportedType はstring/booleanをfalse、int/float/dateをtrueとする", () => {
+test("s3IndexTable: isRangeSupportedType はbooleanのみfalse、それ以外はtrueとする", () => {
     assert.equal(s3IndexTable.isRangeSupportedType("int"), true);
     assert.equal(s3IndexTable.isRangeSupportedType("float"), true);
     assert.equal(s3IndexTable.isRangeSupportedType("date"), true);
-    assert.equal(s3IndexTable.isRangeSupportedType("string"), false);
+    assert.equal(s3IndexTable.isRangeSupportedType("string"), true);
     assert.equal(s3IndexTable.isRangeSupportedType("boolean"), false);
 });
 
