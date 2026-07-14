@@ -7,6 +7,11 @@
   - `s3sdk.js`: 最低限のS3 put/get/delete/list操作.
   - `s3MasterTable.js`: テーブル全体を1つのJSONとしてS3に保存するRDBMSライクなデータベース。**書き込み頻度が少なく、読み込み頻度が多い**用途向け。詳細は[docs/s3MasterTable.md](https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md)を参照.
   - `s3IndexTable.js`: 1行=1ファイルでS3に保存する行ファイル型データベース。**書き込み頻度が多い**用途向け(書き込み競合が起きにくい代わりに、検索は事前定義したインデックス経由のみ・複合インデックスは先頭カラムのみ範囲検索可、という制約がある。1テーブル1万件程度の小規模利用を想定)。詳細は[docs/s3-row-store-design.md](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)を参照.
+  - `dynamoDbSdk.js`: Amazon DynamoDBのDocument Client相当(marshall/unmarshall)ラッパー。put/get/delete/update(patchのSETのみ)/queryの最低限の操作を提供.
+  - `sqsSdk.js`: Amazon SQSの送受信ラッパー。send/receive/deleteの最低限の操作を提供(バッチ操作は非対応).
+  - `snsSdk.js`: Amazon SNSの通知送信ラッパー。既存トピックへのpublishのみ提供(トピック作成・購読管理は対象外).
+  - `secretsManagerSdk.js`: AWS Secrets Managerの取得ラッパー。getのみ提供、TTL付きメモリキャッシュ(デフォルト60秒)を内蔵.
+  - `parameterStoreSdk.js`: AWS Systems Manager Parameter Storeの取得ラッパー。getのみ提供、TTL付きメモリキャッシュ(デフォルト60秒)を内蔵.
 - `notification`: よく使う slack通知やgithubリポジトリのissue作成を行うライブラリ群.
 - `csv`: CSVファイルのパーサーやCSVエクスポート系ライブラリ、メモリーテーブル機能.
 - `auth`: パスワードハッシュ化、S3ベースのセッション管理、CORS共通ヘルパーなど認証まわりのライブラリ群(`sdk/s3sdk.js`に依存).
