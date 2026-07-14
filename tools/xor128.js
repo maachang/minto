@@ -96,15 +96,19 @@
         // UUIDで取得.
         // RFC4122のversion(4)/variant(10)ビットを設定した
         // フォーマット上正式なUUID文字列を生成する.
+        // (文字列は a(8) "-" b01(4) "-" b23(4) "-" c01(4) "-" c23+d(12)
+        //  の並びで生成されるため、versionニブルは3グループ目=b23の
+        //  先頭(bの bit12-15)、variantビットは4グループ目=c01の
+        //  先頭2bit(cの bit30-31)を書き換える.)
         const getUUID = function () {
             const a = next();
-            const b = next();
+            let b = next();
             let c = next();
             const d = next();
             // versionニブル(3グループ目の先頭4bit)を "4" に設定.
-            c = (c & 0x00ffffff) | 0x40000000;
+            b = (b & 0xffff0fff) | 0x00004000;
             // variantビット(4グループ目の先頭2bit)を "10" に設定.
-            c = (c & 0xffff3fff) | 0x00008000;
+            c = (c & 0x3fffffff) | 0x80000000;
             return (
                 _z2((((a & 0xff000000) >> 24) & 0x00ff).toString(16)) +
                 _z2(((a & 0x00ff0000) >> 16).toString(16)) +

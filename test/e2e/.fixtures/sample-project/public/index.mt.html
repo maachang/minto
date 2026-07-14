@@ -1,0 +1,8 @@
+<%#
+    e2eテスト用のシンプルなjhtmlサンプル.
+%>
+<%
+const params = $request().params();
+const name = params.name || "minto";
+%>
+<html><body>Hello, ${name}!</body></html>

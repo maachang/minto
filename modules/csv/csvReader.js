@@ -5,7 +5,7 @@
     "use strict";
 
     // 行単位でCsv読み込み文字列を分解.
-    const parseEnter = function (s, pc) {
+    const parseEnter = function (s) {
         let n;
         let b = 0;
         let inQuote = false;
@@ -33,7 +33,9 @@
                 if (n === '"') {
                     inQuote = true;
                 } else if (n === "\n") {
-                    ret.push(s.substring(b, i + 1).trim() + pc);
+                    // 行末に区切り文字を付与すると、末尾に余分な
+                    // 空カラムが生成されてしまうため付与しない.
+                    ret.push(s.substring(b, i + 1).trim());
                     b = i + 1;
                 }
             }
@@ -223,7 +225,7 @@
         let resetLine = 0;
         let headerKeys = {};
 
-        const srcCsv = parseEnter(csvString, parseCode);
+        const srcCsv = parseEnter(csvString);
         let headers = null;
 
         if (Array.isArray(defaultHeaderKeyArray)) {

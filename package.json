@@ -1,0 +1,8 @@
+{
+  "name": "minto",
+  "private": true,
+  "description": "llrtを使ったAWS Lambda URL Functionコールドスタート軽量化フレームワーク",
+  "scripts": {
+    "test": "node --test"
+  }
+}

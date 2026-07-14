@@ -13,6 +13,15 @@
     // recursive: 指定ディレクトリ以下を再起実行する場合は trueを設定します.
     // 戻り値: resultKeyValue == trueの場合辞書型で返却.
     //         falseの場合リスト型で返却.
+    // dirent.parentPath を常に末尾"/"付きの絶対パスに正規化する.
+    // NodeとBunで parentPath の末尾スラッシュ有無が異なるため、
+    // 単純な文字列比較(pp != path)に依存すると環境によって
+    // パスが二重結合されて壊れる不具合があったため、常に
+    // parentPathをそのまま正としてスラッシュのみ補う方式にする.
+    const _normalizeParentPath = function (pp) {
+        return !pp.endsWith("/") ? pp + "/" : pp;
+    }
+
     exports.listDir = function (path, resultKeyValue, recursive) {
         path = !path.endsWith("/") ? path + "/" : path;
         const lst = fs.readdirSync(
@@ -25,10 +34,7 @@
             const ret = [];
             for (let i = 0; i < len; i++) {
                 if (lst[i].isDirectory()) {
-                    pp = lst[i].parentPath;
-                    if (pp != path) {
-                        pp = path + pp + "/";
-                    }
+                    pp = _normalizeParentPath(lst[i].parentPath);
                     ret.push(pp + lst[i].name + "/");
                 }
             }
@@ -39,13 +45,8 @@
             let keyHead
             for (let i = 0; i < len; i++) {
                 if (lst[i].isDirectory()) {
-                    pp = lst[i].parentPath;
-                    if (pp != path) {
-                        pp = path + pp + "/";
-                        keyHead = pp.substring(path.length);
-                    } else {
-                        keyHead = "";
-                    }
+                    pp = _normalizeParentPath(lst[i].parentPath);
+                    keyHead = pp.startsWith(path) ? pp.substring(path.length) : "";
                     ret[keyHead + lst[i].name] = pp + lst[i].name + "/";
                 }
             }
@@ -65,7 +66,6 @@
         const lst = fs.readdirSync(
             path, { withFileTypes: true, recursive: recursive == true });
         const len = lst.length;
-        const ret = [];
         let pp;
         // key, value での戻り値じゃない場合.
         if (resultKeyValue != true) {
@@ -73,10 +73,7 @@
             const ret = [];
             for (let i = 0; i < len; i++) {
                 if (lst[i].isFile()) {
-                    pp = lst[i].parentPath;
-                    if (pp != path) {
-                        pp = path + pp + "/";
-                    }
+                    pp = _normalizeParentPath(lst[i].parentPath);
                     ret.push(pp + lst[i].name);
                 }
             }
@@ -87,13 +84,8 @@
             let keyHead
             for (let i = 0; i < len; i++) {
                 if (lst[i].isFile()) {
-                    pp = lst[i].parentPath;
-                    if (pp != path) {
-                        pp = path + pp + "/";
-                        keyHead = pp.substring(path.length);
-                    } else {
-                        keyHead = "";
-                    }
+                    pp = _normalizeParentPath(lst[i].parentPath);
+                    keyHead = pp.startsWith(path) ? pp.substring(path.length) : "";
                     ret[keyHead + lst[i].name] = pp + lst[i].name;
                 }
             }
