@@ -12,19 +12,30 @@ const PREFIX = "users/";
 
 const s3 = new S3Client({ region: REGION });
 
-function hashPw(pw, salt) {
-    return crypto.createHash("sha256")
-        .update(salt + ":" + pw).digest("hex");
+// modules/auth/password.js と同じ PBKDF2-HMAC-SHA256(反復10000回)を
+// Node標準の crypto.pbkdf2Sync で計算する.
+// (本スクリプトは llrt ではなく通常のnode.jsで実行するため
+//  crypto.pbkdf2Sync が利用できる. 導出結果は
+//  modules/auth/password.js の derive() と一致することを確認済み.)
+const ITERATIONS = 10000;
+
+function hashPw(pw) {
+    const salt = crypto.randomBytes(16).toString("hex");
+    const hash = crypto.pbkdf2Sync(
+        pw, Buffer.from(salt, "hex"), ITERATIONS, 32, "sha256"
+    ).toString("hex");
+    return { salt: salt, hash: hash, iterations: ITERATIONS };
 }
 
 async function createUser(uid, pw, name, role) {
-    const salt = crypto.randomBytes(16).toString("hex");
+    const hashed = hashPw(pw);
     await s3.send(new PutObjectCommand({
         Bucket: BUCKET,
         Key: PREFIX + uid + ".json",
         Body: JSON.stringify({
             userId: uid, name: name, role: role,
-            salt: salt, passwordHash: hashPw(pw, salt),
+            salt: hashed.salt, passwordHash: hashed.hash,
+            passwordIterations: hashed.iterations,
             createdAt: new Date().toISOString()
         }),
         ContentType: "application/json"

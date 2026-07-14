@@ -39,10 +39,15 @@
 //   │       └── style.css            (スタイルシート)
 //   ├── lib/
 //   │   ├── s3client.js              (S3操作 共通モジュール)
-//   │   ├── session.js               (S3セッション管理)
-//   │   └── userStore.js             (S3ユーザー管理)
+//   │   ├── sessionStore.js          (modules/auth/session.js のラッパー)
+//   │   └── userStore.js             (S3ユーザー管理 ※パスワードは
+//   │                                  modules/auth/password.js に委譲)
 //   └── conf/
 //       └── app.json                 (アプリ設定)
+//
+// ※ セッション管理(modules/auth/session.js)とパスワードハッシュ化
+//   (modules/auth/password.js)は、mintoの共通モジュールとして
+//   modules/auth/ 配下に切り出されている(後述の追記を参照)。
 //
 //
 // ■ S3 バケット構成
@@ -128,7 +133,7 @@
 - `$require()` でAWS SDKを読み込める（Lambda環境にはAWS SDKが標準搭載）
 - `lib/` にS3操作モジュールを配置し `$loadLib()` で利用
 - セッション情報とユーザー情報をそれぞれS3のJSONファイルとして管理
-- パスワードはcryptoモジュールでハッシュ化（SHA-256）S3をバックエンドにした完全版を作成しました。主な変更点と設計を説明します。
+- パスワードはPBKDF2-HMAC-SHA256(反復10000回)でハッシュ化。S3をバックエンドにした完全版を作成しました。主な変更点と設計を説明します。
 
 ---
 
@@ -149,7 +154,8 @@ s3://my-minto-app-bucket/
   "name": "管理者ユーザー",
   "role": "admin",
   "salt": "a1b2c3d4...",
-  "passwordHash": "sha256ハッシュ値",
+  "passwordHash": "pbkdf2-hmac-sha256ハッシュ値",
+  "passwordIterations": 10000,
   "createdAt": "2026-02-11T..."
 }
 ```
@@ -162,10 +168,11 @@ s3://my-minto-app-bucket/
 |---|---|
 | **セッション管理** | インメモリ → S3 (`sessions/<sid>.json`)。Lambdaスケールアウト時も共有可能に |
 | **ユーザー管理** | `conf/users.json` 固定 → S3 (`users/<userId>.json`)。動的に登録・変更可能 |
-| **パスワード保存** | 平文 → SHA-256 + ランダムソルトでハッシュ化 |
+| **パスワード保存** | 平文 → PBKDF2-HMAC-SHA256(反復10000回) + ランダムソルトでハッシュ化 |
 | **新規登録機能** | `register.mt.html` + `api/register.mt.js` を追加 |
 | **パスワード変更** | `userStore.js` に `changePassword()` を実装済み |
 | **S3共通モジュール** | `lib/s3client.js` にget/put/delete/listを集約 |
+| **共通モジュール化** | セッション管理・パスワードハッシュ化は `modules/auth/session.js` / `modules/auth/password.js` に切り出し、`lib/sessionStore.js` がアプリ設定でラップして利用 |
 
 ---
 
@@ -214,7 +221,7 @@ exports.handler = mintoIndex.handler;
 |---|---|---|
 | `<% ... %>` | JS実行（出力なし） | `<% const user = await session.get(sid); %>` |
 | `<%= expr %>` | 式の結果をHTML出力 | `<%= user.userId %>` |
-| `${ expr }` | テンプレート出力（`<%= %>`と同等） | `${ user.name }` |
+| `${ expr }` | テンプレート出力（`<%= %>`と同等） | `${ user.data.name }` |
 | `<%# ... %>` | コメント | `<%# マイページ %>` |
 | `$out("str")` | プログラム的HTML出力 | 変換後に自動生成される内部関数 |
 

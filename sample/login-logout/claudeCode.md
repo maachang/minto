@@ -26,10 +26,16 @@
 //   │       └── style.css            (スタイルシート)
 //   ├── lib/
 //   │   ├── s3client.js              (S3操作 共通モジュール)
-//   │   ├── session.js               (S3セッション管理)
-//   │   └── userStore.js             (S3ユーザー管理)
+//   │   ├── sessionStore.js          (modules/auth/session.js のラッパー)
+//   │   └── userStore.js             (S3ユーザー管理 ※パスワードは
+//   │                                  modules/auth/password.js に委譲)
 //   └── conf/
 //       └── app.json                 (アプリ設定)
+//
+// ※ 2026-07-14 追記: セッション管理とパスワードハッシュ化(PBKDF2)は
+//   mintoの共通モジュール modules/auth/session.js, modules/auth/password.js
+//   に切り出され、本ファイル中の lib/session.js, lib/userStore.js の
+//   ソース例は当時のものです(現状は下記「更新後」ブロックを参照)。
 //
 //
 // ■ S3 バケット構成
@@ -1073,3 +1079,46 @@ async function createUser(uid, pw, name, role) {
     console.log("Done.");
 })();
 ~~~
+
+---
+
+## 追記(2026-07-14): modules/auth への共通モジュール化に伴う更新
+
+上記は本サンプルを最初に作成した際のClaudeCodeとの対話・生成ソースの記録です。その後、以下の内容で `modules/auth/` 配下への共通モジュール化を行い、本サンプルもそれを利用する形に置き換えました。
+
+- **`lib/session.js` は廃止し、`lib/sessionStore.js` に置き換え**。`modules/auth/session.js`（S3ベースのセッションストア、汎用化されたモジュール）を`conf/app.json`の設定で初期化する薄いラッパーです。
+  ```js
+  // lib/sessionStore.js
+  (function () {
+      'use strict';
+      const authSession = $loadLib("session.js"); // modules/auth/session.js
+      const _conf = $loadConf("app.json");
+      const _store = authSession.create({
+          bucket: _conf.s3Bucket,
+          prefix: _conf.sessionPrefix,
+          timeoutMin: _conf.sessionTimeoutMin,
+          region: _conf.region
+      });
+      exports.start = _store.start;
+      exports.get = _store.get;
+      exports.destroy = _store.destroy;
+      exports.count = _store.count;
+  })();
+  ```
+  呼び出し側のAPIも変わっています。
+  - `session.create(userId, userData)` → `session.start(userId, userData)`
+  - `session.get(sid)` の戻り値が `{userId, name, role}` から `{userId, data}` に変更(`data`に`userData`がそのまま格納される)
+
+- **`lib/userStore.js` のパスワードハッシュを `modules/auth/password.js` に委譲**。旧実装は `crypto.createHash("sha256").update(salt + ":" + pw)` という**単発SHA-256**でしたが、GPU総当たりに弱いため、`modules/auth/password.js` の **PBKDF2-HMAC-SHA256(反復10000回)** に置き換えました(llrtが`crypto.pbkdf2`/`scrypt`をサポートしていないため、`createHmac`のみで自前実装されています)。
+  ```js
+  const hashed = password.hash(pw); // {salt, hash, iterations}
+  // ... salt/passwordHash/passwordIterations として保存 ...
+  const ok = password.verify(pw, { salt: u.salt, hash: u.passwordHash, iterations: u.passwordIterations });
+  ```
+  これに伴い、S3上のユーザーJSONに `passwordIterations` フィールドが追加されています。
+
+- **`scripts/init-users.js` も同様にPBKDF2ベースに更新**。`userStore.js`とは別経路でS3に直接ユーザーJSONを書き込むスクリプトのため、ハッシュ方式が食い違うとログインできなくなる問題があり、`crypto.pbkdf2Sync`（Node.js単体実行のため利用可）で同一アルゴリズムに揃えています。
+
+- `public/filter.mt.js`, `login.mt.js`, `logout.mt.js`, `index.mt.html`, `mypage.mt.html` 内の `$loadLib("session.js")` は全て `$loadLib("sessionStore.js")` に、`user.name` / `user.role` の参照は `user.data.name` / `user.data.role` に置き換わっています。
+
+上記より前の本文中のソース例(`lib/session.js`, `lib/userStore.js`, および各`$loadLib("session.js")`呼び出し)は、この置き換え以前の実装記録として残しています。
