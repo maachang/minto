@@ -1,24 +1,33 @@
 # minto
 
-## 概要
+**minto**（minimize to = [AWS Lambda関数URL実行を]最小化する）は、AWS LambdaのURL Function（関数URL）向けに、CJSで実装された「超軽量実行環境」です。
 
-mintoとは(minimize to=[AWS lambda関数URL実行を]最小化する)を目指す、AWS Lambda での URL Function(関数URL)での「超軽量実行環境」をcjsで作るためのプロジェクトです。
+Node.jsの代替ランタイムである[llrt（Low Latency Runtime）](https://github.com/awslabs/llrt)での実行を前提とすることで、AWS Lambdaの最小メモリ環境（128MB）でも「コールドスタートで高速に動作する」ことを目指しています。
 
-またminto では AWS lambda関数URL実行を最小化するための llrt(Low Latency Runtime) のnodejs の代替えランタイムを利用して実行することを「前提」としたものです。
-- llrt: https://github.com/awslabs/llrt
+## 目次
 
-あと llrtランタイムを利用前提とする事で、AWS Lambda の最小環境＝メモリ128mb で「コールドスタートで高速に動作」させる事を目指します。
+- [特徴](#特徴)
+- [性能実測（llrt + 128MB）](#性能実測llrt--128mb)
+- [想定用途](#想定用途)
+- [llrtの機能制限について](#llrtの機能制限について)
+- [ドキュメント一覧](#ドキュメント一覧)
 
-## minto+llrt+128mb の URL Function 実行結果を説明.
+## 特徴
 
-実際に以下の環境でAWS Lambda + URL Function で実行した結果です.
+- **index.js 1ファイルでURL Functionが動く**: 機能は最低限のWebアプリ機能に絞られています
+- **mt.js / jhtml の2種類の動的コンテンツ**: JSON返却用（mt.js）とHTML返却用（jhtml）のシンプルな実行環境を提供
+- **S3をKVSとして利用**: RDBMSではなくS3を対象とした「KVS的」なデータ永続化を想定
+- **128MBメモリでの安価な運用**: llrt採用によりAWS Lambdaの最小メモリ環境でも高速に動作
+- **ローカル検証環境あり**: AWS Lambdaに毎回デプロイせずに、ローカルでURL Functionと同様の環境を検証可能（[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md)参照）
+
+## 性能実測（llrt + 128MB）
+
+以下の環境で、AWS Lambda + URL FunctionでS3からテキストを取得しJSONを返却するだけの処理を実行した結果です。
+
 - アーキテクチャー: arm64
-- メモリ: 128mb
+- メモリ: 128MB
 - ランタイム: Amazon Linux 2023
-- llrt(レイヤー): llrt v0.7.0-beta(Commits on Feb 9, 2025) no-sdk(https://github.com/awslabs/llrt/releases)
-
-- AWS lambda URL Function実行結果(コールドスタート)
-  > REPORT RequestId: 82c60798-6ea5-4f3d-befd-5957174db2c0 Duration: 103.77 ms Billed Duration: 158 ms Memory Size: 128 MB Max Memory Used: 24 MB Init Duration: 53.69 ms
+- llrt（レイヤー）: llrt v0.7.0-beta（Commits on Feb 9, 2025）no-sdk（https://github.com/awslabs/llrt/releases）
 
 実行ソース:
 ~~~js
@@ -33,93 +42,68 @@ exports.handler = async function () {
 }
 ~~~
 
+| 実行環境 | 実行パターン | Billed Duration | Init Duration | Max Memory Used |
+|---|---|---|---|---|
+| llrt v0.7.0-beta no-sdk（fetch + AWS Signature V4） | コールドスタート | 158 ms | 53.69 ms | 24 MB |
+| llrt v0.7.0-beta no-sdk（fetch + AWS Signature V4） | ウォームスタート | 15 ms | - | 24 MB |
+| llrt v0.7.0-beta full（AWS-SDK-V3） | コールドスタート | 258 ms | 67.85 ms | 31 MB |
+| Node.js v22（AWS-SDK-V3） | コールドスタート | 4802 ms | 156.66 ms | 97 MB |
+
+- コールドスタートでも「AWS Lambdaとは思えないほど高速」（158 ms）に実行され、ウォームスタートではさらに高速（15 ms）です。
+- AWS-SDK-V3を使うllrt full版でも258 msと、Node.js版（4802 ms）に比べれば十分高速なので、S3以外のAWSサービスを利用する場合はこちらでも実用的です。
+- 比較用に計測したNode.js（v22, AWS-SDK-V3）でのコールドスタートは4802 ms・97 MBとなり、llrtランタイムの軽量さが際立つ結果となっています。
+
+<details>
+<summary>各実行結果の生ログ</summary>
+
+AWS lambda URL Function実行結果（コールドスタート / no-sdk）:
+> REPORT RequestId: 82c60798-6ea5-4f3d-befd-5957174db2c0 Duration: 103.77 ms Billed Duration: 158 ms Memory Size: 128 MB Max Memory Used: 24 MB Init Duration: 53.69 ms
+
 実行結果:
 ~~~
 hoge	100
 hogehoge	"testHogehoge"
 ~~~
 
-内容としては
-1. S3からテキスト情報を取得
-2. JSON結果を返却している
+AWS lambda URL Function実行結果（ウォームスタート / no-sdk）:
+> REPORT RequestId: a5465a5b-94d2-4b7e-badb-e21690211f9a Duration: 14.69 ms Billed Duration: 15 ms Memory Size: 128 MB Max Memory Used: 24 MB
 
-だけの処理ですが、これの「コールドスタート実行」の結果が
-- Billed Duration: 158 ms
-- Used: 24 MB
-
-こんな感じで「コールドスタート」に対しての速度が「aws lambda と思えないほど高速に実行」されます。
-
-また「ウォームスタート」では「以下」のような実行結果となります。
-
-- AWS lambda URL Function実行結果(ウォームスタート)
-  > REPORT RequestId: a5465a5b-94d2-4b7e-badb-e21690211f9a Duration: 14.69 ms Billed Duration: 15 ms Memory Size: 128 MB Max Memory Used: 24 MB 
-
-  - Billed Duration: 15 ms
-  - Used: 24 MB
-
-このように「かなり高速で実行」されます。
-
-ただし、今回の環境は
-- AWS Signature V4
-- fetch(https)でS3Client実装
-
-で実施されてるのですが、これを
-- llrt v0.7.0-beta full(AWS-SDK-V3 Full)
-
-使った環境で同じくS3Client(AWS-SDK-V3)を使った場合の「コールドスタート実行結果」は以下のものとなります。
-
+AWS lambda URL Function実行結果（コールドスタート / llrt full, AWS-SDK-V3）:
 > REPORT RequestId: 3851698e-8163-4f38-a9f6-3d943a064465 Duration: 190.13 ms Billed Duration: 258 ms Memory Size: 128 MB Max Memory Used: 31 MB Init Duration: 67.85 ms
 
-- Billed Duration: 258 ms
-- Used: 31 MB
-
-これでも「全然速い」ので、AWSのS3以外の他のサービスを利用する場合は、こちらでも問題ないかと思います。
-
-なお、上のAWS-SDK-V3環境を node-js(v22) で「コールドスタート」で実行した場合は「以下」のようになります。
-
+AWS lambda URL Function実行結果（コールドスタート / Node.js v22, AWS-SDK-V3）:
 > REPORT RequestId: 828f62d0-ddf7-4f81-81d6-b3bd777bfd72 Duration: 4801.02 ms Billed Duration: 4802 ms Memory Size: 128 MB Max Memory Used: 97 MB Init Duration: 156.66 ms
 
-- Billed Duration: 4802 ms
-- Memory Used: 97 MB
+</details>
 
-正に llrtランタイムがかなり軽量で実行されることがよくわかります。
+## 想定用途
 
-## mintoの機能と利用想定
+mintoは「機能としては最低限」のWebアプリ機能しか実装しておらず、想定しているのは以下のような小～中規模用途です。
 
-正直言えば「minto=index.js １つのファイルがあれば、URL Function の実行対応ができる」レベルのもので「機能としては、最低限」レベルのWebアプリ機能しか実装されていないです。
+- 小規模の社内Webアプリの作成
+- メモリ128MB（安価な実行環境）＋ S3 KVS（安価なデータベース環境）で完結する構成
 
-一応
-- mt.js
-- jhtml
-
-この２つの動的実行環境が利用できるので、これらを使って「最低限のWebアプリ」が利用できます。
-
-また「通常だとWebアプリ＝RDBMSなどのデータベースが必要」ではありますが、mintoでは「S3」が対象となるので「KVS」的なデータベース対応しかできないものとなっています。
-
-minto の想定としては「小規模の社内Webアプリの作成」ぐらいを想定しており、更に「memory 128MB＝安価な環境＋S3KVS＝安価なデータベース環境」で利用できる事を想定しています。
+RDBMSが必要な本格的なWebアプリや、大規模なデータ操作が必要な用途には向いていません。
 
 ## llrtの機能制限について
 
-llrtは nodejs ライクな利用が利用できますが、一方で「node.js で不要と位置づけられた機能や非推奨な機能が利用できない」などの問題があります。
+llrtはNode.jsライクに利用できますが、以下のような制限があります。
 
-ただ「現在もベータ版(2025/12月時点)」ですが、一旦は AWS Lambda の 関数URLが利用できる」などですが、関数URLなど、普通に利用できました。
+- Node.jsで不要と位置づけられた機能や非推奨（deprecate）の機能は、大体実装されていません
+- そのため、既存のNode.js向けソースコードがAWS Lambda上のllrtでそのまま動くかどうかは、実際に動かしてみないとわからないのが実情です
+- `https`などのモジュールは利用できませんが、代わりにNode.js標準の`fetch`が使えるため、httpClient機能はこれで対応可能です
 
-また「node.js で非推奨(deprecate)」のものは、大体実装されていなかったりするので、そのためそのまま AWS Lambdabでの Node.js のソースコードが動くのかと言うのは、実際にやってみないとわからないかと言えます。
+なお、llrtは現在もベータ版（2025年12月時点）ですが、AWS Lambdaの関数URLは問題なく利用できています。
 
-あと https などのモジュールが利用出来ませんが、一方で node.js だと
-- fetch
+## ドキュメント一覧
 
-が使えるので、httpClient機能はこれを利用する事で対応が可能となります。
+興味を持ちましたら、以下のドキュメントをご覧いただき、利用していただければ幸いです。
 
-## EOF
+- ローカル環境
+  - [mintoをローカル環境セットアップ](https://github.com/maachang/minto/blob/main/docs/setup.md)
+  - [mintoのローカル開発説明](https://github.com/maachang/minto/blob/main/docs/howto.md)
+- Lambda生成・デプロイ
+  - [mintoのローカル環境のAWS Lambdaデプロイ](https://github.com/maachang/minto/blob/main/docs/lambda.md)
 
-興味を持ちましたら、以下ドキュメント内容を見ていただき、利用していただければ幸いです。
-
-- ローカル環境:
-  - mintoをローカル環境セットアップ: https://github.com/maachang/minto/blob/main/docs/setup.md
-  - mintoのローカル開発説明: https://github.com/maachang/minto/blob/main/docs/howto.md
-
-- Lambda生成 デプロイ
-  - mintoのローカル環境の AWS Lambda デプロイ: https://github.com/maachang/minto/blob/main/docs/lambda.md
-
-以上ありがとうございました。
+以上、ありがとうございました。
+</content>

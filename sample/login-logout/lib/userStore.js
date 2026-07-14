@@ -6,19 +6,10 @@
 (function () {
     'use strict';
 
-    const crypto = $require("crypto");
+    const password = $loadLib("password.js");
     const s3 = $loadLib("s3client.js");
     const _conf = $loadConf("app.json");
     const _PREFIX = _conf.userPrefix || "users/";
-
-    const _hashPw = function (pw, salt) {
-        return crypto.createHash("sha256")
-            .update(salt + ":" + pw).digest("hex");
-    };
-
-    const _genSalt = function () {
-        return crypto.randomBytes(16).toString("hex");
-    };
 
     const _key = function (uid) {
         return _PREFIX + uid + ".json";
@@ -33,13 +24,14 @@
                 message: "このユーザーIDは既に登録されています"
             };
         }
-        const salt = _genSalt();
+        const hashed = password.hash(pw);
         await s3.putJson(_key(uid), {
             userId: uid,
             name: name || uid,
             role: role || "user",
-            salt: salt,
-            passwordHash: _hashPw(pw, salt),
+            salt: hashed.salt,
+            passwordHash: hashed.hash,
+            passwordIterations: hashed.iterations,
             createdAt: new Date().toISOString()
         });
         return { success: true, message: "ユーザー登録が完了しました" };
@@ -49,7 +41,11 @@
     exports.authenticate = async function (uid, pw) {
         const u = await s3.getJson(_key(uid));
         if (u == null) return null;
-        if (_hashPw(pw, u.salt) !== u.passwordHash) return null;
+        const ok = password.verify(pw, {
+            salt: u.salt, hash: u.passwordHash,
+            iterations: u.passwordIterations
+        });
+        if (!ok) return null;
         return { userId: u.userId, name: u.name, role: u.role };
     };
 
@@ -85,15 +81,20 @@
         if (u == null) {
             return { success: false, message: "ユーザーが見つかりません" };
         }
-        if (_hashPw(oldPw, u.salt) !== u.passwordHash) {
+        const ok = password.verify(oldPw, {
+            salt: u.salt, hash: u.passwordHash,
+            iterations: u.passwordIterations
+        });
+        if (!ok) {
             return {
                 success: false,
                 message: "現在のパスワードが正しくありません"
             };
         }
-        const newSalt = _genSalt();
-        u.salt = newSalt;
-        u.passwordHash = _hashPw(newPw, newSalt);
+        const hashed = password.hash(newPw);
+        u.salt = hashed.salt;
+        u.passwordHash = hashed.hash;
+        u.passwordIterations = hashed.iterations;
         await s3.putJson(_key(uid), u);
         return { success: true, message: "パスワードを変更しました" };
     };

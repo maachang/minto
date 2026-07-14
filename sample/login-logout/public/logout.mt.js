@@ -7,7 +7,7 @@ exports.handler = async function () {
     const req = $request();
     const res = $response();
 
-    const session = $loadLib("session.js");
+    const session = $loadLib("sessionStore.js");
     const sid = req.cookie("minto_sid");
     if (sid != null) {
         await session.destroy(sid);

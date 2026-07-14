@@ -6,6 +6,7 @@
 - `sdk`:  llrt-lambda-{cpu名}-full-sdk.zip を利用する場合の aws-sdk-V3を利用するライブラリ群.
 - `notification`: よく使う slack通知やgithubリポジトリのissue作成を行うライブラリ群.
 - `csv`: CSVファイルのパーサーやCSVエクスポート系ライブラリ、メモリーテーブル機能.
+- `auth`: パスワードハッシュ化、S3ベースのセッション管理、CORS共通ヘルパーなど認証まわりのライブラリ群(`sdk/s3sdk.js`に依存).
 
 ## 利用方法(実装方法)
 

@@ -28,6 +28,10 @@ minto（llrtを使ったAWS Lambda軽量化） は、軽量化モジュール ll
 
 - llrtと言う aws Lambda で実行可能な node.js 互換があるものを利用している.
   - https://github.com/awslabs/llrt
+- llrt で実行されるもの（影響があるもの）は以下のディレクトリ以下となる
+  - lambda/src
+  - modules
+  - sample
 - minto をローカルで実行する環境は tools 以下にまとまっており、これは node.js か bun.js で利用する必要がある.
 
 # ディレクトリ構成 

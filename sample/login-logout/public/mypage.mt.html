@@ -6,7 +6,7 @@
 %>
 <%
     // セッション取得.
-    const session = $loadLib("session.js");
+    const session = $loadLib("sessionStore.js");
     const sid = $request().cookie("minto_sid");
     const user = await session.get(sid);
 
@@ -36,8 +36,8 @@
             <div class="nav-brand">minto App</div>
             <div class="nav-right">
                 <span class="nav-user">
-                    <%= user.name %>
-                    <% if (user.role === "admin") { %>
+                    <%= user.data.name %>
+                    <% if (user.data.role === "admin") { %>
                     <span class="badge badge-admin">Admin</span>
                     <% } else { %>
                     <span class="badge badge-user">User</span>
@@ -49,7 +49,7 @@
 
         <div class="card mypage-card">
             <h1>マイページ</h1>
-            <p>ようこそ、<strong>${ user.name }</strong> さん!</p>
+            <p>ようこそ、<strong>${ user.data.name }</strong> さん!</p>
 
             <div class="info-table">
                 <table>
@@ -59,11 +59,11 @@
                     </tr>
                     <tr>
                         <th>表示名</th>
-                        <td>${ user.name }</td>
+                        <td>${ user.data.name }</td>
                     </tr>
                     <tr>
                         <th>ロール</th>
-                        <td><%= user.role %></td>
+                        <td><%= user.data.role %></td>
                     </tr>
                     <tr>
                         <th>登録日時</th>
@@ -81,7 +81,7 @@
             </div>
 
             <%# === 管理者セクション === %>
-            <% if (user.role === "admin") { %>
+            <% if (user.data.role === "admin") { %>
             <div class="admin-section">
                 <h2>管理者メニュー</h2>
                 <%

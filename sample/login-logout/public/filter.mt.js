@@ -18,7 +18,7 @@ exports.handler = async function () {
     }
 
     // セッションチェック.
-    const session = $loadLib("session.js");
+    const session = $loadLib("sessionStore.js");
     const sid = req.cookie("minto_sid");
     const user = await session.get(sid);
 

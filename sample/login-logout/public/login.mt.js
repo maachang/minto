@@ -34,8 +34,8 @@ exports.handler = async function () {
     }
 
     // S3セッション作成.
-    const session = $loadLib("session.js");
-    const sid = await session.create(userId, userData);
+    const session = $loadLib("sessionStore.js");
+    const sid = await session.start(userId, userData);
 
     // Cookie設定.
     res.cookie("minto_sid", {

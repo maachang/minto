@@ -1,5 +1,16 @@
 # minto ローカル環境利用方法
 
+## 目次
+
+- [①ディレクトリ構成とローカル実行環境構築方法](#①minto-ローカル環境ディレクトリ構成とローカル実行環境構築方法)
+- [②lambda url functionの制限を理解する](#②lambda-url-function-の制限を理解する)
+- [③publicディレクトリのコンテンツ説明](#③public-ディレクトリのコンテンツ説明)
+- [④実装モジュールや定義関連の利用について](#④実装モジュールや定義関連の利用について)
+- [⑤minto用 $request 説明](#⑤minto用-request-説明)
+- [⑥minto用 $response 説明](#⑥minto用-response-説明)
+- [⑦動的コンテンツ(json返却)の実装説明](#⑦動的コンテンツjson返却-の実装説明)
+- [⑧jhtml実装](#⑧jhtml-実装)
+
 事前にこちらを読んでください。
 
 [setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md) の内容を元に環境変数設定で `minto` コマンドが利用可能な状況を元に説明しています。
@@ -357,7 +368,7 @@ header.userAgent: Mozilla/5.0 (X11; Linux x86_64; rv:139.0) Gecko/20100101 Firef
 
 上の例だとHTTPリクエストの `User-Agent` を表示しています。
 
-また minth では headerキー名は全て小文字で変換されたもので取り扱えます。
+また minto では headerキー名は全て小文字で変換されたもので取り扱えます。
 
 ### 5. $request().header(string)
 
@@ -376,7 +387,7 @@ header.userAgent: Mozilla/5.0 (X11; Linux x86_64; rv:139.0) Gecko/20100101 Firef
 
 上の例だとHTTPリクエストの `User-Agent` を表示しています。
 
-また minth では headerキー名は全て小文字で変換されたもので取り扱えます。
+また minto では headerキー名は全て小文字で変換されたもので取り扱えます。
 
 ### 6. $request().cookies()
 
@@ -727,17 +738,3 @@ Lambda 上でjhtmlを利用可能にするには [mtpkコマンド](https://gith
 ## EOF
 
 一旦ローカル環境での開発関連説明は終了となります。
-
-
-
-
-
-
-
-
-
-
-
-
-
-
