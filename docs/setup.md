@@ -205,6 +205,16 @@ AWS Lambda では環境変数が利用できますが、これを ローカルmi
 
 あと `検証環境=nodejs` の一方で、基本実行するランタイム= `llrt` なので「多少の互換性の問題」があるので、これらを含めての「実行テスト」が「AWS Lambda 上」で必要となるので、注意が必要です。
 
+この互換性の問題を事前に検知するため、`mtpk` には `-c` または `--check` オプションが用意されています。これは `lambda/src`・`modules`・プロジェクトの`lib`/`public`以下を対象に、llrtで未サポートと確認済みのAPI(`crypto.pbkdf2`、`for await`構文など)が使われていないかを、pack化前にチェックするものです。問題が見つかった場合は zip 作成を中断します。詳細は[bin/README.md](https://github.com/maachang/minto/blob/main/bin/README.md#4-llrt互換性チェック)を参照してください。
+
+~~~sh
+> mtpk -c
+もしくは
+> mtpk --check
+~~~
+
+ただしこれは正規表現による簡易的なチェックであり、既知のNG項目のみを対象とした簡易検知に過ぎないため、これだけで安心せず、必ず実際の AWS Lambda 上での実行テストも行ってください。
+
 またこれら「AWS Lambda 上での検証」においては
 - jsMin: `mtpk -m or --min`
 
