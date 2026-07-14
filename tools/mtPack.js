@@ -13,7 +13,7 @@
     // crypto.
     const crypto = require('crypto');
     // execCommand.
-    const { execSync } = require("child_process");
+    const { execFileSync } = require("child_process");
 
     // mintoUtil.
     const mintoUtil = require("./mintoUtil.js");
@@ -102,11 +102,13 @@
     }
 
     // 指定ディレクトリを削除.
-    // path 削除対象のディレクトリ名を設定します.
+    // dirPath 削除対象のディレクトリ名を設定します.
     // 戻り値: true の場合、ディレクトリ削除が成功しました.
-    const removeDir = function (path) {
-        // コマンドで実行.
-        return execSync("rm -Rf " + path);
+    const removeDir = function (dirPath) {
+        // シェル経由(rm -Rf)だとパスにスペースや記号を含む場合に
+        // 壊れるため、fs.rmSyncで直接削除する.
+        fs.rmSync(dirPath, { recursive: true, force: true });
+        return true;
     }
 
     // 指定ディレクトリを生成.
@@ -129,10 +131,13 @@
     const cmdMimify = function (src, dest, consoleOff) {
         consoleOff = consoleOff == true
         try {
-            execSync("uglifyjs " + src +
-                " --compress drop_console=" + consoleOff +
-                " --mangle -o " +
-                dest);
+            // execFileSyncでシェルを介さず引数配列で実行することで
+            // パスにスペース等が含まれる場合でも安全に実行する.
+            execFileSync("uglifyjs", [
+                src,
+                "--compress", "drop_console=" + consoleOff,
+                "--mangle", "-o", dest
+            ]);
         } catch (e) {
             throw new Error("uglifyjs command does not exist")
         }
@@ -472,8 +477,10 @@
     // zip圧縮.
     const convZip = function () {
         p("# deploy zip: " + _ZIP_FILE);
-        execSync("cd " + _WORK_DIR + "; zip archive -r ./");
-        execSync("mv " + _WORK_DIR + "archive.zip " + _CURRENT_PATH + _ZIP_FILE);
+        // "cd X; ..." のシェル文字列結合をやめ、cwdオプションで
+        // 作業ディレクトリを指定する(パスにスペース等を含む場合の対策).
+        execFileSync("zip", ["archive", "-r", "./"], { cwd: _WORK_DIR });
+        fs.renameSync(_WORK_DIR + "archive.zip", _CURRENT_PATH + _ZIP_FILE);
         // workディレクトリを削除.
         removeDir(_WORK_DIR);
         p("   ... success");

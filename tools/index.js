@@ -42,8 +42,8 @@
         if (mintoUtil.existsFileSync(_MINTO_CONF)) {
             mintoConf = mintoUtil.loadJson(_MINTO_CONF);
             // bindPortを取得.
-            if (mintConf.bindPort != undefined) {
-                bindPort = mintConf.bindPort;
+            if (mintoConf.bindPort != undefined) {
+                bindPort = mintoConf.bindPort;
             }
         }
 
@@ -53,7 +53,7 @@
             const envConf = mintoUtil.loadJson(_ENV_CONF);
             // 環境変数に定義条件を割り当てる.
             for (let key in envConf) {
-                prcess.env[key] = envConf[key];
+                process.env[key] = envConf[key];
             }
         }
 

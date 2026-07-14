@@ -77,7 +77,7 @@
                     if (pp != path) {
                         pp = path + pp + "/";
                     }
-                    ret.push(pp + lst[i].name + "/");
+                    ret.push(pp + lst[i].name);
                 }
             }
             return ret;
@@ -94,7 +94,7 @@
                     } else {
                         keyHead = "";
                     }
-                    ret[keyHead + lst[i].name] = pp + lst[i].name + "/";
+                    ret[keyHead + lst[i].name] = pp + lst[i].name;
                 }
             }
             return ret;

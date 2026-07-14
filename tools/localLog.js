@@ -46,6 +46,8 @@
     const LEVEL_ERROR = 5;
     // 出力タイプ: log.
     const LEVEL_LOG = 99;
+    // 出力タイプ: none(すべてのログを抑制).
+    const LEVEL_NONE = 100;
 
     // ログレベル.
     let logLevel = LEVEL_INFO;
@@ -58,7 +60,7 @@
             return;
         }
         switch (level.trim().toLowerCase()) {
-            case "none": logLevel = LEVEL_TRACE; break;
+            case "none": logLevel = LEVEL_NONE; break;
             case "trace": logLevel = LEVEL_TRACE; break;
             case "dbg": logLevel = LEVEL_DEBUG; break;
             case "debug": logLevel = LEVEL_DEBUG; break;
@@ -306,9 +308,9 @@
         }
         let c = countSimboles[simbol];
         if (c == undefined) {
-            c = 1;
+            c = 0;
         }
-        countSimboles[simbol] = c++;
+        countSimboles[simbol] = ++c;
         if (simbol == null) {
             simbol = "default";
         }

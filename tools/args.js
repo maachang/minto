@@ -120,7 +120,7 @@
         // 数字で直接指定している場合.
         if (len == 1 && isNumeric(arguments[1])) {
             const pos = arguments[1] | 0;
-            // [修正] +2 オフセット廃止。args は 0 始まりのユーザー引数配列
+            // args は 0 始まりのユーザー引数配列.
             if (pos >= 0 && pos < args.length) {
                 return args[pos];
             }
@@ -128,10 +128,9 @@
         }
         let i, j;
         let cnt = 0;
-        // [修正] フラグの次の要素を取るため末尾-1まで走査
+        // フラグの次の要素を取るため末尾-1まで走査.
         const lenJ = args.length - 1;
         for (i = 0; i < len; i++) {
-            // [修正] j=0 から走査（+2 オフセット廃止）
             for (j = 0; j < lenJ; j++) {
                 if (arguments[i + 1] == args[j]) {
                     if (no <= cnt) {
@@ -178,7 +177,7 @@
     // 戻り値: Array型が返却されます.
     o.getArray = function () {
         const ret = [];
-        // [修正] ローカル変数名を params に変更し、モジュールスコープの args と区別する
+        // ローカル変数名は params とし、モジュールスコープの args と区別する.
         const params = [0];
         const len = arguments.length;
         for (let i = 0; i < len; i++) {
@@ -207,7 +206,7 @@
         for (i = 0; i < len; i++) {
             if (isNumeric(arguments[i])) {
                 no = arguments[i] | 0;
-                // [修正] +2 オフセット廃止。args は 0 始まりのユーザー引数配列
+                // args は 0 始まりのユーザー引数配列.
                 if (no >= 0 && no < args.length) {
                     return true;
                 }
@@ -228,7 +227,7 @@
         if (args.length == 0) {
             return "";
         }
-        // [修正] args[0] は init() により正しくユーザー引数の先頭を指す
+        // args[0] は init() により正しくユーザー引数の先頭を指す.
         return args[0];
     };
 

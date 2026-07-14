@@ -343,8 +343,8 @@
                     let n = null;
                     let off = 0;
                     let body = Buffer.allocUnsafe(binLen);
+                    const len = list.length;
                     binLen = null;
-                    const len = buf.length;
                     // 取得内容を統合.
                     for (let i = 0; i < len; i++) {
                         n = list[i];
@@ -659,11 +659,13 @@
         headers["date"] = new Date().toISOString();
         // cookieが存在する場合.
         if (Array.isArray(cookies) && cookies.length > 0) {
-            // set-cookieをセット.
+            // set-cookieを複数設定できるよう配列でセット.
             const len = cookies.length;
+            const setCookie = [];
             for (let i = 0; i < len; i++) {
-                headers["set-cookie"] = cookies[i];
+                setCookie.push(cookies[i]);
             }
+            headers["set-cookie"] = setCookie;
         }
         // 書き込み処理.
         if (typeof (message) == "string") {

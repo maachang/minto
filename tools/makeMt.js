@@ -115,8 +115,8 @@
             return;
         }
         // プロジェクト名を取得.
-        const projectName = process.argv[2];
-        if (projectName == undefined) {
+        const projectName = args.getFirst();
+        if (projectName == undefined || projectName === "") {
             p("[ERROR] Project name not set.");
             return;
         }
