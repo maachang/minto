@@ -44,6 +44,10 @@
     // bindPort.
     let bindPort = null;
 
+    // リクエスト直列実行用キュー.
+    // (共有状態汚染対策。詳細はcreateServerのコールバック内コメントを参照).
+    let _requestQueue = Promise.resolve();
+
     // このファイルが存在するディレクトリ.
     // __dirname と同じ.
     const _DIR_NAME = (function () {
@@ -212,11 +216,25 @@
         // サーバー生成.
         var server = require("http")
             .createServer(function (req, res) {
-                // 全requireキャッシュのクリア
-                // (ローカルはテスト実行なので毎回削除).
-                _clearRequireCache();
-                // httpRequestを受信処理.
-                _runMintoLambda(req, res);
+                // AIメモ: lambda/src/index.js は _event/_c_request/_c_response
+                // などをモジュールスコープの共有変数として持つ実装になっている
+                // (本番のAWS Lambdaでは実行環境が同時実行毎に分離されるため
+                //  問題にならない設計)。一方このローカルサーバーは単一の
+                //  Node.jsプロセス・単一のmintoLambdaIndexモジュールインスタンスで
+                //  複数の同時接続を処理するため、リクエストを並行処理すると
+                //  後続リクエストの_clearRequireCache()が先行リクエスト処理中の
+                //  共有状態を巻き込んでリセットし、レスポンスが混線する
+                //  恐れがある。そのため_requestQueueで1件ずつ完全に処理してから
+                //  次のリクエストの処理を開始するようにする.
+                _requestQueue = _requestQueue.then(function () {
+                    // 全requireキャッシュのクリア
+                    // (ローカルはテスト実行なので毎回削除).
+                    _clearRequireCache();
+                    // httpRequestを受信処理.
+                    return _runMintoLambda(req, res);
+                }).catch(function (e) {
+                    console.warn("[error] requestQueue:", e);
+                });
             }
             );
 
@@ -289,94 +307,100 @@
     // (http)mintoLambda実行処理.
     // req 対象のリクエストオブジェクトが設定されます.
     // res 対象のレスポンスオブジェクトが設定されます.
+    // 戻り値: リクエスト処理(レスポンス送信含む)が完了した時点で
+    //         resolveするPromiseが返却されます(直列実行キュー用).
     const _runMintoLambda = function (req, res) {
-        // イベント11超えでメモリーリーク警告が出るので
-        // これを排除.
-        req.setMaxListeners(0);
-        res.setMaxListeners(0);
-        const method = req.method.toUpperCase()
-        // requestされたpostデータのダウンロード.
-        if (method == "POST") {
-            // コンテンツ長が設定されている場合.
-            if (req.headers["content-length"]) {
-                let off = 0;
-                let body = Buffer.allocUnsafe(
-                    req.headers["content-length"] | 0);
-                // データ取得.
-                const dataCall = function (bin) {
-                    bin.copy(body, off);
-                    off += bin.length;
-                };
-                // データ取得終了.
-                const endCall = function () {
-                    cleanup();
-                    // mintoMainを実行.
-                    _runLambdaIndex(req, res, body);
-                }
-                // エラー終了.
-                const errCall = function (e) {
-                    cleanup();
-                    console.warn(e);
-                }
-                // クリーンアップ.
-                const cleanup = function () {
-                    req.removeListener('data', dataCall);
-                    req.removeListener('end', endCall);
-                    req.removeListener('error', errCall);
-                }
-                // リクエストイベントセット.
-                req.on('data', dataCall);
-                req.once('end', endCall);
-                req.once('error', errCall);
-            } else {
-                // コンテンツ長が設定されていない場合.
-                let list = [];
-                let binLen = 0;
-                // データ取得.
-                const dataCall = function (bin) {
-                    list.push(bin);
-                    binLen += bin.length;
-                };
-                // データ取得終了.
-                const endCall = function () {
-                    cleanup();
-                    let n = null;
+        return new Promise(function (resolve) {
+            // イベント11超えでメモリーリーク警告が出るので
+            // これを排除.
+            req.setMaxListeners(0);
+            res.setMaxListeners(0);
+            const method = req.method.toUpperCase()
+            // requestされたpostデータのダウンロード.
+            if (method == "POST") {
+                // コンテンツ長が設定されている場合.
+                if (req.headers["content-length"]) {
                     let off = 0;
-                    let body = Buffer.allocUnsafe(binLen);
-                    const len = list.length;
-                    binLen = null;
-                    // 取得内容を統合.
-                    for (let i = 0; i < len; i++) {
-                        n = list[i];
-                        n.copy(body, off);
-                        list[i] = null;
-                        off += n.length;
+                    let body = Buffer.allocUnsafe(
+                        req.headers["content-length"] | 0);
+                    // データ取得.
+                    const dataCall = function (bin) {
+                        bin.copy(body, off);
+                        off += bin.length;
+                    };
+                    // データ取得終了.
+                    const endCall = function () {
+                        cleanup();
+                        // mintoMainを実行.
+                        resolve(_runLambdaIndex(req, res, body));
                     }
-                    list = null;
-                    // mintoMainを実行.
-                    _runLambdaIndex(req, res, body);
+                    // エラー終了.
+                    const errCall = function (e) {
+                        cleanup();
+                        console.warn(e);
+                        resolve();
+                    }
+                    // クリーンアップ.
+                    const cleanup = function () {
+                        req.removeListener('data', dataCall);
+                        req.removeListener('end', endCall);
+                        req.removeListener('error', errCall);
+                    }
+                    // リクエストイベントセット.
+                    req.on('data', dataCall);
+                    req.once('end', endCall);
+                    req.once('error', errCall);
+                } else {
+                    // コンテンツ長が設定されていない場合.
+                    let list = [];
+                    let binLen = 0;
+                    // データ取得.
+                    const dataCall = function (bin) {
+                        list.push(bin);
+                        binLen += bin.length;
+                    };
+                    // データ取得終了.
+                    const endCall = function () {
+                        cleanup();
+                        let n = null;
+                        let off = 0;
+                        let body = Buffer.allocUnsafe(binLen);
+                        const len = list.length;
+                        binLen = null;
+                        // 取得内容を統合.
+                        for (let i = 0; i < len; i++) {
+                            n = list[i];
+                            n.copy(body, off);
+                            list[i] = null;
+                            off += n.length;
+                        }
+                        list = null;
+                        // mintoMainを実行.
+                        resolve(_runLambdaIndex(req, res, body));
+                    }
+                    // エラー終了.
+                    const errCall = function (e) {
+                        cleanup();
+                        console.warn(e);
+                        resolve();
+                    }
+                    // クリーンアップ.
+                    const cleanup = function () {
+                        req.removeListener('data', dataCall);
+                        req.removeListener('end', endCall);
+                        req.removeListener('error', errCall);
+                    }
+                    // リクエストイベントセット.
+                    req.on('data', dataCall);
+                    req.once('end', endCall);
+                    req.once('error', errCall);
                 }
-                // エラー終了.
-                const errCall = function (e) {
-                    cleanup();
-                    console.warn(e);
-                }
-                // クリーンアップ.
-                const cleanup = function () {
-                    req.removeListener('data', dataCall);
-                    req.removeListener('end', endCall);
-                    req.removeListener('error', errCall);
-                }
-                // リクエストイベントセット.
-                req.on('data', dataCall);
-                req.once('end', endCall);
-                req.once('error', errCall);
+                // GET処理.
+            } else {
+                // mintoMainを実行.
+                resolve(_runLambdaIndex(req, res, null));
             }
-            // GET処理.
-        } else {
-            // mintoMainを実行.
-            _runLambdaIndex(req, res, null);
-        }
+        });
     }
 
     // lambdaIndexを実行.
