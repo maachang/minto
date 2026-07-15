@@ -6,6 +6,9 @@
 
     // events.
     const events = require("events");
+    // イベント11超えでメモリーリーク警告が出るのでこれを排除.
+    // (モジュールロード時に1回だけ設定すれば十分なため、handler内から移動).
+    events.EventEmitter.defaultMaxListeners = 0;
 
     // path.
     const pathLib = require("path");
@@ -39,8 +42,6 @@
 
     // lambda main(３番目の引数 callbackはサポートしない).
     exports.handler = async function (event, context) {
-        // イベント11超えでメモリーリーク対応.警告が出るのでこれを排除.
-        events.EventEmitter.defaultMaxListeners = 0;
         // 初期化処理.
         _event = event;
         _context = context;
@@ -49,8 +50,14 @@
 
         let rawPath = event.rawPath;
         // 不正なパスが設定されている場合はエラーにする.
-        if (rawPath.indexOf("/../") != -1) {
-            throw new HttpError(400, "不正なパスを検知しました")
+        // AIメモ: 以前は throw new HttpError(...) としていたが、handler()の
+        // 先頭でthrowすると_responseRunJs等が持つtry/catch(_errorRunJs経由での
+        // ステータス復元)を経由せずに呼び出し元まで例外が伝播してしまい、
+        // HttpErrorが意図したステータス(400)が失われ500に丸められてしまう
+        // 問題があった。_errorRunJs()を直接呼んで正しいステータスで返却する.
+        if (_hasParentTraversal(rawPath)) {
+            return _errorRunJs(
+                new HttpError({ status: 400, message: "不正なパスを検知しました" }), "");
         }
         // favicon.icoのアクセス.
         if (rawPath.endsWith("/" + _FAVICON_ICO)) {
@@ -413,7 +420,7 @@
             return _resultFilter(null, ext);
         } catch (e) {
             // エラーログ出力.
-            console.error("[error]runFilter: ", e);
+            console.error("[error][" + $requestId() + "]runFilter: ", e);
             return _errorRunJs(e, "");
         }
     }
@@ -586,7 +593,7 @@
             }
             // 対象のファイルが存在しない場合.
             if (!_existsSync(targetFile)) {
-                console.warn("[warning] not static file: " + targetFile);
+                console.warn("[warning][" + $requestId() + "] not static file: " + targetFile);
                 return _errorStaticResult(404, ext);
             }
             // fileを取得.
@@ -606,7 +613,7 @@
                 , body: body.toString("base64")
             };
         } catch (e) {
-            console.error("[error]staticFile: " + path, e);
+            console.error("[error][" + $requestId() + "]staticFile: " + path, e);
             return _errorStaticResult(500, ext);
         }
     }
@@ -683,7 +690,7 @@
             }
             // 対象のファイルが存在しない場合.
             if (!_existsSync(path)) {
-                console.warn("[warning] not RunJs file: " + path);
+                console.warn("[warning][" + $requestId() + "] not RunJs file: " + path);
                 return _errorStaticResult(404, (ext === "jhtml") ? "html" : "js");
             }
             // 実行jsを取得.
@@ -716,7 +723,7 @@
             return _returnRunJsResponse(response, ext);
         } catch (e) {
             // エラーログ出力.
-            console.error("[error]runJs: " + path, e);
+            console.error("[error][" + $requestId() + "]runJs: " + path, e);
             return _errorRunJs(e, ext);
         }
     }
@@ -838,8 +845,7 @@
             body = "" + message;
         } else {
             headers["content-type"] = "application/json";
-            body = "{status: " + status + ", message: '"
-                + message + "'}";
+            body = JSON.stringify({ status: status, message: message });
         }
         // ノーキャッシュヘッダをセット.
         _setResponseNoCacheHeaders(headers);
@@ -884,6 +890,22 @@
             }
         }
         return ret;
+    }
+
+    // パスに親ディレクトリ参照("..")セグメントが含まれるか判定する.
+    // AIメモ: 以前は rawPath.indexOf("/../") != -1 という部分文字列一致の
+    // みで判定していたが、パス末尾が"/.."で終わる(区切りスラッシュが
+    // 後続に無い)場合に検知をすり抜ける抜け穴があった。セグメント単位で
+    // 判定することでこの抜け穴を無くす.
+    const _hasParentTraversal = function (path) {
+        const segs = path.split("/");
+        const len = segs.length;
+        for (let i = 0; i < len; i++) {
+            if (segs[i] === "..") {
+                return true;
+            }
+        }
+        return false;
     }
 
     // 拡張子を取得.
@@ -1305,6 +1327,9 @@
             if (args.error === undefined) {
                 args.error = undefined;
             }
+            // Errorの派生クラスは、thisにアクセスする前に必ずsuper()を
+            // 呼ぶ必要がある(呼ばないとReferenceErrorになる).
+            super(args.message);
             this.#status = args.status;
             this.#message = args.message;
             this.#error = args.error;
