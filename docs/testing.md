@@ -38,6 +38,7 @@ bun test
 
 - 新規の依存パッケージは追加せず、Node.js標準の `node:test` / `node:assert/strict` のみを使用しています(`node --test` と `bun test` の両方で同一のテストファイルがそのまま動作することを確認済みです)
 - ルートの `package.json` は `npm test` 実行のためだけに追加した最小構成で、依存パッケージ(`dependencies`)は定義していません
+- 例外として、`modules/sdk/*`が実行時に前提とする`@aws-sdk/client-s3`のみ`devDependencies`として追加しています(後述の`s3IndexTable-crud.test.js`が実際にこのSDKを使って`tools/localS3.js`と通信するため)。`npm install`を実行すれば自動的にインストールされます
 
 ## ディレクトリ構成
 
@@ -56,7 +57,9 @@ test/
 │   ├── auth-password.test.js
 │   ├── auth-jwt.test.js
 │   ├── http-response.test.js
-│   └── validate.test.js
+│   ├── validate.test.js
+│   ├── s3IndexTable-encode.test.js
+│   └── s3IndexTable-crud.test.js
 │
 └── e2e/                     結合テスト(実際にローカルサーバーを起動して確認)
     ├── webapps.test.js
@@ -86,6 +89,18 @@ test/
 - **auth-jwt.test.js**: `modules/auth/jwt.js`のHS256署名/検証(sign/verify)を検証します。secret不一致・期限切れ(exp)・フォーマット不正時の検証失敗、`options.noError == false`時の例外throwも確認しています
 - **http-response.test.js**: `modules/http/response.js`のJSON/エラーレスポンス組み立て(`json`/`error`)を検証します。グローバルの`$response()`を呼び出し内容を記録するスタブに差し替えて検証しています
 - **validate.test.js**: `modules/validate/validate.js`のスキーマベース検証(`check`)を検証します。required/type/minLen・maxLen/min・max/pattern/enum/customの各ルール、default値補完、元データを変更しないことなどを確認しています
+- **s3IndexTable-encode.test.js**: `modules/sdk/s3IndexTable.js`のうち、S3通信を伴わない値エンコードロジック(`encodeInt`/`encodeFloat`/`encodeString`/`encodeBoolean`/`encodeDate`)が数値順・辞書順と一致すること、`generateRowId`の一意性などを検証します
+- **s3IndexTable-crud.test.js**: `modules/sdk/s3IndexTable.js`のCRUD/検索エンジン本体を検証します。`tools/localS3.js`(ローカルS3エミュレータ)を子プロセスとして起動し、実際に`@aws-sdk/client-s3`経由で通信させることで、以下を確認しています。
+  - createTable/insert/select(eq検索)
+  - 複合インデックス(先頭カラム範囲検索+後続カラム完全一致)
+  - 範囲検索(gt/gte/lt/lte)・in検索
+  - orderBy(インデックス順序利用・メモリソート双方)、offset/limit
+  - groupBy + 集計(count/sum/avg/min/max)
+  - update/delete
+  - 行ファイルを直接削除した場合の自己修復(stale索引の自動削除)
+  - createIndexによる既存行へのバックフィル、dropIndex、dropTable
+
+  ポートは`test/e2e/webapps.test.js`と同様に`net`モジュールでOSに空きポートを割り当てる方式、ストレージ先は`os.tmpdir()`配下の一時ディレクトリを使い、テスト終了後に削除しています。
 
 ### e2e/
 
@@ -102,11 +117,17 @@ test/
 以下は実際のAWS/Slack/GitHubへの通信が発生するため、`fetch`のモック化などの追加設計が必要になります。今回は対象外としています。
 
 - `modules/no-sdk/*`(s3client.js, sqs.js, asv4.js)
-- `modules/sdk/*`(s3sdk.js, s3MasterTable.js)
 - `modules/notification/*`(sendSlack.js, sendGithub.js)
-- `modules/auth/session.js`(内部で`modules/sdk/s3sdk.js`を経由してS3にアクセスするため)
+- `modules/sdk/dynamoDbSdk.js`・`sqsSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`(S3以外のAWSサービス。`tools/localS3.js`はS3のみが対象のため未対応)
 
-必要になった場合は、`fetch`をモックに差し替える仕組みを別途検討してください。
+一方で `modules/sdk/s3sdk.js`・`s3IndexTable.js`・`s3Lock.js` は、[tools/localS3.js](https://github.com/maachang/minto/blob/main/docs/localS3.md)(ファイル/ディレクトリベースのローカルS3エミュレータ)を子プロセスとして起動することで、実AWSへの通信無しに実際の`@aws-sdk/client-s3`経由のテストが可能になっています(`s3IndexTable-crud.test.js`を参照)。
+
+以下はまだこの方式でのテストが未整備です。
+
+- `modules/sdk/s3MasterTable.js`
+- `modules/auth/session.js`(内部で`modules/sdk/s3sdk.js`を経由してS3にアクセスするため、s3IndexTable-crud.test.jsと同様の方式でテスト可能)
+
+必要になった場合は、`fetch`をモックに差し替える仕組みや、上記の`localS3`を使ったテストの追加を検討してください。
 
 ## テストの追加方法
 
