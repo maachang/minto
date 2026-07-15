@@ -59,7 +59,8 @@ test/
 │   ├── http-response.test.js
 │   ├── validate.test.js
 │   ├── s3IndexTable-encode.test.js
-│   └── s3IndexTable-crud.test.js
+│   ├── s3IndexTable-crud.test.js
+│   └── s3MasterTable-crud.test.js
 │
 └── e2e/                     結合テスト(実際にローカルサーバーを起動して確認)
     ├── webapps.test.js
@@ -101,6 +102,16 @@ test/
   - createIndexによる既存行へのバックフィル、dropIndex、dropTable
 
   ポートは`test/e2e/webapps.test.js`と同様に`net`モジュールでOSに空きポートを割り当てる方式、ストレージ先は`os.tmpdir()`配下の一時ディレクトリを使い、テスト終了後に削除しています。
+- **s3MasterTable-crud.test.js**: `modules/sdk/s3MasterTable.js`(テーブル全体1JSON方式)のCRUD/検索エンジン本体を、`s3IndexTable-crud.test.js`と同じ方式(`tools/localS3.js`を子プロセスとして起動)で検証します。
+  - createTable(重複作成のエラー含む)/insert/select(全件)
+  - where演算子(eq/ne/gt/gte/lt/lte/in/ni/between/regexp)
+  - orderBy(asc/desc)、offset/limit、columns指定(カラム投影)
+  - groupBy + 集計(count/sum/avg/min/max)
+  - update/delete
+  - primaryKey/uniqueカラムの重複挿入エラー、autoIncrementの自動採番
+  - date型カラムのDateオブジェクトでの挿入・取得・比較
+  - dropTable後のdescribeTable/selectのエラー化
+  - exportCsv/importCsvによるテーブル内容の往復
 
 ### e2e/
 
@@ -120,12 +131,11 @@ test/
 - `modules/notification/*`(sendSlack.js, sendGithub.js)
 - `modules/sdk/dynamoDbSdk.js`・`sqsSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`(S3以外のAWSサービス。`tools/localS3.js`はS3のみが対象のため未対応)
 
-一方で `modules/sdk/s3sdk.js`・`s3IndexTable.js`・`s3Lock.js` は、[tools/localS3.js](https://github.com/maachang/minto/blob/main/docs/localS3.md)(ファイル/ディレクトリベースのローカルS3エミュレータ)を子プロセスとして起動することで、実AWSへの通信無しに実際の`@aws-sdk/client-s3`経由のテストが可能になっています(`s3IndexTable-crud.test.js`を参照)。
+一方で `modules/sdk/s3sdk.js`・`s3IndexTable.js`・`s3MasterTable.js`・`s3Lock.js` は、[tools/localS3.js](https://github.com/maachang/minto/blob/main/docs/localS3.md)(ファイル/ディレクトリベースのローカルS3エミュレータ)を子プロセスとして起動することで、実AWSへの通信無しに実際の`@aws-sdk/client-s3`経由のテストが可能になっています(`s3IndexTable-crud.test.js`・`s3MasterTable-crud.test.js`を参照)。
 
 以下はまだこの方式でのテストが未整備です。
 
-- `modules/sdk/s3MasterTable.js`
-- `modules/auth/session.js`(内部で`modules/sdk/s3sdk.js`を経由してS3にアクセスするため、s3IndexTable-crud.test.jsと同様の方式でテスト可能)
+- `modules/auth/session.js`(内部で`modules/sdk/s3sdk.js`を経由してS3にアクセスするため、同様の方式でテスト可能)
 
 必要になった場合は、`fetch`をモックに差し替える仕組みや、上記の`localS3`を使ったテストの追加を検討してください。
 
