@@ -157,6 +157,8 @@ minto
 
 そしてこの `./minto` を `.gitignore` でコミット除外にする事で credential の事故を防げます。
 
+なお、S3を利用する検証において「実際のAWS環境のCredentialを用意したくない」場合は、実AWS S3の代わりにファイル/ディレクトリベースでローカル動作確認ができる `localS3` コマンドも利用できます。詳しくは [localS3.md](https://github.com/maachang/minto/blob/main/docs/localS3.md) を参照してください。
+
 このように定義して実際に検証環境立ち上げ時には
 ~~~cmd
 ./minto
