@@ -5,6 +5,9 @@ mintoコマンドは、以下のコマンドが存在します.
   ローカル環境でmintoを実行・確認するためのコマンド
 - mtpk
   ローカルmintoをデプロイして aws lambda 用の zip ファイル化するためのコマンド
+- localS3
+  `modules/sdk/s3sdk.js`・`modules/sdk/s3Lock.js`が利用するS3を、実AWSに接続せず
+  ファイル/ディレクトリベースでローカル動作確認するためのS3エミュレータ起動コマンド
 
 まずこれらコマンドを利用するための設定を行うための説明を行います.
 
@@ -91,6 +94,40 @@ export NODE_PATH=`npm root -g`
 <<終了>>
 
 ※ ちなみに llrt だと http or https モジュールが利用できないようなので、minto=nodeしか利用できません.
+
+## localS3 コマンド
+
+`modules/sdk/s3sdk.js`・`modules/sdk/s3Lock.js`を使うプロジェクトを、実際のAWS S3に
+接続せずローカルのファイル/ディレクトリだけで動作確認するためのS3エミュレータです。
+
+~~~sh
+> localS3
+もしくは
+> localS3 -p {ポート番号} -d {ストレージ保存先ディレクトリ}
+~~~
+
+- `-p` / `--port`: バインドポート(デフォルト `9911`)
+- `-d` / `--dir`: バケット内容を保存するローカルディレクトリ(デフォルト `./.localS3`)
+
+起動後、`minto`コマンド実行時に読み込まれる `conf/env.json` などで以下の環境変数を
+設定することで、`s3sdk.js`/`s3Lock.js`が自動的にこのローカルサーバーへ接続します
+(実AWS環境で使う場合は、これらの環境変数を設定しなければ通常通りAWS S3に接続します)。
+
+~~~json
+{
+  "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911",
+  "AWS_ACCESS_KEY_ID": "local",
+  "AWS_SECRET_ACCESS_KEY": "local"
+}
+~~~
+
+`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`は`@aws-sdk/client-s3`がクレデンシャル解決に
+必要とするため、ローカル接続時も適当な値(任意の文字列)を設定する必要があります
+(`localS3`側では署名検証を行わないため値そのものは使われません)。
+
+サポートしているS3操作は PutObject(条件付き書き込み`If-None-Match`含む)・GetObject・
+DeleteObject・ListObjectsV2 の最低限のみです。それ以外の操作(バージョニング、
+マルチパートアップロードなど)には対応していません。
 
 ## mtpk コマンド
 

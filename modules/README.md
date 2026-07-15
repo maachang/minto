@@ -4,7 +4,7 @@
 
 - `no-sdk`: llrt-lambda-{cpu名}-no-sdk.zip を利用する場合の aws-sdk(AWS Signature(version4)) を利用する場合のライブラリ群.
 - `sdk`:  llrt-lambda-{cpu名}-full-sdk.zip を利用する場合の aws-sdk-V3を利用するライブラリ群.
-  - `s3sdk.js`: 最低限のS3 put/get/delete/list操作.
+  - `s3sdk.js`: 最低限のS3 put/get/delete/list操作。環境変数`MINTO_LOCAL_S3_ENDPOINT`が設定されている場合、実AWS S3ではなく`tools/localS3.js`(ローカルS3エミュレータ)に接続する.
   - `s3MasterTable.js`: テーブル全体を1つのJSONとしてS3に保存するRDBMSライクなデータベース。**書き込み頻度が少なく、読み込み頻度が多い**用途向け。詳細は[docs/s3MasterTable.md](https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md)を参照.
   - `s3IndexTable.js`: 1行=1ファイルでS3に保存する行ファイル型データベース。**書き込み頻度が多い**用途向け(書き込み競合が起きにくい代わりに、検索は事前定義したインデックス経由のみ・複合インデックスは先頭カラムのみ範囲検索可、という制約がある。1テーブル1万件程度の小規模利用を想定)。詳細は[docs/s3-row-store-design.md](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)を参照.
   - `dynamoDbSdk.js`: Amazon DynamoDBのDocument Client相当(marshall/unmarshall)ラッパー。put/get/delete/update(patchのSETのみ)/queryの最低限の操作を提供.
@@ -14,7 +14,7 @@
   - `parameterStoreSdk.js`: AWS Systems Manager Parameter Storeの取得ラッパー。getのみ提供、TTL付きメモリキャッシュ(デフォルト60秒)を内蔵.
   - `sesSdk.js`: Amazon SESのメール送信ラッパー。sendのみ提供(text/html本文のシンプル送信、添付ファイル非対応).
   - `kmsSdk.js`: AWS KMSのエンベロープ暗号化ラッパー。encrypt/decryptを提供。ローカルのAES-256-GCM暗号化にはllrtの制約上crypto.subtle(WebCrypto)を使用.
-  - `s3Lock.js`: S3の条件付き書き込み(IfNoneMatch)を利用した簡易排他ロック。acquire/releaseを提供。期限切れロック(stale)の自動失捉(reclaim)に対応.
+  - `s3Lock.js`: S3の条件付き書き込み(IfNoneMatch)を利用した簡易排他ロック。acquire/releaseを提供。期限切れロック(stale)の自動失捉(reclaim)に対応。`s3sdk.js`と同様に`MINTO_LOCAL_S3_ENDPOINT`によるローカル接続に対応.
 - `notification`: よく使う slack通知やgithubリポジトリのissue作成を行うライブラリ群.
 - `csv`: CSVファイルのパーサーやCSVエクスポート系ライブラリ、メモリーテーブル機能.
 - `auth`: パスワードハッシュ化、S3ベースのセッション管理、CORS共通ヘルパー、JWT署名/検証(HS256のみ)など認証まわりのライブラリ群(`session.js`は`sdk/s3sdk.js`に依存).

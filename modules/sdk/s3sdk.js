@@ -45,16 +45,25 @@
             credentials = _getEnvCredential();
         }
         // accessKeyが存在しない場合.
+        // ローカルS3エミュレータ(tools/localS3.js)接続用endpoint.
+        // 環境変数が設定されている場合、AWS本番環境ではなくローカルサーバーに接続する.
+        const localEndpoint = process.env["MINTO_LOCAL_S3_ENDPOINT"];
+        const clientOptions = localEndpoint != undefined ?
+            { endpoint: localEndpoint, forcePathStyle: true } : {};
+
         if (credentials["access_key"] == undefined) {
-            if (_S3CLIENT[region] == undefined) {
-                _S3CLIENT[region] = new S3Client({
+            const clientKey = localEndpoint != undefined ?
+                "local_" + region : region;
+            if (_S3CLIENT[clientKey] == undefined) {
+                _S3CLIENT[clientKey] = new S3Client(Object.assign({
                     region: region
-                });
+                }, clientOptions));
             }
-            return _S3CLIENT[region];
+            return _S3CLIENT[clientKey];
         }
         // S3Clientオブジェクトキャッシュキーを生成.
-        const key = credentials["access_key"] + "_" + region;
+        const key = credentials["access_key"] + "_" + region +
+            (localEndpoint != undefined ? "_local" : "");
         if (_S3CLIENT[key] == undefined) {
             let setCredentials;
             if (credentials["session_token"] == undefined) {
@@ -69,10 +78,10 @@
                     sessionToken: credentials["session_token"]
                 }
             }
-            _S3CLIENT[key] = new S3Client({
+            _S3CLIENT[key] = new S3Client(Object.assign({
                 region: region,
                 credentials: setCredentials
-            });
+            }, clientOptions));
         }
         return _S3CLIENT[key];
     }
