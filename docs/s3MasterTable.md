@@ -63,7 +63,8 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 - `notNull`: 必須項目にする
 - `default`: 省略時のデフォルト値（関数も指定可）
 - `primaryKey` / `unique`: 一意性制約。テーブル全体を1回の読み込み→書き戻しサイクルの中で検証するため、`s3IndexTable.js`とは異なりサポートしています
-- `autoIncrement`: 連番の自動採番
+
+`autoIncrement`（連番の自動採番）はサポートしていません。insertの度に変わる値をテーブル定義の集約ファイルに同居させると書き込み競合・性能劣化を招くためです。連番的な採番が必要な場合はソート可能なユニークID発行等、別の仕組みで対応してください。
 
 ## where の演算子仕様
 
@@ -84,7 +85,8 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 ## S3 上のデータ構造
 
 ```
-s3://bucket/prefix/_schema/users.json   ← スキーマ定義
+s3://bucket/prefix/table.json            ← 全テーブル分のスキーマ定義を集約したファイル
+                                            (テーブル名をキーにしたオブジェクト)
 s3://bucket/prefix/table/users/data.json ← 行データ (JSON配列)
 ```
 
@@ -97,7 +99,7 @@ const db = s3MasterTable.create({ bucket: "my-bucket", prefix: "myapp/" });
 // テーブル作成 → INSERT → SELECT の流れ
 await db.createTable("users", {
   columns: {
-    id:   { type: "int", primaryKey: true, autoIncrement: true },
+    id:   { type: "int", primaryKey: true },
     name: { type: "string", notNull: true },
   }
 });
@@ -119,7 +121,7 @@ exports.handler = async (event) => {
     // ── CREATE TABLE ──
     await db.createTable("users", {
         columns: {
-            id:    { type: "int", primaryKey: true, autoIncrement: true },
+            id:    { type: "int", primaryKey: true },
             name:  { type: "string", notNull: true },
             email: { type: "string", unique: true },
             age:   { type: "int", default: 0 },
@@ -128,7 +130,7 @@ exports.handler = async (event) => {
 
     await db.createTable("orders", {
         columns: {
-            id:      { type: "int", primaryKey: true, autoIncrement: true },
+            id:      { type: "int", primaryKey: true },
             userId:  { type: "int", notNull: true },
             product: { type: "string" },
             amount:  { type: "int" },

@@ -108,7 +108,7 @@ test/
   - orderBy(asc/desc)、offset/limit、columns指定(カラム投影)
   - groupBy + 集計(count/sum/avg/min/max)
   - update/delete
-  - primaryKey/uniqueカラムの重複挿入エラー、autoIncrementの自動採番
+  - primaryKey/uniqueカラムの重複挿入エラー
   - date型カラムのDateオブジェクトでの挿入・取得・比較
   - dropTable後のdescribeTable/selectのエラー化
   - exportCsv/importCsvによるテーブル内容の往復

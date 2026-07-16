@@ -15,14 +15,19 @@
 //   演算子(eq/ne/gt/gte/lt/lte/in/ni/between/regexp)をそのまま使える.
 //   ※ 演算子名は memoryTable.js の ge/le ではなく、s3IndexTable.js に
 //     合わせて gte/lte としている(プロジェクト内表記の統一).
-// - primaryKey/unique/autoIncrementは、テーブル全体を1回の
-//   読み込み→書き戻しサイクルの中で検証するため、s3IndexTable.jsとは
-//   異なり提供する(s3IndexTable.jsで見送った理由は、複数の独立した
-//   Lambda実行が別々の行ファイル+インデックスファイルに分散して
-//   書き込むため一意性チェックがTOCTOU的に競合するからだが、本モジュールは
-//   その構造ではないため同じ問題は起きない。ただし複数の書き込みが
-//   同時に発生した場合、後勝ちで上書きされる可能性は既存の制約として
-//   残る=書き込み頻度が少ない前提のため許容している).
+// - primaryKey/uniqueは、テーブル全体を1回の読み込み→書き戻しサイクルの
+//   中で検証するため、s3IndexTable.jsとは異なり提供する(s3IndexTable.jsで
+//   見送った理由は、複数の独立したLambda実行が別々の行ファイル+
+//   インデックスファイルに分散して書き込むため一意性チェックがTOCTOU的に
+//   競合するからだが、本モジュールはその構造ではないため同じ問題は起きない。
+//   ただし複数の書き込みが同時に発生した場合、後勝ちで上書きされる可能性は
+//   既存の制約として残る=書き込み頻度が少ない前提のため許容している).
+//   autoIncrementは提供しない(insertの度に変わる値をテーブル定義の集約
+//   ファイルに同居させると書き込み競合・性能劣化を招くため。連番的な
+//   採番が必要な場合はソート可能なユニークID発行等、別の仕組みで対応する).
+// - テーブル定義(カラム定義)は、テーブル単位ファイルではなく
+//   {prefix}table.json という1つの集約ファイルにテーブル名をキーにして
+//   まとめて保持する(show tables的な一覧参照・キャッシュ効率のため).
 // - join・transactionは不要機能として提供しない(旧実装にはあったが削除).
 // - カラム型システム(string/int/float/boolean/date/json)は
 //   s3IndexTable.jsと共通の考え方. date型はinsert時にDateオブジェクトを
@@ -153,12 +158,6 @@
             credentials: options.credentials
         };
 
-        const _schemaPrefix = function () {
-            return _basePrefix + "_schema";
-        };
-        const _schemaKey = function (tableName) {
-            return tableName + ".json";
-        };
         const _dataPrefix = function (tableName) {
             return _basePrefix + "table/" + tableName;
         };
@@ -166,18 +165,35 @@
             return "data.json";
         };
 
-        // スキーマを取得する(存在しない場合はエラー).
-        const _loadSchema = async function (tableName) {
-            const res = await s3sdk.get(_bucket, _schemaPrefix(), _schemaKey(tableName), _s3opts);
-            if (res == null) {
-                throw new Error("Table not found: " + tableName);
-            }
-            return JSON.parse(await _streamToString(res.Body));
+        // 全テーブルのスキーマ定義を1つにまとめた集約ファイルのprefix/key.
+        const _defsPrefix = function () {
+            return _basePrefix ? _basePrefix.slice(0, -1) : null;
+        };
+        const _defsKey = function () {
+            return "table.json";
         };
 
-        const _saveSchema = async function (tableName, schema) {
-            await s3sdk.put(_bucket, _schemaPrefix(), _schemaKey(tableName),
-                JSON.stringify(schema), _s3opts);
+        // 集約ファイルのキャッシュ(1回のLambda実行中のみ有効).
+        let _allDefsCache = null;
+
+        // 集約ファイル(全テーブル分のスキーマ定義)を取得する
+        // (キャッシュがあればそれを返す。ファイルが存在しない場合は空).
+        const _loadAllDefs = async function () {
+            if (_allDefsCache != null) {
+                return _allDefsCache;
+            }
+            const res = await s3sdk.get(_bucket, _defsPrefix(), _defsKey(), _s3opts);
+            _allDefsCache = (res == null) ? {} : JSON.parse(await _streamToString(res.Body));
+            return _allDefsCache;
+        };
+
+        // スキーマを取得する(存在しない場合はエラー).
+        const _loadSchema = async function (tableName) {
+            const all = await _loadAllDefs();
+            if (all[tableName] == null) {
+                throw new Error("Table not found: " + tableName);
+            }
+            return all[tableName];
         };
 
         // 行データ全件を取得する(存在しない場合は空配列).
@@ -197,29 +213,27 @@
         // テーブル作成.
         // tableName 対象のテーブル名を設定します.
         // schema.columns カラム定義
-        //   ({名前: {type, notNull, default, primaryKey, unique, autoIncrement}}).
+        //   ({名前: {type, notNull, default, primaryKey, unique}}).
         const createTable = async function (tableName, schema) {
             schema = schema || {};
             const columns = schema.columns || {};
-            const existing = await s3sdk.get(_bucket, _schemaPrefix(), _schemaKey(tableName), _s3opts);
-            if (existing != null) {
+            const all = await _loadAllDefs();
+            if (all[tableName] != null) {
                 throw new Error("Table already exists: " + tableName);
             }
-            const autoIncrementSeq = {};
-            for (const colName in columns) {
-                if (columns[colName].autoIncrement === true) {
-                    autoIncrementSeq[colName] = 0;
-                }
-            }
-            const saveSchemaObj = { columns: columns, autoIncrementSeq: autoIncrementSeq };
-            await _saveSchema(tableName, saveSchemaObj);
+            all[tableName] = { columns: columns };
+            await s3sdk.put(_bucket, _defsPrefix(), _defsKey(),
+                JSON.stringify(all), _s3opts);
             await _saveRows(tableName, []);
             return true;
         };
 
         // テーブル削除.
         const dropTable = async function (tableName) {
-            await s3sdk.delete(_bucket, _schemaPrefix(), _schemaKey(tableName), _s3opts);
+            const all = await _loadAllDefs();
+            delete all[tableName];
+            await s3sdk.put(_bucket, _defsPrefix(), _defsKey(),
+                JSON.stringify(all), _s3opts);
             await s3sdk.delete(_bucket, _dataPrefix(tableName), _dataKey(), _s3opts);
             return true;
         };
@@ -230,7 +244,7 @@
         };
 
         // 1件分の行データを、カラム定義(notNull/default/primaryKey/unique/
-        // autoIncrement/型)に従って検証・補完する.
+        // 型)に従って検証・補完する.
         // rows 一意性チェック対象の既存行配列を設定します.
         const _prepareInsertRow = function (schema, rows, raw) {
             const row = {};
@@ -238,11 +252,6 @@
                 const def = schema.columns[colName];
                 let value = raw[colName];
 
-                if (def.autoIncrement === true && value == null) {
-                    schema.autoIncrementSeq[colName] =
-                        (schema.autoIncrementSeq[colName] || 0) + 1;
-                    value = schema.autoIncrementSeq[colName];
-                }
                 if (value == null && def.default !== undefined) {
                     value = (typeof def.default === "function") ? def.default() : def.default;
                 }
@@ -285,8 +294,6 @@
                 inserted.push(row);
             }
             await _saveRows(tableName, rows);
-            // autoIncrementSeqの更新を保存.
-            await _saveSchema(tableName, schema);
             return inserted;
         };
 
@@ -476,7 +483,7 @@
 
         // CSV文字列からテーブル全体を置き換える(インポート).
         // 既存の行データは全て破棄され、CSVの内容で丸ごと置き換わる.
-        // notNull/default/primaryKey/unique/autoIncrement/型検証は
+        // notNull/default/primaryKey/unique/型検証は
         // insertと同様に適用される(一意性チェックはCSV内の行同士でも行う).
         // tableName 対象のテーブル名を設定します.
         // csvString インポート対象のCSV文字列を設定します.
@@ -522,22 +529,6 @@
                 newRows.push(_prepareInsertRow(schema, newRows, raw));
             }
             await _saveRows(tableName, newRows);
-
-            // autoIncrementSeqを、インポートしたデータ中の最大値に合わせる
-            // (再インポート後の新規insertがID衝突しないようにするため).
-            for (const colName in schema.columns) {
-                if (schema.columns[colName].autoIncrement === true) {
-                    let maxVal = schema.autoIncrementSeq[colName] || 0;
-                    for (let i = 0; i < newRows.length; i++) {
-                        if (typeof newRows[i][colName] === "number" &&
-                            newRows[i][colName] > maxVal) {
-                            maxVal = newRows[i][colName];
-                        }
-                    }
-                    schema.autoIncrementSeq[colName] = maxVal;
-                }
-            }
-            await _saveSchema(tableName, schema);
             return newRows.length;
         };
 

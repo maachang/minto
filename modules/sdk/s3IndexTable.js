@@ -13,6 +13,9 @@
 //   という0バイトファイルで、HEAD/LISTのみで存在確認・検索が完結する.
 // - 複合インデックスは先頭カラムのみ範囲検索可(RDBMSのB-tree複合
 //   インデックスと同じ制約). 後続カラムは完全一致(eq/in)のみ.
+// - テーブル定義(カラム・インデックス定義)は、テーブル単位ファイルではなく
+//   {prefix}table.json という1つの集約ファイルにテーブル名をキーにして
+//   まとめて保持する(show tables的な一覧参照・キャッシュ効率のため).
 // - delete は行ファイルを即時DeleteObjectするだけで、インデックスの
 //   後始末はしない. 読み取り時にインデックス経由でGetObjectして404に
 //   なったら、その場でそのインデックスエントリだけ削除する(自己修復).
@@ -235,15 +238,32 @@
             credentials: options.credentials
         };
 
-        // テーブル定義キャッシュ(1回のLambda実行中のみ有効).
-        const _confCache = {};
-
-        // conf/{table名}.json のprefix/keyを取得.
-        const _confPrefix = function () {
-            return _basePrefix + "conf";
+        // 全テーブルのスキーマ定義を1つにまとめた集約ファイルのprefix/key.
+        const _defsPrefix = function () {
+            return _basePrefix ? _basePrefix.slice(0, -1) : null;
         };
-        const _confKey = function (tableName) {
-            return tableName + ".json";
+        const _defsKey = function () {
+            return "table.json";
+        };
+
+        // 集約ファイルのキャッシュ(1回のLambda実行中のみ有効).
+        let _allDefsCache = null;
+
+        // 集約ファイル(全テーブル分のスキーマ定義)を取得する
+        // (キャッシュがあればそれを返す。ファイルが存在しない場合は空).
+        const _loadAllDefs = async function () {
+            if (_allDefsCache != null) {
+                return _allDefsCache;
+            }
+            const res = await s3sdk.get(_bucket, _defsPrefix(), _defsKey(), _s3opts);
+            _allDefsCache = (res == null) ? {} : JSON.parse(await _streamToString(res.Body));
+            return _allDefsCache;
+        };
+
+        // 集約ファイル全体を書き戻す(キャッシュ更新後に呼び出す想定).
+        const _saveAllDefs = async function () {
+            await s3sdk.put(_bucket, _defsPrefix(), _defsKey(),
+                JSON.stringify(_allDefsCache), _s3opts);
         };
 
         // table/{table名}/ のprefixを取得.
@@ -256,19 +276,13 @@
             return _basePrefix + "index/" + tableName + "/" + columns.join(SEP);
         };
 
-        // テーブル定義を取得(キャッシュ有り).
+        // テーブル定義を取得(集約ファイルのキャッシュ経由).
         const _loadSchema = async function (tableName) {
-            if (_confCache[tableName] != null) {
-                return _confCache[tableName];
-            }
-            const res = await s3sdk.get(_bucket, _confPrefix(), _confKey(tableName), _s3opts);
-            if (res == null) {
+            const all = await _loadAllDefs();
+            if (all[tableName] == null) {
                 throw new Error("Table not found: " + tableName);
             }
-            const body = await _streamToString(res.Body);
-            const schema = JSON.parse(body);
-            _confCache[tableName] = schema;
-            return schema;
+            return all[tableName];
         };
 
         // テーブル作成.
@@ -292,10 +306,12 @@
                     }
                 }
             }
-            const saveSchema = { columns: columns, indexes: indexes };
-            await s3sdk.put(_bucket, _confPrefix(), _confKey(tableName),
-                JSON.stringify(saveSchema), _s3opts);
-            _confCache[tableName] = saveSchema;
+            const all = await _loadAllDefs();
+            if (all[tableName] != null) {
+                throw new Error("Table already exists: " + tableName);
+            }
+            all[tableName] = { columns: columns, indexes: indexes };
+            await _saveAllDefs();
             return true;
         };
 
@@ -307,9 +323,10 @@
             await _removeAllUnder(_tablePrefix(tableName));
             // indexディレクトリの全ファイル削除.
             await _removeAllUnder(_basePrefix + "index/" + tableName);
-            // conf削除.
-            await s3sdk.delete(_bucket, _confPrefix(), _confKey(tableName), _s3opts);
-            delete _confCache[tableName];
+            // 集約ファイルから該当テーブルの定義を削除.
+            const all = await _loadAllDefs();
+            delete all[tableName];
+            await _saveAllDefs();
             return true;
         };
 
@@ -343,9 +360,7 @@
                 }
             }
             schema.indexes[indexName] = columns;
-            await s3sdk.put(_bucket, _confPrefix(), _confKey(tableName),
-                JSON.stringify(schema), _s3opts);
-            _confCache[tableName] = schema;
+            await _saveAllDefs();
 
             // 既存の全行に対してインデックスエントリをバックフィル.
             let token = undefined;
@@ -373,9 +388,7 @@
             const schema = await _loadSchema(tableName);
             const columns = schema.indexes[indexName];
             delete schema.indexes[indexName];
-            await s3sdk.put(_bucket, _confPrefix(), _confKey(tableName),
-                JSON.stringify(schema), _s3opts);
-            _confCache[tableName] = schema;
+            await _saveAllDefs();
             if (columns != null) {
                 await _removeAllUnder(_indexPrefix(tableName, columns));
             }

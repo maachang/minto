@@ -354,7 +354,7 @@ test("s3IndexTable: dropIndexでインデックスエントリが削除される
     assert.equal((idxRes.Contents || []).length, 0);
 });
 
-test("s3IndexTable: dropTableでtable/index/conf配下が全て削除される", async () => {
+test("s3IndexTable: dropTableでtable/index配下と集約定義が全て削除される", async () => {
     const db = createDb();
     const table = nextTableName();
     await db.createTable(table, {
@@ -369,6 +369,16 @@ test("s3IndexTable: dropTableでtable/index/conf配下が全て削除される",
     assert.equal((tableRes.Contents || []).length, 0);
     const idxRes = await s3sdk.list(BUCKET, "index/" + table, { noError: false });
     assert.equal((idxRes.Contents || []).length, 0);
-    const confRes = await s3sdk.get(BUCKET, "conf", table + ".json", { noError: true });
-    assert.equal(confRes, null);
+
+    // 集約ファイル(table.json)からも該当テーブルの定義が削除されていること.
+    const defsRes = await s3sdk.get(BUCKET, null, "table.json", { noError: true });
+    const defs = defsRes == null ? {} : JSON.parse(await defsRes.Body.transformToString("utf-8"));
+    assert.equal(defs[table], undefined);
+});
+
+test("s3IndexTable: 既存テーブル名でcreateTableするとエラーになる", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+    await assert.rejects(() => db.createTable(table, { columns: { name: { type: "string" } } }));
 });

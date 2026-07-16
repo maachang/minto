@@ -272,21 +272,6 @@ test("s3MasterTable: primaryKey/uniqueカラムは重複挿入がエラーにな
     await assert.rejects(() => db.insert(table, { email: "a@example.com", name: "alice2" }));
 });
 
-test("s3MasterTable: autoIncrementカラムは未指定時に連番を自動採番する", async () => {
-    const db = createDb();
-    const table = nextTableName();
-    await db.createTable(table, {
-        columns: {
-            id: { type: "int", autoIncrement: true },
-            name: { type: "string" }
-        }
-    });
-    const r1 = await db.insert(table, { name: "alice" });
-    const r2 = await db.insert(table, { name: "bob" });
-    assert.equal(r1[0].id, 1);
-    assert.equal(r2[0].id, 2);
-});
-
 test("s3MasterTable: date型カラムはDateオブジェクトで挿入・取得・比較できる", async () => {
     const db = createDb();
     const table = nextTableName();
@@ -315,8 +300,10 @@ test("s3MasterTable: dropTable後はdescribeTable/selectがエラーになる", 
     await assert.rejects(() => db.describeTable(table));
     await assert.rejects(() => db.select(table, {}));
 
-    const schemaRes = await s3sdk.get(BUCKET, "_schema", table + ".json", { noError: true });
-    assert.equal(schemaRes, null);
+    // 集約ファイル(table.json)からも該当テーブルの定義が削除されていること.
+    const defsRes = await s3sdk.get(BUCKET, null, "table.json", { noError: true });
+    const defs = defsRes == null ? {} : JSON.parse(await defsRes.Body.transformToString("utf-8"));
+    assert.equal(defs[table], undefined);
 });
 
 test("s3MasterTable: exportCsv/importCsvでテーブル内容を往復できる", async () => {
