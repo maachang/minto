@@ -49,6 +49,13 @@
         _c_response = null;
 
         let rawPath = event.rawPath;
+        // rawPathが無く、event.targetが指定されている場合はテーブル管理
+        // コマンド(createTable/dropTable/alterTable/alterIndex)の実行と判定する.
+        // AWSコンソールの「テスト実行」やtools/tableTool.jsから、Function URL
+        // 形式ではないevent({ target, command, ... })が渡されるケース.
+        if (rawPath == null && event.target != null) {
+            return await _responseTableCommand(event);
+        }
         // 不正なパスが設定されている場合はエラーにする.
         // AIメモ: 以前は throw new HttpError(...) としていたが、handler()の
         // 先頭でthrowすると_responseRunJs等が持つtry/catch(_errorRunJs経由での
@@ -286,6 +293,246 @@
             return require(name);
         }
     }
+
+    ///////////////////////////////////////////////
+    // テーブル管理コマンド(createTable/dropTable/alterTable/alterIndex).
+    //
+    // AIメモ: masterとindexは同一実行内で同時に処理しない
+    // (タイムアウト対策のため、対象は必ずどちらか一方のみ). 定義ファイルは
+    // conf/table/{target}.json( { options: {bucket,prefix,region},
+    // tables: {テーブル名: schema} } )に「あるべき新しい定義」として置き、
+    // S3上の集約ファイル(table.json、s3MasterTable.js/s3IndexTable.js内部の
+    // listTables()相当)を「現在有効な実際の定義」として比較する。
+    // 検証(フェーズ1)→適用(フェーズ2)の2段階とし、1つでも検証エラーが
+    // あれば何も適用せず中断する。多重実行防止はs3Lock.jsによる単一の
+    // メンテナンスロックで行う(タイムアウトは実質無し。異常終了時は手動で
+    // ロック解除する運用).
+    ///////////////////////////////////////////////
+
+    // メンテナンスロックのキー名.
+    const _TABLE_LOCK_KEY = "table-migration";
+
+    // メンテナンスロックのタイムアウト(実質無し扱い. 異常終了時は手動解除).
+    const _TABLE_LOCK_TIMEOUT_MS = Number.MAX_SAFE_INTEGER;
+
+    // カラム定義の差分(追加・削除)を検出する.
+    // 戻り値: { addedNames, removedNames } (いずれもカラム名の配列).
+    const _diffColumns = function (currentColumns, desiredColumns) {
+        currentColumns = currentColumns || {};
+        desiredColumns = desiredColumns || {};
+        const addedNames = [];
+        const removedNames = [];
+        for (const colName in desiredColumns) {
+            if (currentColumns[colName] == null) {
+                addedNames.push(colName);
+            }
+        }
+        for (const colName in currentColumns) {
+            if (desiredColumns[colName] == null) {
+                removedNames.push(colName);
+            }
+        }
+        return { addedNames: addedNames, removedNames: removedNames };
+    };
+
+    // primaryKey/uniqueの定義が変更されていないか検証する.
+    // 戻り値: 変更が無ければtrue.
+    const _samePrimaryKeyAndUnique = function (currentColumns, desiredColumns) {
+        currentColumns = currentColumns || {};
+        desiredColumns = desiredColumns || {};
+        const names = Object.assign({}, currentColumns, desiredColumns);
+        for (const colName in names) {
+            const c = currentColumns[colName];
+            const d = desiredColumns[colName];
+            const cPk = c != null && c.primaryKey === true;
+            const dPk = d != null && d.primaryKey === true;
+            const cUnique = c != null && c.unique === true;
+            const dUnique = d != null && d.unique === true;
+            if (cPk !== dPk || cUnique !== dUnique) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // 追加カラムがnotNullの場合、defaultが指定されているか検証する.
+    // 戻り値: 問題があれば説明メッセージ、問題無ければnull.
+    const _validateAddedColumns = function (desiredColumns, addedNames) {
+        for (let i = 0; i < addedNames.length; i++) {
+            const def = desiredColumns[addedNames[i]] || {};
+            if (def.notNull === true && def.default === undefined) {
+                return "追加カラム '" + addedNames[i] +
+                    "' はnotNullですがdefaultが指定されていません。";
+            }
+        }
+        return null;
+    };
+
+    // インデックス定義の差分(追加・削除)を検出する.
+    const _diffIndexes = function (currentIndexes, desiredIndexes) {
+        currentIndexes = currentIndexes || {};
+        desiredIndexes = desiredIndexes || {};
+        const addedNames = [];
+        const removedNames = [];
+        for (const idxName in desiredIndexes) {
+            if (currentIndexes[idxName] == null) {
+                addedNames.push(idxName);
+            }
+        }
+        for (const idxName in currentIndexes) {
+            if (desiredIndexes[idxName] == null) {
+                removedNames.push(idxName);
+            }
+        }
+        return { addedNames: addedNames, removedNames: removedNames };
+    };
+
+    // テーブル管理コマンド実行本体.
+    // event.target "master"|"index" を設定します.
+    // event.command "createTable"|"dropTable"|"alterTable"|"alterIndex" を設定します.
+    // event.tableName alterIndex(target="index")の場合のみ必須の対象テーブル名.
+    const _responseTableCommand = async function (event) {
+        const target = event.target;
+        const command = event.command;
+        if (target !== "master" && target !== "index") {
+            return { error: "不正なtargetです: " + target };
+        }
+        if (["createTable", "dropTable", "alterTable", "alterIndex"].indexOf(command) === -1) {
+            return { error: "不正なcommandです: " + command };
+        }
+        if (command === "alterIndex") {
+            if (target !== "index") {
+                return { error: "alterIndexはtarget=indexのみ対応しています。" };
+            }
+            if (event.tableName == null) {
+                return { error: "alterIndexにはtableNameの指定が必須です。" };
+            }
+        }
+
+        const confFile = _$loadConf("table/" + target + ".json");
+        if (confFile == null) {
+            return { error: "定義ファイルが見つかりません: conf/table/" + target + ".json" };
+        }
+        const options = confFile.options || {};
+        const desiredTables = confFile.tables || {};
+
+        const s3Lock = _g.$loadLib("s3Lock.js");
+        const lock = s3Lock.create({
+            bucket: options.bucket, prefix: options.prefix,
+            region: options.region, credentials: options.credentials,
+            timeoutMs: _TABLE_LOCK_TIMEOUT_MS
+        });
+        if (!(await lock.acquire(_TABLE_LOCK_KEY))) {
+            return { error: "他のテーブル管理コマンドが実行中です。しばらく待ってから再実行してください。" };
+        }
+
+        try {
+            const db = (target === "master") ?
+                _g.$loadLib("s3MasterTable.js").create(options) :
+                _g.$loadLib("s3IndexTable.js").create(options);
+            const currentTables = await db.listTables();
+
+            if (command === "createTable") {
+                return await _tableCommandCreate(db, currentTables, desiredTables, target);
+            } else if (command === "dropTable") {
+                return await _tableCommandDrop(db, currentTables, desiredTables, target);
+            } else if (command === "alterTable") {
+                return await _tableCommandAlter(db, currentTables, desiredTables, target);
+            } else {
+                return await _tableCommandAlterIndex(db, currentTables, desiredTables, event.tableName);
+            }
+        } catch (e) {
+            console.error("[error][" + $requestId() + "]tableCommand: ", e);
+            return { error: "テーブル管理コマンドの実行に失敗しました: " + e.message };
+        } finally {
+            await lock.release(_TABLE_LOCK_KEY);
+        }
+    };
+
+    // createTable: 定義済みで未作成のテーブルを作成する.
+    const _tableCommandCreate = async function (db, currentTables, desiredTables, target) {
+        const created = [];
+        for (const tableName in desiredTables) {
+            if (currentTables[tableName] == null) {
+                await db.createTable(tableName, desiredTables[tableName]);
+                created.push(tableName);
+            }
+        }
+        return { command: "createTable", target: target, created: created };
+    };
+
+    // dropTable: 定義から消えたテーブルを実体ごと削除する.
+    const _tableCommandDrop = async function (db, currentTables, desiredTables, target) {
+        const dropped = [];
+        for (const tableName in currentTables) {
+            if (desiredTables[tableName] == null) {
+                await db.dropTable(tableName);
+                dropped.push(tableName);
+            }
+        }
+        return { command: "dropTable", target: target, dropped: dropped };
+    };
+
+    // alterTable: 両方に存在するテーブルのカラム差分を検証→適用する.
+    const _tableCommandAlter = async function (db, currentTables, desiredTables, target) {
+        const targets = [];
+        const errors = [];
+        for (const tableName in desiredTables) {
+            const current = currentTables[tableName];
+            if (current == null) {
+                continue;
+            }
+            const desired = desiredTables[tableName];
+            if (!_samePrimaryKeyAndUnique(current.columns, desired.columns)) {
+                errors.push(tableName + ": primaryKey/uniqueの変更は非対応です。" +
+                    "変更する場合はテーブルの再作成(dropTable→createTable)が必要です。");
+                continue;
+            }
+            const diff = _diffColumns(current.columns, desired.columns);
+            const invalidMsg = _validateAddedColumns(desired.columns, diff.addedNames);
+            if (invalidMsg != null) {
+                errors.push(tableName + ": " + invalidMsg);
+                continue;
+            }
+            if (diff.addedNames.length > 0 || diff.removedNames.length > 0) {
+                targets.push({ tableName: tableName, columns: desired.columns, diff: diff });
+            }
+        }
+        // フェーズ1で1つでも検証エラーがあれば、何も適用せず中断する.
+        if (errors.length > 0) {
+            return { command: "alterTable", target: target, error: "検証エラーのため中断しました。", details: errors };
+        }
+        // フェーズ2: 適用.
+        const altered = [];
+        for (let i = 0; i < targets.length; i++) {
+            const t = targets[i];
+            await db.alterColumns(t.tableName, t.columns);
+            altered.push({ tableName: t.tableName, addedColumns: t.diff.addedNames, removedColumns: t.diff.removedNames });
+        }
+        return { command: "alterTable", target: target, altered: altered };
+    };
+
+    // alterIndex: 指定した1テーブルのインデックス差分を検証→適用する(target=indexのみ).
+    const _tableCommandAlterIndex = async function (db, currentTables, desiredTables, tableName) {
+        const current = currentTables[tableName];
+        const desired = desiredTables[tableName];
+        if (current == null || desired == null) {
+            return { command: "alterIndex", target: "index", tableName: tableName,
+                error: "テーブルが定義または現在のテーブル一覧に存在しません: " + tableName };
+        }
+        const diff = _diffIndexes(current.indexes, desired.indexes);
+        // フェーズ2: 適用(インデックス増減の検証は「未知のカラム参照」
+        // 「json型のインデックス化」等、createIndex/dropIndex自体が行う).
+        for (let i = 0; i < diff.addedNames.length; i++) {
+            const idxName = diff.addedNames[i];
+            await db.createIndex(tableName, idxName, desired.indexes[idxName]);
+        }
+        for (let i = 0; i < diff.removedNames.length; i++) {
+            await db.dropIndex(tableName, diff.removedNames[i]);
+        }
+        return { command: "alterIndex", target: "index", tableName: tableName,
+            addedIndexes: diff.addedNames, removedIndexes: diff.removedNames };
+    };
 
     // requestオブジェクトを取得.
     // 戻り値: request情報が返却されます.

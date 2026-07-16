@@ -8,6 +8,9 @@ mintoコマンドは、以下のコマンドが存在します.
 - localS3
   `modules/sdk/s3sdk.js`・`modules/sdk/s3Lock.js`が利用するS3を、実AWSに接続せず
   ファイル/ディレクトリベースでローカル動作確認するためのS3エミュレータ起動コマンド
+- tableTool
+  `modules/sdk/s3MasterTable.js`・`modules/sdk/s3IndexTable.js`が管理するテーブル
+  定義に対して、createTable/dropTable/alterTable/alterIndexを実行するコマンド
 
 まずこれらコマンドを利用するための設定を行うための説明を行います.
 
@@ -128,6 +131,59 @@ export NODE_PATH=`npm root -g`
 サポートしているS3操作は PutObject(条件付き書き込み`If-None-Match`含む)・GetObject・
 DeleteObject・ListObjectsV2 の最低限のみです。それ以外の操作(バージョニング、
 マルチパートアップロードなど)には対応していません。
+
+## tableTool コマンド
+
+`s3MasterTable.js`・`s3IndexTable.js`が管理するテーブル定義(カラム・インデックス)に
+対して、テーブルの作成・削除・カラム変更・インデックス変更を行うコマンドです。
+実装は`lambda/src/index.js`側に集約されており、AWSコンソールの「テスト実行」で
+以下と同じ形のevent(JSON)を渡して実行することもできます(ローカル実行・Lambda実行
+どちらでも全く同じ処理が行われます)。
+
+~~~sh
+> tableTool -t <master|index> -c <createTable|dropTable|alterTable|alterIndex> [-n <テーブル名>]
+~~~
+
+- `-t` / `--target`: 対象(`master` = s3MasterTable.js、`index` = s3IndexTable.js)
+- `-c` / `--command`: 実行するコマンド
+  - `createTable`: 定義済みで未作成のテーブルのみ作成する
+  - `dropTable`: 定義から消えたテーブルを実体ごと削除する
+  - `alterTable`: 既存テーブルのカラム定義差分(追加・削除)を反映する
+  - `alterIndex`: 指定した1テーブルのインデックス定義差分を反映する
+    (`target=index`のみ対応、`-n`必須)
+- `-n` / `--table`: `alterIndex`実行時に対象とするテーブル名(必須)
+
+対象(`master`/`index`)ごとに、プロジェクトの`conf/table/master.json`・
+`conf/table/index.json`に「あるべきテーブル定義」を記載しておく必要があります。
+
+~~~json
+{
+  "options": { "bucket": "my-bucket", "prefix": "master/", "region": "ap-northeast-1" },
+  "tables": {
+    "users": {
+      "columns": {
+        "name": { "type": "string", "notNull": true },
+        "email": { "type": "string", "unique": true }
+      }
+    }
+  }
+}
+~~~
+
+- `alterTable`はカラムを追加・削除する前に、対象の全テーブルを検証してから
+  一括で適用する(1つでも問題があれば何も適用せず中断する)。
+  - 追加するカラムが`notNull: true`の場合は`default`の指定が必須(既存行に
+    値が無いままnot null違反になる問題を避けるため)
+  - `primaryKey`/`unique`の変更は非対応(変更したい場合はテーブルの再作成
+    (`dropTable`→`createTable`)が必要)
+  - カラム削除時、既存の行データ自体は書き換えない(select結果から除外されるだけ)
+- `createTable`/`dropTable`/`alterTable`はmaster/indexの対象テーブル全体を
+  一括で処理するが、`alterIndex`はインデックス追加時のバックフィル処理に
+  時間がかかる可能性があるため、テーブルを1つずつ指定して実行する
+- 実行中は`modules/sdk/s3Lock.js`によるメンテナンスロック(タイムアウト無し)を
+  取得するため、同時に複数のテーブル管理コマンドを実行することはできない
+  (他の実行が進行中の場合はエラーで即座に終了する)。異常終了等でロックが
+  残ってしまった場合は、S3上の`locks/table-migration.lock`を手動で削除する
 
 ## mtpk コマンド
 

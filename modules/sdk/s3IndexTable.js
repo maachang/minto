@@ -330,6 +330,29 @@
             return true;
         };
 
+        // 全テーブル分のテーブル定義を取得する({テーブル名: schema}形式).
+        // テーブル管理コマンド(createTable/dropTable/alterTable/alterIndex)が、
+        // 現在S3上に存在するテーブル定義を把握するために使用する.
+        const listTables = async function () {
+            const all = await _loadAllDefs();
+            return JSON.parse(JSON.stringify(all));
+        };
+
+        // 既存テーブルのカラム定義を丸ごと差し替える(テーブル管理コマンドの
+        // alterTable用). indexes定義・行データ・インデックスエントリは一切
+        // 変更しない(削除されたカラムは以後selectで除外されるだけで、
+        // 既存データはそのまま残る. インデックスの増減はcreateIndex/dropIndex
+        // で別途行う).
+        // tableName 対象のテーブル名を設定します.
+        // columns 差し替え後のカラム定義({名前: {type, notNull, default}})
+        //   を設定します.
+        const alterColumns = async function (tableName, columns) {
+            const schema = await _loadSchema(tableName);
+            schema.columns = columns;
+            await _saveAllDefs();
+            return true;
+        };
+
         // 指定prefix配下の全オブジェクトを削除する(内部ユーティリティ).
         const _removeAllUnder = async function (prefix) {
             let token = undefined;
@@ -604,12 +627,22 @@
 
         // 行ファイルを取得する。存在しない場合(404相当)はnullを返し、
         // 呼び出し元でインデックスの自己修復に使えるようにする.
-        const _getRow = async function (tableName, rowId) {
+        // 戻り値は現在のスキーマ(schema.columns)に定義されたキーのみに
+        // 絞り込む(alterTableでカラムが削除された場合、既存の行データ自体は
+        // 書き換えないため、ここで現在のスキーマに存在しないカラムを除外する).
+        const _getRow = async function (tableName, rowId, schema) {
             const res = await s3sdk.get(_bucket, _tablePrefix(tableName), rowId, _s3opts);
             if (res == null) {
                 return null;
             }
-            return JSON.parse(await _streamToString(res.Body));
+            const row = JSON.parse(await _streamToString(res.Body));
+            const out = {};
+            for (const colName in schema.columns) {
+                if (row[colName] !== undefined) {
+                    out[colName] = row[colName];
+                }
+            }
+            return out;
         };
 
         // インデックス経由で取得した行が存在しなかった場合、該当する
@@ -672,7 +705,7 @@
                     // whereに含まれないインデックスでの並び替え=メモリソート.
                     const rows = [];
                     for (let i = 0; i < ids.length; i++) {
-                        const row = await _getRow(tableName, ids[i]);
+                        const row = await _getRow(tableName, ids[i], schema);
                         if (row == null) {
                             await _healStaleIndex(tableName, schema, ids[i]);
                             continue;
@@ -703,7 +736,7 @@
             // 行データ取得(自己修復含む).
             const rows = [];
             for (let i = 0; i < ids.length; i++) {
-                const row = await _getRow(tableName, ids[i]);
+                const row = await _getRow(tableName, ids[i], schema);
                 if (row == null) {
                     await _healStaleIndex(tableName, schema, ids[i]);
                     continue;
@@ -773,7 +806,7 @@
             const candidateSet = await _resolveCandidates(tableName, schema, query.where);
             let cnt = 0;
             for (const rowId of candidateSet) {
-                const row = await _getRow(tableName, rowId);
+                const row = await _getRow(tableName, rowId, schema);
                 if (row == null) {
                     await _healStaleIndex(tableName, schema, rowId);
                     continue;
@@ -810,6 +843,8 @@
         return {
             createTable: createTable,
             dropTable: dropTable,
+            listTables: listTables,
+            alterColumns: alterColumns,
             createIndex: createIndex,
             dropIndex: dropIndex,
             insert: insert,

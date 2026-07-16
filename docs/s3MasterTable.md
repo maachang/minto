@@ -35,9 +35,11 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 
 | 操作 | メソッド | 備考 |
 |---|---|---|
-| **CREATE TABLE** | `createTable(name, schema)` | 型定義・PK・UNIQUE・NOT NULL・デフォルト値・AUTO INCREMENT |
+| **CREATE TABLE** | `createTable(name, schema)` | 型定義・PK・UNIQUE・NOT NULL・デフォルト値 |
 | **DROP TABLE** | `dropTable(name)` | スキーマ＋データ削除 |
 | **DESCRIBE TABLE** | `describeTable(name)` | テーブル定義を取得 |
+| **SHOW TABLES** | `listTables()` | 全テーブル分の定義を`{テーブル名: schema}`形式で取得 |
+| **ALTER TABLE** | `alterColumns(name, columns)` | カラム定義を丸ごと差し替え(データは変更しない)。`bin/tableTool`経由での利用を想定 |
 | **INSERT** | `insert(table, row)` | 単一/バルク挿入、制約チェック付き |
 | **SELECT** | `select(table, query)` | WHERE・ORDER BY・LIMIT/OFFSET・GROUP BY・集計関数 (COUNT/SUM/AVG/MIN/MAX) |
 | **UPDATE** | `update(table, query, patch)` | 条件指定で部分更新 |

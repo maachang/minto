@@ -64,6 +64,7 @@ test/
 │
 └── e2e/                     結合テスト(実際にローカルサーバーを起動して確認)
     ├── webapps.test.js
+    ├── tableTool.test.js
     └── .fixtures/
         ├── runServer.js            テスト用サーバー起動スクリプト
         └── sample-project/         最小構成のサンプルmintoプロジェクト
@@ -112,6 +113,8 @@ test/
   - date型カラムのDateオブジェクトでの挿入・取得・比較
   - dropTable後のdescribeTable/selectのエラー化
   - exportCsv/importCsvによるテーブル内容の往復
+  - listTables(全テーブル定義の一覧取得)、alterColumns(カラム定義の差し替え、
+    削除したカラムがselect結果から除外されること)
 
 ### e2e/
 
@@ -122,6 +125,17 @@ test/
   - `filter.mt.js`が存在してもtrueを返せば処理が継続すること
 
   ポートは`net`モジュールでOSに空きポートを割り当ててもらう方式にしており、固定ポートによる競合を避けています。
+
+- **tableTool.test.js**: `tools/tableTool.js`(テーブル管理コマンド: createTable/dropTable/alterTable/alterIndex)を、`tools/localS3.js`を子プロセスとして起動した上で、実際に`node tools/tableTool.js -t ... -c ...`を子プロセス実行して標準出力のJSON結果を検証します。以下を確認しています。
+  - createTableが未作成テーブルのみを作成すること(べき等性)
+  - alterTableがカラムの追加・削除を反映すること
+  - alterTableがnotNullカラム追加時にdefault未指定だと検証エラーで中断すること(何も適用されない)
+  - alterTableがprimaryKey/unique変更を検知すると中断すること
+  - dropTableが定義から消えたテーブルを削除すること
+  - target=indexでのcreateTable→alterIndexによるインデックス追加
+  - 定義ファイル(`conf/table/{target}.json`)が存在しない場合のエラー応答
+
+  fixtureプロジェクトの`lib/`には、`modules/sdk/*.js`をコピーせず絶対パスでre-exportするスタブファイルを配置し、実体との重複・鮮度ズレを避けています。
 
 ## テスト対象外にしているもの
 

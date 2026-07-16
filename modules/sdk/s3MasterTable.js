@@ -243,6 +243,31 @@
             return await _loadSchema(tableName);
         };
 
+        // 全テーブル分のテーブル定義を取得する({テーブル名: schema}形式).
+        // テーブル管理コマンド(createTable/dropTable/alterTable)が、現在
+        // S3上に存在するテーブル定義を把握するために使用する.
+        const listTables = async function () {
+            const all = await _loadAllDefs();
+            return JSON.parse(JSON.stringify(all));
+        };
+
+        // 既存テーブルのカラム定義を丸ごと差し替える(テーブル管理コマンドの
+        // alterTable用). 行データ(data.json)は一切変更しない
+        // (削除されたカラムは以後selectで除外されるだけで、既存データはそのまま残る).
+        // tableName 対象のテーブル名を設定します.
+        // columns 差し替え後のカラム定義({名前: {type, notNull, default,
+        //   primaryKey, unique}})を設定します.
+        const alterColumns = async function (tableName, columns) {
+            const all = await _loadAllDefs();
+            if (all[tableName] == null) {
+                throw new Error("Table not found: " + tableName);
+            }
+            all[tableName] = Object.assign({}, all[tableName], { columns: columns });
+            await s3sdk.put(_bucket, _defsPrefix(), _defsKey(),
+                JSON.stringify(all), _s3opts);
+            return true;
+        };
+
         // 1件分の行データを、カラム定義(notNull/default/primaryKey/unique/
         // 型)に従って検証・補完する.
         // rows 一意性チェック対象の既存行配列を設定します.
@@ -297,13 +322,18 @@
             return inserted;
         };
 
-        // 行データのdate型カラムをDateオブジェクトに変換した複製を返す.
+        // 行データを、現在のスキーマ(schema.columns)に定義されたキーのみに
+        // 絞り込み、date型カラムをDateオブジェクトに変換して返す.
+        // (alterTableでカラムが削除された場合、既存の行データ自体は書き換え
+        //  ないため、ここで現在のスキーマに存在しないカラムを除外する).
         const _applyDateConversion = function (schema, row) {
-            const out = Object.assign({}, row);
+            const out = {};
             for (const colName in schema.columns) {
-                if (schema.columns[colName].type === "date" && out[colName] != null) {
-                    out[colName] = new Date(out[colName]);
+                if (row[colName] === undefined) {
+                    continue;
                 }
+                out[colName] = (schema.columns[colName].type === "date" && row[colName] != null)
+                    ? new Date(row[colName]) : row[colName];
             }
             return out;
         };
@@ -536,6 +566,8 @@
             createTable: createTable,
             dropTable: dropTable,
             describeTable: describeTable,
+            listTables: listTables,
+            alterColumns: alterColumns,
             insert: insert,
             select: select,
             update: update,

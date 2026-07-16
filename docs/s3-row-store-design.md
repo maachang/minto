@@ -190,11 +190,16 @@ await db.createTable("users", {
 await db.dropTable("users");
 await db.createIndex("users", "byAge", ["age"]);
 await db.dropIndex("users", "byAge");
+
+// 追加API(テーブル管理コマンド bin/tableTool 向け).
+await db.listTables();                 // 全テーブル分の定義を{テーブル名: schema}で取得
+await db.alterColumns("users", {...}); // カラム定義を丸ごと差し替え(データは変更しない)
 ~~~
 
 - `dropTable`は`table/`と`index/`配下の全オブジェクトを削除するため、行数分のDeleteObjectを要する
 - 既存テーブルへの`createIndex`は、既存の全行に対してインデックスエントリを遡って作成するバックフィル処理を要する
 - いずれも[想定スケール](#想定スケール)の通り、1万件程度までを前提とした許容範囲のコストとする
+- `listTables`/`alterColumns`は、`bin/tableTool`(createTable/dropTable/alterTable/alterIndex)が現在のテーブル定義との差分を検出・適用するために使用する(詳細は`bin/README.md`のtableToolコマンド節を参照)
 
 ### カラム型・オプション
 
