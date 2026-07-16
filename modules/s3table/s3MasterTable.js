@@ -4,7 +4,7 @@
 //
 // AIメモ:
 // 詳細は docs/s3MasterTable.md を参照。s3IndexTable.js
-// (modules/sdk/s3IndexTable.js)と対になるモジュールで、
+// (modules/s3table/s3IndexTable.js)と対になるモジュールで、
 // 書き込み頻度が少なく読み込み頻度が多い用途向け.
 // (旧名: s3db.js. 用途(マスターデータ向け)を名前に反映して改名した).
 //

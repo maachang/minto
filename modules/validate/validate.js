@@ -3,7 +3,7 @@
 //
 // $request().params() で取得したリクエストパラメータに限らず、
 // 任意のJSオブジェクトを対象に、フィールド単位のスキーマ定義に
-// 沿って検証する. 型システムは modules/sdk/s3MasterTable.js /
+// 沿って検証する. 型システムは modules/s3table/s3MasterTable.js /
 // s3IndexTable.js と共通の string/int/float/boolean/date の
 // 5種類のみをサポートする(json/array/ネストオブジェクトは対象外).
 //

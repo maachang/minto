@@ -1,4 +1,4 @@
-// modules/sdk/s3MasterTable.js のCRUD/検索エンジン本体のテスト.
+// modules/s3table/s3MasterTable.js のCRUD/検索エンジン本体のテスト.
 //
 // s3IndexTable-crud.test.jsと同じ方針で、tools/localS3.js(ローカルS3
 // エミュレータ)を子プロセスとして起動し、実際に@aws-sdk/client-s3経由で
@@ -79,7 +79,7 @@ after(() => {
 // 取得する実装のため、テスト用にスタブしてから読み込む.
 global.$loadLib = function (name) {
     if (name === "s3sdk.js") {
-        return require("../../modules/sdk/s3sdk.js");
+        return require("../../modules/s3table/s3sdk.js");
     }
     if (name === "csvWriter.js") {
         return require("../../modules/csv/csvWriter.js");
@@ -92,8 +92,8 @@ global.$loadLib = function (name) {
 global.$require = function (name) {
     return require(name);
 };
-const s3MasterTable = require("../../modules/sdk/s3MasterTable.js");
-const s3sdk = require("../../modules/sdk/s3sdk.js");
+const s3MasterTable = require("../../modules/s3table/s3MasterTable.js");
+const s3sdk = require("../../modules/s3table/s3sdk.js");
 
 let _tableSeq = 0;
 // テスト間で衝突しないユニークなテーブル名を生成.

@@ -1,4 +1,4 @@
-// modules/sdk/s3IndexTable.js のテスト.
+// modules/s3table/s3IndexTable.js のテスト.
 // 実際のS3通信を伴うCRUD部分はテスト対象外(docs/testing.mdの方針通り)。
 // ここではS3に依存しない純粋なエンコードロジックのみを検証する。
 global.$loadLib = function (name) {
@@ -13,7 +13,7 @@ global.$require = function (name) {
 
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const s3IndexTable = require("../../modules/sdk/s3IndexTable.js");
+const s3IndexTable = require("../../modules/s3table/s3IndexTable.js");
 
 test("s3IndexTable: encodeInt は整数を数値順と一致する文字列にエンコードする", () => {
     const values = [

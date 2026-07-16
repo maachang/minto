@@ -16,7 +16,7 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 
 ## s3IndexTable.js との使い分け
 
-`modules/sdk/`配下には、S3をバックエンドにしたデータベースがもう1つ存在する（[modules/sdk/s3IndexTable.js](https://github.com/maachang/minto/blob/main/modules/sdk/s3IndexTable.js)、設計の詳細は[docs/s3-row-store-design.md](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)を参照）。用途に応じて使い分けること。
+`modules/s3table/`配下には、S3をバックエンドにしたデータベースがもう1つ存在する（[modules/s3table/s3IndexTable.js](https://github.com/maachang/minto/blob/main/modules/s3table/s3IndexTable.js)、設計の詳細は[docs/s3-row-store-design.md](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)を参照）。用途に応じて使い分けること。
 
 | | `s3MasterTable.js`（本ドキュメント） | `s3IndexTable.js` |
 |---|---|---|
@@ -29,7 +29,7 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 
 - **同時書き込み**: S3 には行ロックがないため、高頻度の並行書き込みには向きません。読み取り中心・低〜中頻度の書き込みユースケースに最適です（高頻度の書き込みが必要な場合は`s3IndexTable.js`を検討してください）。
 - **データ量**: テーブル全体を1つの JSON として読み書きするため、数万行程度までが実用的です。それ以上は DynamoDB や Aurora Serverless の検討をおすすめします。
-- **依存**: `modules/sdk/s3sdk.js`（内部でS3のput/get/delete操作を行う）
+- **依存**: `modules/s3table/s3sdk.js`（内部でS3のput/get/delete操作を行う）
 
 ## 主な機能
 
@@ -49,7 +49,7 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 
 ## カラム型・オプション
 
-`modules/sdk/s3IndexTable.js`と共通の型システムを採用しています。
+`modules/s3table/s3IndexTable.js`と共通の型システムを採用しています。
 
 | タイプ名 | 説明 |
 |---|---|

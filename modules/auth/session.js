@@ -2,7 +2,7 @@
 // S3ベース セッション管理(共通モジュール).
 //
 // sample/login-logout/lib/session.js の実装を汎用化したもの.
-// modules/sdk/s3sdk.js に依存する(AWS-SDK-V3利用).
+// modules/s3table/s3sdk.js に依存する(AWS-SDK-V3利用).
 ///////////////////////////////////////////////
 (function () {
     'use strict';

@@ -1,4 +1,4 @@
-// modules/sdk/s3IndexTable.js のCRUD/検索エンジン本体のテスト.
+// modules/s3table/s3IndexTable.js のCRUD/検索エンジン本体のテスト.
 //
 // エンコードロジックのみのテストは s3IndexTable-encode.test.js を参照。
 // ここでは実際のS3通信(insert/select/update/delete、インデックス、
@@ -79,15 +79,15 @@ after(() => {
 // テスト用にスタブしてから読み込む(auth-jwt.test.js等と同じパターン).
 global.$loadLib = function (name) {
     if (name === "s3sdk.js") {
-        return require("../../modules/sdk/s3sdk.js");
+        return require("../../modules/s3table/s3sdk.js");
     }
     throw new Error("unexpected $loadLib: " + name);
 };
 global.$require = function (name) {
     return require(name);
 };
-const s3IndexTable = require("../../modules/sdk/s3IndexTable.js");
-const s3sdk = require("../../modules/sdk/s3sdk.js");
+const s3IndexTable = require("../../modules/s3table/s3IndexTable.js");
+const s3sdk = require("../../modules/s3table/s3sdk.js");
 
 let _tableSeq = 0;
 // テスト間で衝突しないユニークなテーブル名を生成.

@@ -11,13 +11,13 @@
 
 ## 概要
 
-`localS3` は、`modules/sdk/s3sdk.js`・`modules/sdk/s3Lock.js`が利用する`@aws-sdk/client-s3`(S3Client)の接続先(endpoint)をローカルのHTTPサーバーに向けることで、実際のAWS S3へ接続せずにファイル/ディレクトリをバックエンドにしたローカル動作確認を行うためのコマンドです。
+`localS3` は、`modules/s3table/s3sdk.js`・`modules/s3table/s3Lock.js`が利用する`@aws-sdk/client-s3`(S3Client)の接続先(endpoint)をローカルのHTTPサーバーに向けることで、実際のAWS S3へ接続せずにファイル/ディレクトリをバックエンドにしたローカル動作確認を行うためのコマンドです。
 
 実装本体は [tools/localS3.js](https://github.com/maachang/minto/blob/main/tools/localS3.js) で、Node標準の`http`/`fs`モジュールのみを使い、本物のS3 REST APIの必要最小限を実装しています。SDK自体は本物の`@aws-sdk/client-s3`をそのまま使うため、ローカルで動作確認したコードは無改修で本番のAWS S3にもそのまま接続できます。
 
 ## なぜ必要か
 
-[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md) で説明した通り、`minto`のローカル検証環境で S3 を利用する `modules/sdk/s3sdk.js`・`s3IndexTable.js`・`s3MasterTable.js`・`s3Lock.js`・`session.js` 等を使う場合、通常は実際のAWS環境のIAM Credential(AccessKey等)を設定する必要があります。
+[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md) で説明した通り、`minto`のローカル検証環境で S3 を利用する `modules/s3table/s3sdk.js`・`s3IndexTable.js`・`s3MasterTable.js`・`s3Lock.js`・`session.js` 等を使う場合、通常は実際のAWS環境のIAM Credential(AccessKey等)を設定する必要があります。
 
 `localS3` を使うことで、AWS Credentialやネットワーク接続を用意せずに、ローカルのファイル/ディレクトリだけでこれらの動作確認ができます。
 

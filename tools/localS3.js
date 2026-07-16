@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////
 // (node専用)ローカルS3エミュレータ.
 //
-// modules/sdk/s3sdk.js・modules/sdk/s3Lock.js が利用する
+// modules/s3table/s3sdk.js・modules/s3table/s3Lock.js が利用する
 // @aws-sdk/client-s3(S3Client)の接続先(endpoint)をこのサーバーに
 // 向けることで、実際のAWS S3へ接続せずにファイル/ディレクトリを
 // バックエンドにしたローカル動作確認ができるようにするもの.

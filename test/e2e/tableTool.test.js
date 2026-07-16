@@ -90,13 +90,13 @@ before(async () => {
     storageDir = fs.mkdtempSync(path.join(os.tmpdir(), "tableTool-test-storage-"));
     projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "tableTool-test-project-"));
 
-    // fixtureプロジェクトの lib/ に、実物のmodules/sdk/*.jsを絶対パスで
+    // fixtureプロジェクトの lib/ に、実物のmodules/s3table/*.jsを絶対パスで
     // re-exportするスタブを配置する(コピーによる重複・鮮度ズレを避けるため).
     const libDir = path.join(projectDir, "lib");
     fs.mkdirSync(libDir, { recursive: true });
     fs.mkdirSync(path.join(projectDir, "conf", "table"), { recursive: true });
     for (const name of ["s3sdk.js", "s3Lock.js", "s3MasterTable.js", "s3IndexTable.js"]) {
-        const realPath = path.join(MINTO_HOME, "modules", "sdk", name).replace(/\\/g, "\\\\");
+        const realPath = path.join(MINTO_HOME, "modules", "s3table", name).replace(/\\/g, "\\\\");
         fs.writeFileSync(path.join(libDir, name),
             "module.exports = require(\"" + realPath + "\");\n");
     }

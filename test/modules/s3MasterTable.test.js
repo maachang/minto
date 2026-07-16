@@ -1,4 +1,4 @@
-// modules/sdk/s3MasterTable.js のテスト.
+// modules/s3table/s3MasterTable.js のテスト.
 // 実際のS3への通信は行わず、get/put/deleteをインメモリでエミュレートする
 // フェイクなs3sdkを $loadLib 経由で注入して検証する
 // (s3MasterTable.jsはlistを使用しないため、s3IndexTable.jsと異なりCRUD全体を
@@ -46,7 +46,7 @@ global.$loadLib = function (name) {
 
 // s3MasterTable.js はrequireキャッシュされるため、テストごとに独立したフェイク
 // S3state(=db)が欲しい場合は create() の bucket を変えて分離する。
-const s3MasterTable = require("../../modules/sdk/s3MasterTable.js");
+const s3MasterTable = require("../../modules/s3table/s3MasterTable.js");
 
 let bucketSeq = 0;
 const createDb = () => s3MasterTable.create({ bucket: "test-bucket-" + (bucketSeq++) });
