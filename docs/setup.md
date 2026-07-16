@@ -214,6 +214,17 @@ AWS Lambda では環境変数が利用できますが、これを ローカルmi
 
 でブラウザからアクセスする事で `./minto` コマンド実行に対する検証環境の利用を行なう事ができます。
 
+### s3table のテーブル定義を管理する(tableTool コマンド)
+
+`modules/s3table/s3MasterTable.js`・`s3IndexTable.js`を使う場合、テーブルの作成・削除・カラム変更・インデックス変更は`tableTool`コマンドで行います。
+
+~~~sh
+> cd {mintoプロジェクト名}
+> tableTool -t <master|index> -c <createTable|dropTable|alterTable|alterIndex> [-n <テーブル名>]
+~~~
+
+事前に`conf/table/master.json`・`conf/table/index.json`へ「あるべきテーブル定義」を記載しておく必要があります。詳しくは[bin/README.md](https://github.com/maachang/minto/blob/main/bin/README.md#tabletool-%E3%82%B3%E3%83%9E%E3%83%B3%E3%83%89)を参照してください。
+
 ## ローカル検証環境で検証が終わったら「AWS Lambda にデプロイ対応」を行います
 
 ローカル環境で検証した内容を 本番のAWS Lambda にデプロイする場合のコマンドは以下の通りです。

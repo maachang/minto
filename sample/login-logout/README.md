@@ -4,7 +4,7 @@
 
 - Lambda用関数URL handlerファイル: https://github.com/maachang/minto/blob/main/lambda/src/index.js
 - jhtml: https://raw.githubusercontent.com/maachang/minto/refs/heads/main/tools/jhtml.js
-- database(RDBMS的): https://raw.githubusercontent.com/maachang/minto/refs/heads/main/modules/sdk/s3db.js
+- database(RDBMS的): https://raw.githubusercontent.com/maachang/minto/refs/heads/main/modules/s3table/s3MasterTable.js
 
 質問内容は以下の通り.
 

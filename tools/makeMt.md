@@ -30,6 +30,7 @@ mkmt [PROJECT NAME]
 # プロジェクトを作成する
 > mkmt testProject
 [success] testProject project created.
+  > cd testProject && npm install
 
 # ヘルプを表示する
 > mkmt -h
@@ -43,20 +44,49 @@ mkmt [PROJECT NAME]
 <PROJECT NAME>/
 ├── public/          # 公開用静的ファイル格納ディレクトリ
 ├── lib/             # ライブラリ格納ディレクトリ
-└── conf/            # 設定ファイル格納ディレクトリ
-    ├── env.json     # 環境設定ファイル
-    └── minto.json   # minto サーバー設定ファイル
+├── conf/            # 設定ファイル格納ディレクトリ
+│   ├── env.json     # 環境設定ファイル
+│   └── minto.json   # minto サーバー設定ファイル
+└── package.json     # modules/s3table が必要とする @aws-sdk/client-s3 の
+                        ローカルインストール用
 ```
 
 ## 生成される設定ファイル
 
 ### conf/env.json
 
-環境固有の設定を記述するファイルです。初期状態では空のオブジェクトが記述されます。
+環境固有の設定を記述するファイルです。`modules/s3table`(S3をデータストアとして使うモジュール群)のローカル検証環境(`localS3`)向けの環境変数がデフォルトで設定されます。
 
 ```json
 {
+    "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911",
+    "AWS_ACCESS_KEY_ID": "local",
+    "AWS_SECRET_ACCESS_KEY": "local"
 }
+```
+
+`modules/s3table`を利用しない場合はこれらを削除しても問題ありません。詳しくは[docs/localS3.md](https://github.com/maachang/minto/blob/main/docs/localS3.md)を参照してください。
+
+### package.json
+
+`modules/s3table`が実行時に必要とする`@aws-sdk/client-s3`を、プロジェクトローカルへ`npm install`できるようにするためのファイルです(ローカル検証専用。AWS Lambda本番実行時は`llrt-lambda-{cpu名}-full-sdk.zip`のLayerが`@aws-sdk/client-s3`を提供するため、このファイル自体はデプロイパッケージ(`mtpk`)には含まれません)。
+
+```json
+{
+    "name": "<PROJECT NAME>",
+    "version": "1.0.0",
+    "private": true,
+    "dependencies": {
+        "@aws-sdk/client-s3": "latest"
+    }
+}
+```
+
+生成後は以下でインストールしてください。
+
+```bash
+> cd <PROJECT NAME>
+> npm install
 ```
 
 ### conf/minto.json
