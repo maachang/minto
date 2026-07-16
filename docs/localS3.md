@@ -47,16 +47,24 @@
 
 ~~~json
 {
-    "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911",
-    "AWS_ACCESS_KEY_ID": "local",
-    "AWS_SECRET_ACCESS_KEY": "local"
+    "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911"
 }
 ~~~
 
 - `MINTO_LOCAL_S3_ENDPOINT`: これが設定されている場合、`s3sdk.js`/`s3Lock.js`は実AWS S3ではなくこのURLへ接続します(`forcePathStyle: true`が自動的に付与されます)。
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`: `@aws-sdk/client-s3`がクレデンシャル解決のために必須とするため、ローカル接続時も何らかの値を設定する必要があります。`localS3`側では署名検証を行わないため、値そのものは使われません(任意の文字列でOKです)。
+- AWSクレデンシャル(`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`)は、**設定不要**です。`MINTO_LOCAL_S3_ENDPOINT`が設定されており、かつ他に明示的なクレデンシャル指定(環境変数や呼び出し元の`options.credentials`)が無い場合、`s3sdk.js`/`s3Lock.js`側で自動的にダミークレデンシャルが使われます(`localS3`側では署名検証を行わないため実害はありません)。これにより、実際のAWSクレデンシャルを誤って`conf/env.json`(プロジェクトディレクトリ内、gitignore対応を忘れるとコミットされ得る場所)に書いてしまうリスクを避けられます。
 
-この環境変数を設定しない場合は、通常通り実際のAWS S3に接続されます。本番のAWS Lambda環境にデプロイする際は、この環境変数を設定しない(または`conf/env.json`はローカル専用のためLambdaには含まれない)ことで、自動的に本番のAWS S3が使われます。
+この環境変数を設定しない場合は、通常通り実際のAWS S3に接続されます。本番のAWS Lambda環境にデプロイする際は、この環境変数を設定しない(または`conf/env.json`はローカル専用のためLambdaには含まれない)ことで、自動的に本番のAWS S3が使われます。実際のAWS環境に接続する場合のクレデンシャル設定方法は[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#実際の検証環境実行方法＋利用方法を説明)を参照してください。
+
+### クレデンシャル解決の優先順位
+
+`s3sdk.js`/`s3Lock.js`は、以下の優先順位でクレデンシャルを解決します。
+
+1. **`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`環境変数が設定されている場合**: `~/.aws/credentials`の有無に関わらず、その値をそのまま使います(最優先)。
+2. **上記が無く、`MINTO_LOCAL_S3_ENDPOINT`も設定されていない場合**: AWS SDKの標準クレデンシャルプロバイダーチェーンに委ねます。`AWS_PROFILE`環境変数が設定されていれば`~/.aws/credentials`の該当プロファイル、無ければ`default`プロファイルやIAMロール等から解決されます。何も解決できない場合は、実際にS3へリクエストを送る際にエラーになります。
+3. **上記が無く、`MINTO_LOCAL_S3_ENDPOINT`が設定されている場合**: 自動的にダミークレデンシャル(`accessKeyId: "local"`, `secretAccessKey: "local"`)が使われます(`localS3`は署名検証を行わないため実害はありません)。
+
+つまり、環境変数によるクレデンシャル指定は`~/.aws/credentials`の存在有無より常に優先されます。
 
 ## 対応しているS3操作
 

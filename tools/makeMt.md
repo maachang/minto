@@ -72,13 +72,11 @@ mkmt [PROJECT NAME]
 
 ```json
 {
-    "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911",
-    "AWS_ACCESS_KEY_ID": "local",
-    "AWS_SECRET_ACCESS_KEY": "local"
+    "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911"
 }
 ```
 
-`modules/s3table`を利用しない場合はこれらを削除しても問題ありません。詳しくは[docs/localS3.md](https://github.com/maachang/minto/blob/main/docs/localS3.md)を参照してください。
+AWSクレデンシャルは設定不要です(`MINTO_LOCAL_S3_ENDPOINT`設定時は`s3sdk.js`/`s3Lock.js`側が自動的にダミー値を使います)。`modules/s3table`を利用しない場合は`MINTO_LOCAL_S3_ENDPOINT`を削除しても問題ありません。実際のAWS S3を使う場合は`AWS_PROFILE`(`~/.aws/credentials`のプロファイル名)を追加してください。詳しくは[docs/localS3.md](https://github.com/maachang/minto/blob/main/docs/localS3.md)・[docs/setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md)を参照してください。
 
 ### package.json
 

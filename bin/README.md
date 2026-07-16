@@ -111,19 +111,18 @@ mkmt で作成された mintoプロジェクトによるWebアプリ実装ディ
 
 起動後、`minto`コマンド実行時に読み込まれる `conf/env.json` などで以下の環境変数を
 設定することで、`s3sdk.js`/`s3Lock.js`が自動的にこのローカルサーバーへ接続します
-(実AWS環境で使う場合は、これらの環境変数を設定しなければ通常通りAWS S3に接続します)。
+(実AWS環境で使う場合は、この環境変数を設定しなければ通常通りAWS S3に接続します)。
 
 ~~~json
 {
-  "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911",
-  "AWS_ACCESS_KEY_ID": "local",
-  "AWS_SECRET_ACCESS_KEY": "local"
+  "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911"
 }
 ~~~
 
-`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`は`@aws-sdk/client-s3`がクレデンシャル解決に
-必要とするため、ローカル接続時も適当な値(任意の文字列)を設定する必要があります
-(`localS3`側では署名検証を行わないため値そのものは使われません)。
+AWSクレデンシャル(`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`)は設定不要です。
+`MINTO_LOCAL_S3_ENDPOINT`が設定されており、かつ他に明示的なクレデンシャル指定が
+無い場合、`s3sdk.js`/`s3Lock.js`側で自動的にダミークレデンシャルが使われます
+(`localS3`側では署名検証を行わないため実害はありません)。
 
 サポートしているS3操作は PutObject(条件付き書き込み`If-None-Match`含む)・GetObject・
 DeleteObject・ListObjectsV2 の最低限のみです。それ以外の操作(バージョニング、

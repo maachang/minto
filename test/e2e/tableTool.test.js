@@ -108,11 +108,17 @@ before(async () => {
     });
     await waitForServer(baseUrl + "/" + BUCKET + "?list-type=2", 5000);
 
+    // AWSクレデンシャルは明示的に設定しない。MINTO_LOCAL_S3_ENDPOINT設定時は
+    // s3sdk.js側が自動的にダミークレデンシャルを使うため不要(この動作自体の
+    // 回帰テストを兼ねる)。実行環境に既にAWS認証情報が設定されていても
+    // その経路を通らないことを保証するため、明示的に削除しておく.
     s3Env = Object.assign({}, process.env, {
-        MINTO_LOCAL_S3_ENDPOINT: baseUrl,
-        AWS_ACCESS_KEY_ID: "local",
-        AWS_SECRET_ACCESS_KEY: "local"
+        MINTO_LOCAL_S3_ENDPOINT: baseUrl
     });
+    delete s3Env.AWS_ACCESS_KEY_ID;
+    delete s3Env.AWS_SECRET_ACCESS_KEY;
+    delete s3Env.AWS_SESSION_TOKEN;
+    delete s3Env.AWS_PROFILE;
 });
 
 after(() => {

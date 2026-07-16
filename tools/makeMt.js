@@ -106,12 +106,12 @@
     // conf/env.json を作成.
     // modules/s3table(s3sdk.js/s3Lock.js/s3MasterTable.js/s3IndexTable.js)の
     // ローカル検証環境(tools/localS3.js)向けの環境変数をデフォルトで含める.
+    // AWSクレデンシャルは、MINTO_LOCAL_S3_ENDPOINT設定時はコード側
+    // (s3sdk.js/s3Lock.js)が自動的にダミー値を使うため、ここでは設定不要.
     const createEnvJson = function (projectName) {
         createConfJson(projectName, "env",
             "{\n" +
-            "    \"MINTO_LOCAL_S3_ENDPOINT\": \"http://localhost:9911\",\n" +
-            "    \"AWS_ACCESS_KEY_ID\": \"local\",\n" +
-            "    \"AWS_SECRET_ACCESS_KEY\": \"local\"\n" +
+            "    \"MINTO_LOCAL_S3_ENDPOINT\": \"http://localhost:9911\"\n" +
             "}"
         );
     }

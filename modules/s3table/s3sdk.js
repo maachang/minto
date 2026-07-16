@@ -34,20 +34,30 @@
     // リージョン毎のS3Client.
     const _S3CLIENT = {};
 
+    // ローカルS3エミュレータ接続時、明示的なクレデンシャルが1つも
+    // 見つからない場合に使うダミークレデンシャル(署名検証されないため実害無し).
+    const _LOCAL_CREDENTIAL = { "access_key": "local", "secret_access_key": "local" };
+
     // S3Clientオブジェクトを取得.
     const _getS3Client = function (region, credentials) {
-        if (region == undefined || regin == null) {
+        if (region == undefined || region == null) {
             region = _DEF_REGION;
         }
+        // ローカルS3エミュレータ(tools/localS3.js)接続用endpoint.
+        // 環境変数が設定されている場合、AWS本番環境ではなくローカルサーバーに接続する.
+        const localEndpoint = process.env["MINTO_LOCAL_S3_ENDPOINT"];
         // credentialsが設定されていない場合.
         if (credentials == undefined || credentials == null) {
             // 環境変数から取得.
             credentials = _getEnvCredential();
+            // ローカルS3接続時、環境変数にもクレデンシャルが無ければ、
+            // AWS SDKのデフォルトクレデンシャルプロバイダーチェーン(実AWS向け)を
+            // 経由させずにダミークレデンシャルを使う(実AWSへの接続は行わない
+            // ため、AWS_PROFILE等の設定を要求しないようにするため).
+            if (localEndpoint != undefined && credentials["access_key"] == undefined) {
+                credentials = _LOCAL_CREDENTIAL;
+            }
         }
-        // accessKeyが存在しない場合.
-        // ローカルS3エミュレータ(tools/localS3.js)接続用endpoint.
-        // 環境変数が設定されている場合、AWS本番環境ではなくローカルサーバーに接続する.
-        const localEndpoint = process.env["MINTO_LOCAL_S3_ENDPOINT"];
         const clientOptions = localEndpoint != undefined ?
             { endpoint: localEndpoint, forcePathStyle: true } : {};
 
