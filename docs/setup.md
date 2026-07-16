@@ -44,13 +44,13 @@ git clone https://github.com/maachang/minto.git
 
 のローカルディレクトリにセットアップされました。
 
-次に以下の環境設定を行います。`bin/initMinto.sh`を実行すると、利用しているシェル
+次に以下の環境設定を行います。`bin/initMinto`を実行すると、利用しているシェル
 (bash/zsh、Linux・macOS・WSL2に対応)の設定ファイルへ`MINTO_HOME`と`PATH`が
 自動的に追記されます(再実行しても二重に追記されません)。
 
 ~~~sh
 cd ${HOME}/project/minto
-./bin/initMinto.sh
+./bin/initMinto
 ~~~
 
 表示された案内に従って`source {設定ファイル}`するか、ターミナルを再起動してください。

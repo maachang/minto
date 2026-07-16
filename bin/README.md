@@ -14,7 +14,7 @@ mintoコマンドは、以下のコマンドが存在します.
 
 まずこれらコマンドを利用するための設定を行うための説明を行います.
 
-## 0. initMinto.sh で自動セットアップする(推奨)
+## 0. initMinto で自動セットアップする(推奨)
 
 `git clone`した`minto`ディレクトリの直下で以下を実行すると、`MINTO_HOME`環境変数と
 `PATH`へのbin追加が、利用中のシェル設定ファイル(bash: `.bashrc`(macOSのみ
@@ -23,7 +23,7 @@ WSL2に対応。WSL2はLinuxと同じ扱いになります)。
 
 ~~~sh
 cd minto
-./bin/initMinto.sh
+./bin/initMinto
 ~~~
 
 再実行しても二重に追記されません(マーカーコメントで既存設定を検知してスキップします)。

@@ -10,7 +10,7 @@
 #
 # 使い方:
 #   cd minto
-#   ./bin/initMinto.sh
+#   ./bin/initMinto
 #   (追記後は `source <表示された設定ファイル>` するか、ターミナルを再起動)
 
 set -e
