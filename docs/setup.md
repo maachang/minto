@@ -118,8 +118,8 @@ cd {mintoプロジェクトを作成するディレクトリ名}
 
 #### 動的コンテンツ説明
 
-- *.mt.js: [json返却実装](https://github.com/maachang/minto/blob/main/docs/mint-js.md)
-- *.mt.html: [html返却実装](https://github.com/maachang/minto/blob/main/docs/jhtml-js.md)
+- *.mt.js: [json返却実装](https://github.com/maachang/minto/blob/main/docs/howto.md#⑦動的コンテンツjson返却-の実装説明)
+- *.mt.html: [html返却実装](https://github.com/maachang/minto/blob/main/docs/howto.md#⑧jhtml-実装)
 
 動的コンテンツ作成については上記のURLを参照してください。
 
