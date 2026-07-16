@@ -81,6 +81,9 @@ global.$loadLib = function (name) {
     if (name === "s3sdk.js") {
         return require("../../modules/s3table/s3sdk.js");
     }
+    if (name === "seqId.js") {
+        return require("../../modules/s3table/seqId.js");
+    }
     throw new Error("unexpected $loadLib: " + name);
 };
 global.$require = function (name) {
@@ -419,4 +422,29 @@ test("s3IndexTable: alterColumnsでカラム定義を差し替えられる(既�
     assert.equal(rows[0].name, "alice");
 
     await assert.rejects(() => db.alterColumns("no-such-table", {}));
+});
+
+test("s3IndexTable: seqId型は自動採番され、インデックス経由の範囲検索(gt)で生成順に並べられる", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, {
+        columns: {
+            id: { type: "seqId" },
+            name: { type: "string" }
+        },
+        indexes: { byId: ["id"] }
+    });
+    await db.insert(table, { name: "alice" });
+    await db.insert(table, { name: "bob" });
+    await db.insert(table, { name: "carol" });
+
+    const all = await db.select(table, { where: { byId: {} }, orderBy: { byId: "asc" } });
+    assert.deepEqual(all.map((r) => r.name), ["alice", "bob", "carol"]);
+
+    const aliceId = all[0].id;
+    const rows = await db.select(table, {
+        where: { byId: { id: { gt: aliceId } } },
+        orderBy: { byId: "asc" }
+    });
+    assert.deepEqual(rows.map((r) => r.name), ["bob", "carol"]);
 });

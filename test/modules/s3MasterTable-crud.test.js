@@ -87,6 +87,9 @@ global.$loadLib = function (name) {
     if (name === "csvReader.js") {
         return require("../../modules/csv/csvReader.js");
     }
+    if (name === "seqId.js") {
+        return require("../../modules/s3table/seqId.js");
+    }
     throw new Error("unexpected $loadLib: " + name);
 };
 global.$require = function (name) {
@@ -270,6 +273,24 @@ test("s3MasterTable: primaryKey/uniqueカラムは重複挿入がエラーにな
     });
     await db.insert(table, { email: "a@example.com", name: "alice" });
     await assert.rejects(() => db.insert(table, { email: "a@example.com", name: "alice2" }));
+});
+
+test("s3MasterTable: seqId型は自動採番され、生成順に範囲検索(gt)で並べられる", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, {
+        columns: {
+            id: { type: "seqId", primaryKey: true },
+            name: { type: "string" }
+        }
+    });
+    const [alice] = await db.insert(table, { name: "alice" });
+    const [bob] = await db.insert(table, { name: "bob" });
+    const [carol] = await db.insert(table, { name: "carol" });
+
+    const rows = await db.select(table, { where: { id: { gt: alice.id } }, orderBy: { id: "asc" } });
+    assert.deepEqual(rows.map((r) => r.name), ["bob", "carol"]);
+    assert.equal(bob.id < carol.id, true);
 });
 
 test("s3MasterTable: date型カラムはDateオブジェクトで挿入・取得・比較できる", async () => {

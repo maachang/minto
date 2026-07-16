@@ -58,6 +58,7 @@ test/
 │   ├── auth-jwt.test.js
 │   ├── http-response.test.js
 │   ├── validate.test.js
+│   ├── seqId.test.js
 │   ├── s3IndexTable-encode.test.js
 │   ├── s3IndexTable-crud.test.js
 │   └── s3MasterTable-crud.test.js
@@ -91,6 +92,7 @@ test/
 - **auth-jwt.test.js**: `modules/auth/jwt.js`のHS256署名/検証(sign/verify)を検証します。secret不一致・期限切れ(exp)・フォーマット不正時の検証失敗、`options.noError == false`時の例外throwも確認しています
 - **http-response.test.js**: `modules/http/response.js`のJSON/エラーレスポンス組み立て(`json`/`error`)を検証します。グローバルの`$response()`を呼び出し内容を記録するスタブに差し替えて検証しています
 - **validate.test.js**: `modules/validate/validate.js`のスキーマベース検証(`check`)を検証します。required/type/minLen・maxLen/min・max/pattern/enum/customの各ルール、default値補完、元データを変更しないことなどを確認しています
+- **seqId.test.js**: `modules/s3table/seqId.js`(Snowflake ID方式のユニークID発行、旧`autoIncrement`の代替)を検証します。固定長16桁の小文字hex文字列を返すこと、大量生成しても重複しないこと(同一ミリ秒内のシーケンス処理含む)、生成順に文字列比較で単調増加すること、`$requestId()`が使えない環境でもエラーにならないことを確認しています
 - **s3IndexTable-encode.test.js**: `modules/s3table/s3IndexTable.js`のうち、S3通信を伴わない値エンコードロジック(`encodeInt`/`encodeFloat`/`encodeString`/`encodeBoolean`/`encodeDate`)が数値順・辞書順と一致すること、`generateRowId`の一意性などを検証します
 - **s3IndexTable-crud.test.js**: `modules/s3table/s3IndexTable.js`のCRUD/検索エンジン本体を検証します。`tools/localS3.js`(ローカルS3エミュレータ)を子プロセスとして起動し、実際に`@aws-sdk/client-s3`経由で通信させることで、以下を確認しています。
   - createTable/insert/select(eq検索)
@@ -101,6 +103,9 @@ test/
   - update/delete
   - 行ファイルを直接削除した場合の自己修復(stale索引の自動削除)
   - createIndexによる既存行へのバックフィル、dropIndex、dropTable
+  - listTables(全テーブル定義の一覧取得)、alterColumns(カラム定義の差し替え、
+    削除したカラムがselect結果から除外されること)
+  - seqId型カラムの自動採番、インデックス経由の範囲検索(gt)での生成順ソート確認
 
   ポートは`test/e2e/webapps.test.js`と同様に`net`モジュールでOSに空きポートを割り当てる方式、ストレージ先は`os.tmpdir()`配下の一時ディレクトリを使い、テスト終了後に削除しています。
 - **s3MasterTable-crud.test.js**: `modules/s3table/s3MasterTable.js`(テーブル全体1JSON方式)のCRUD/検索エンジン本体を、`s3IndexTable-crud.test.js`と同じ方式(`tools/localS3.js`を子プロセスとして起動)で検証します。
@@ -115,6 +120,7 @@ test/
   - exportCsv/importCsvによるテーブル内容の往復
   - listTables(全テーブル定義の一覧取得)、alterColumns(カラム定義の差し替え、
     削除したカラムがselect結果から除外されること)
+  - seqId型カラムの自動採番、範囲検索(gt)での生成順ソート確認
 
 ### e2e/
 

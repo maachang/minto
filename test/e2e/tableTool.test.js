@@ -95,7 +95,7 @@ before(async () => {
     const libDir = path.join(projectDir, "lib");
     fs.mkdirSync(libDir, { recursive: true });
     fs.mkdirSync(path.join(projectDir, "conf", "table"), { recursive: true });
-    for (const name of ["s3sdk.js", "s3Lock.js", "s3MasterTable.js", "s3IndexTable.js"]) {
+    for (const name of ["s3sdk.js", "s3Lock.js", "s3MasterTable.js", "s3IndexTable.js", "seqId.js"]) {
         const realPath = path.join(MINTO_HOME, "modules", "s3table", name).replace(/\\/g, "\\\\");
         fs.writeFileSync(path.join(libDir, name),
             "module.exports = require(\"" + realPath + "\");\n");

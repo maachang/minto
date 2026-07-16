@@ -24,23 +24,29 @@
 //   既存の制約として残る=書き込み頻度が少ない前提のため許容している).
 //   autoIncrementは提供しない(insertの度に変わる値をテーブル定義の集約
 //   ファイルに同居させると書き込み競合・性能劣化を招くため。連番的な
-//   採番が必要な場合はソート可能なユニークID発行等、別の仕組みで対応する).
+//   採番が必要な場合は代わりにseqId型(modules/s3table/seqId.js、
+//   Snowflake ID方式)を使う。ロック・中央採番管理が不要なため書き込み
+//   競合を招かない).
 // - テーブル定義(カラム定義)は、テーブル単位ファイルではなく
 //   {prefix}table.json という1つの集約ファイルにテーブル名をキーにして
 //   まとめて保持する(show tables的な一覧参照・キャッシュ効率のため).
 // - join・transactionは不要機能として提供しない(旧実装にはあったが削除).
-// - カラム型システム(string/int/float/boolean/date/json)は
+// - カラム型システム(string/int/float/boolean/date/json/seqId)は
 //   s3IndexTable.jsと共通の考え方. date型はinsert時にDateオブジェクトを
 //   受け取り、内部的にはUnixTimeミリ秒のnumberとして保存し、
 //   select時に(集計されていない通常の行では)Dateオブジェクトに変換して
 //   返す。where条件の比較時もDateオブジェクトを渡せるように、
-//   比較前に自動的にミリ秒数へ変換している.
+//   比較前に自動的にミリ秒数へ変換している. seqId型は固定長16桁の
+//   小文字hex文字列(Snowflake ID)で、insert時に値省略なら自動生成される.
 ///////////////////////////////////////////////
 (function () {
     'use strict';
 
     // S3の低レベル操作(put/get/delete/list).
     const s3sdk = $loadLib("s3sdk.js");
+
+    // Snowflake ID方式のユニークID発行(autoIncrementの代替).
+    const seqId = $loadLib("seqId.js");
 
     // StreamをStringに変換.
     // (llrtでは for-await-of 構文が動作しない事例があるため
@@ -56,7 +62,8 @@
         float: function (v) { return typeof v === "number"; },
         boolean: function (v) { return typeof v === "boolean"; },
         date: function (v) { return (v instanceof Date) || typeof v === "number"; },
-        json: function () { return true; }
+        json: function () { return true; },
+        seqId: function (v) { return seqId.isValid(v); }
     };
 
     ///////////////////////////////////////////////
@@ -269,7 +276,7 @@
         };
 
         // 1件分の行データを、カラム定義(notNull/default/primaryKey/unique/
-        // 型)に従って検証・補完する.
+        // seqId/型)に従って検証・補完する.
         // rows 一意性チェック対象の既存行配列を設定します.
         const _prepareInsertRow = function (schema, rows, raw) {
             const row = {};
@@ -277,6 +284,9 @@
                 const def = schema.columns[colName];
                 let value = raw[colName];
 
+                if (def.type === "seqId" && value == null) {
+                    value = seqId.generate();
+                }
                 if (value == null && def.default !== undefined) {
                     value = (typeof def.default === "function") ? def.default() : def.default;
                 }

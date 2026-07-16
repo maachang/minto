@@ -7,6 +7,7 @@
   - `s3MasterTable.js`: テーブル全体を1つのJSONとしてS3に保存するRDBMSライクなデータベース。**書き込み頻度が少なく、読み込み頻度が多い**用途向け。詳細は[docs/s3MasterTable.md](https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md)を参照.
   - `s3IndexTable.js`: 1行=1ファイルでS3に保存する行ファイル型データベース。**書き込み頻度が多い**用途向け(書き込み競合が起きにくい代わりに、検索は事前定義したインデックス経由のみ・複合インデックスは先頭カラムのみ範囲検索可、という制約がある。1テーブル1万件程度の小規模利用を想定)。詳細は[docs/s3-row-store-design.md](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)を参照.
   - `s3Lock.js`: S3の条件付き書き込み(IfNoneMatch)を利用した簡易排他ロック。acquire/releaseを提供。期限切れロック(stale)の自動失捉(reclaim)に対応。`s3sdk.js`と同様に`MINTO_LOCAL_S3_ENDPOINT`によるローカル接続に対応.
+  - `seqId.js`: Snowflake ID方式(タイムスタンプ42bit+ワーカーID10bit+シーケンス12bit)のユニークID発行(旧`autoIncrement`の代替)。ロック・中央採番管理が不要なため書き込み競合を招かない。固定長16桁の小文字hex文字列を返す。カラム定義で`type: "seqId"`を指定すると、`s3MasterTable.js`/`s3IndexTable.js`のinsert時に値省略なら自動生成される.
   - `s3MasterTable.js`/`s3IndexTable.js`のテーブル定義(createTable/dropTable/alterTable/alterIndex)は`bin/tableTool`コマンドから操作する(詳細は`bin/README.md`のtableToolコマンド節を参照).
 - `sdk`: llrt-lambda-{cpu名}-full-sdk.zip を利用する場合の aws-sdk-V3を利用するライブラリ群(S3以外の単発のAWSサービスラッパー).
   - `dynamoDbSdk.js`: Amazon DynamoDBのDocument Client相当(marshall/unmarshall)ラッパー。put/get/delete/update(patchのSETのみ)/queryの最低限の操作を提供.

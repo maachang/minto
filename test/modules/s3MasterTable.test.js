@@ -41,6 +41,9 @@ global.$loadLib = function (name) {
     if (name === "csvWriter.js") {
         return require("../../modules/csv/csvWriter.js");
     }
+    if (name === "seqId.js") {
+        return require("../../modules/s3table/seqId.js");
+    }
     throw new Error("unexpected $loadLib: " + name);
 };
 
@@ -106,6 +109,21 @@ test("s3MasterTable: defaultは値省略時に適用される", async () => {
     });
     const [row] = await db.insert("users", { name: "Alice" });
     assert.equal(row.role, "user");
+});
+
+test("s3MasterTable: seqId型は値省略時に自動採番され、一意なIDになる", async () => {
+    const db = createDb();
+    await db.createTable("users", {
+        columns: {
+            id: { type: "seqId", primaryKey: true },
+            name: { type: "string" }
+        }
+    });
+    const [alice] = await db.insert("users", { name: "Alice" });
+    const [bob] = await db.insert("users", { name: "Bob" });
+    assert.equal(typeof alice.id, "string");
+    assert.match(alice.id, /^[0-9a-f]{16}$/);
+    assert.notEqual(alice.id, bob.id);
 });
 
 test("s3MasterTable: unique/primaryKeyは重複をエラーにする", async () => {

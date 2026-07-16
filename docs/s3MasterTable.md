@@ -59,6 +59,7 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 | `boolean` | 真偽値 |
 | `date` | 日付・日時。内部的にはUnixTimeミリ秒のnumberとして保存されるが、insert時にJSの`Date`オブジェクトを受け取り、select時（`groupBy`未指定の場合）も`Date`オブジェクトとして返す |
 | `json` | 任意のJSON値（オブジェクト・配列など） |
+| `seqId` | Snowflake ID方式のユニークID（固定長16桁の小文字hex文字列）。insert時に値省略で自動生成される（後述） |
 
 カラムのオプションは以下の通りです。
 
@@ -66,7 +67,27 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 - `default`: 省略時のデフォルト値（関数も指定可）
 - `primaryKey` / `unique`: 一意性制約。テーブル全体を1回の読み込み→書き戻しサイクルの中で検証するため、`s3IndexTable.js`とは異なりサポートしています
 
-`autoIncrement`（連番の自動採番）はサポートしていません。insertの度に変わる値をテーブル定義の集約ファイルに同居させると書き込み競合・性能劣化を招くためです。連番的な採番が必要な場合はソート可能なユニークID発行等、別の仕組みで対応してください。
+`autoIncrement`（連番の自動採番）はサポートしていません。insertの度に変わる値をテーブル定義の集約ファイルに同居させると書き込み競合・性能劣化を招くためです。連番的な採番が必要な場合は、代わりに`type: "seqId"`を使ってください。
+
+### seqId型（Snowflake ID方式のユニークID発行）
+
+`type: "seqId"`のカラムは、insert時に値を省略すると自動的にユニークなIDが生成されます（旧`autoIncrement`の使い勝手を踏襲）。
+
+```js
+await db.createTable("users", {
+  columns: {
+    id:   { type: "seqId" },
+    name: { type: "string", notNull: true },
+  }
+});
+const [row] = await db.insert("users", { name: "Alice" });
+// row.id === "04aa00d7160af000" のような固定長16桁の小文字hex文字列
+```
+
+- Twitter社が採用していたSnowflake ID方式（タイムスタンプ+ワーカーID+シーケンス番号をビットパックする方式）を採用しています。ロック・中央採番管理を一切必要としないため、`autoIncrement`が抱えていた書き込み競合の問題が起きません。
+- 実装は`modules/s3table/seqId.js`（64bit = タイムスタンプ42bit + ワーカーID10bit + シーケンス12bit）。他テーブルとの紐付けキーとしての利用を主眼に置いており、値は算術演算ではなく不透明な識別子として扱ってください。
+- 値は固定長16桁の小文字hex文字列で返却されます。これは64bit値をJSの安全な整数範囲(2^53)を超えても精度を落とさず扱うため（内部はBigInt）、かつ固定長にすることで文字列比較(`<`, `>`)がそのまま生成順（数値順）と一致するようにするためです。
+- `primaryKey`/`unique`と組み合わせて使うことを想定しています（衝突確率は極めて低いですが、ゼロではありません）。
 
 ## where の演算子仕様
 

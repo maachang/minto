@@ -50,6 +50,9 @@
     // S3の低レベル操作(put/get/delete/list).
     const s3sdk = $loadLib("s3sdk.js");
 
+    // Snowflake ID方式のユニークID発行(autoIncrementの代替).
+    const seqId = $loadLib("seqId.js");
+
     // crypto(行ファイル名のランダム部分生成用).
     const crypto = $require("crypto");
 
@@ -147,7 +150,7 @@
     };
 
     // カラムの型に応じてインデックス用の値エンコードを行う.
-    // type カラム型(string, int, float, boolean, date)を設定します.
+    // type カラム型(string, int, float, boolean, date, seqId)を設定します.
     // value エンコード対象の値を設定します.
     // 戻り値: エンコードされた文字列(S3キーセーフ)が返却されます.
     const encodeValue = function (type, value) {
@@ -157,6 +160,9 @@
             case "float": return encodeFloat(value);
             case "boolean": return encodeBoolean(value);
             case "date": return encodeDate(value);
+            // seqIdは固定長16桁の小文字hex文字列で、そのままUTF-8バイナリの
+            // hex化(encodeString)でも辞書順=生成順(数値順)を保持できる.
+            case "seqId": return encodeString(value);
             default:
                 throw new Error("Unsupported index column type: " + type);
         }
@@ -164,10 +170,11 @@
 
     // 型が「範囲検索(gt/ge/lt/le)に対応可能か」を判定する.
     // string型もUTF-8バイナリの直接hex化により辞書順を保持するため対応.
+    // seqId型も固定長hex文字列のため同様に対応可能.
     // ただしLIKE検索・部分一致は引き続き対象外(N-gram等の別対応が必要).
     const isRangeSupportedType = function (type) {
         return type === "int" || type === "float" ||
-            type === "date" || type === "string";
+            type === "date" || type === "string" || type === "seqId";
     };
 
     ///////////////////////////////////////////////
@@ -436,12 +443,15 @@
             }
         };
 
-        // カラム定義に従って、not null・defaultを適用した行データを作る.
+        // カラム定義に従って、seqId・not null・defaultを適用した行データを作る.
         const _applyColumnDefaults = function (schema, row) {
             const ret = {};
             for (const colName in schema.columns) {
                 const col = schema.columns[colName];
                 let value = row[colName];
+                if (col.type === "seqId" && value == null) {
+                    value = seqId.generate();
+                }
                 if (value == null) {
                     if (col.default !== undefined) {
                         value = (typeof col.default === "function") ? col.default() : col.default;
