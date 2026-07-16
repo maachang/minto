@@ -27,9 +27,9 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 
 ## 注意点
 
-- **同時書き込み**: S3 には行ロックがないため、高頻度の並行書き込みには向きません。読み取り中心・低〜中頻度の書き込みユースケースに最適です（高頻度の書き込みが必要な場合は`s3IndexTable.js`を検討してください）。
+- **同時書き込み**: S3 には行ロックがないため、高頻度の並行書き込みには向きません。読み取り中心・低〜中頻度の書き込みユースケースに最適です（高頻度の書き込みが必要な場合は`s3IndexTable.js`を検討してください）。安全に更新したい場合は後述の`transaction()`(テーブル単位ロック)を使ってください。
 - **データ量**: テーブル全体を1つの JSON として読み書きするため、数万行程度までが実用的です。それ以上は DynamoDB や Aurora Serverless の検討をおすすめします。
-- **依存**: `modules/s3table/s3sdk.js`（内部でS3のput/get/delete操作を行う）
+- **依存**: `modules/s3table/s3sdk.js`（内部でS3のput/get/delete操作を行う）、`modules/s3table/s3Lock.js`（`transaction()`のテーブルロックに使用）
 
 ## 主な機能
 
@@ -40,12 +40,48 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 | **DESCRIBE TABLE** | `describeTable(name)` | テーブル定義を取得 |
 | **SHOW TABLES** | `listTables()` | 全テーブル分の定義を`{テーブル名: schema}`形式で取得 |
 | **ALTER TABLE** | `alterColumns(name, columns)` | カラム定義を丸ごと差し替え(データは変更しない)。`bin/tableTool`経由での利用を想定 |
-| **INSERT** | `insert(table, row)` | 単一/バルク挿入、制約チェック付き |
+| **INSERT** | `insert(table, row)` | 単一/バルク挿入、制約チェック付き。**S3への即時アップロードは行わない**(後述) |
 | **SELECT** | `select(table, query)` | WHERE・ORDER BY・LIMIT/OFFSET・GROUP BY・集計関数 (COUNT/SUM/AVG/MIN/MAX) |
-| **UPDATE** | `update(table, query, patch)` | 条件指定で部分更新 |
-| **DELETE** | `delete(table, query)` | 条件指定で削除 |
+| **UPDATE** | `update(table, query, patch)` | 条件指定で部分更新。**S3への即時アップロードは行わない**(後述) |
+| **DELETE** | `delete(table, query)` | 条件指定で削除。**S3への即時アップロードは行わない**(後述) |
+| **FLUSH** | `flush(table)` | 保留中の変更を実際にS3へアップロードする |
+| **TRANSACTION** | `transaction(table, fn)` | テーブル単位ロック＋`fn`実行＋`flush`＋ロック解放を一括で行う |
 
-`join`・`transaction`は不要機能として提供していません（過去バージョンにはありましたが削除しました）。
+`join`は不要機能として提供していません（過去バージョンにはありましたが削除しました）。`transaction`は後述の形で復活させています。
+
+### 書き込みのバッファリングとflush/transaction
+
+`insert`/`update`/`delete`/`importCsv`は、呼び出しの度にS3へアップロードするのではなく、**メモリ上にのみ変更を保持**します。これは、1回の処理内で複数回の書き込みが発生する場合にS3へのアップロード回数を減らすためです。実際にS3へ反映するには、明示的に`flush(table)`を呼び出す必要があります(`flush`を呼ばないままLambdaの実行が終了すると、変更は失われます)。
+
+同一の`db`インスタンス内であれば、`select`は`flush`前の変更(自分がinsertした内容)も正しく参照できます(read-your-own-writes)。
+
+```js
+const db = s3MasterTable.create({ bucket: "my-bucket" });
+await db.insert("users", { name: "Alice" });
+// この時点ではまだS3には反映されていない.
+await db.flush("users");
+// ここでS3へアップロードされる.
+```
+
+`flush`は`transaction`を使わずに単体でも呼び出せる公開APIです。ただし、この場合はテーブルロックが掛からないため、複数の実行環境からの同時書き込みに対する安全性は利用者側の責任になります。安全に更新したい場合は`transaction(table, fn)`を使ってください。
+
+```js
+await db.transaction("users", async () => {
+    await db.insert("users", { name: "Alice" });
+    await db.update("users", { where: { name: { eq: "Bob" } } }, { age: 26 });
+});
+```
+
+`transaction(table, fn)`は以下の流れで動作します。
+
+1. `modules/s3table/s3Lock.js`で`"master." + table`というキーのロックを取得する(取得できない場合は即座にエラーになる。リトライはしない)
+2. `fn`(引数無しのasync関数)を実行する
+3. `fn`が正常終了したら`flush(table)`を実行する
+4. ロックを解放する
+
+`fn`実行中に例外が発生した場合は、`transaction`呼び出し前のメモリ上の状態にロールバックし(S3へは一切アップロードしない)、ロックを解放してから例外を再throwします。
+
+`transaction`は1テーブル単位でロックするため、複数テーブルにまたがる更新をまとめて安全に行いたい場合は、テーブルごとに`transaction`を呼び分けてください。
 
 ## カラム型・オプション
 

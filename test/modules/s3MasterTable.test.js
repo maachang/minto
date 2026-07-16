@@ -7,10 +7,13 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 
 // フェイクS3(bucket/prefix/keyの組をMapで管理する).
+// storeを直接公開し、flush前後でS3(相当)に実際に反映されたかをテストから
+// 直接検証できるようにする.
 const makeFakeS3sdk = function () {
     const store = new Map();
     const k = (bucket, prefix, key) => bucket + "/" + (prefix || "") + "/" + key;
     return {
+        store: store,
         put: async (bucket, prefix, key, body) => {
             store.set(k(bucket, prefix, key), body);
             return true;
@@ -31,9 +34,36 @@ const makeFakeS3sdk = function () {
     };
 };
 
+// $loadLib("s3sdk.js")はs3MasterTable.jsのモジュールロード時に1度だけ
+// 呼ばれるため、ここで生成したインスタンスがテスト全体で共有される.
+const fakeS3sdk = makeFakeS3sdk();
+
+// フェイクs3Lock(インメモリのSetでロック中キーを管理する).
+// create()を呼ぶたびに独立したロック名前空間を持たせる
+// (db(=s3MasterTable.create())インスタンスごとにロックが分離されるように).
+const makeFakeS3Lock = function () {
+    return {
+        create: () => {
+            const locked = new Set();
+            return {
+                acquire: async (lockKey) => {
+                    if (locked.has(lockKey)) {
+                        return false;
+                    }
+                    locked.add(lockKey);
+                    return true;
+                },
+                release: async (lockKey) => {
+                    locked.delete(lockKey);
+                }
+            };
+        }
+    };
+};
+
 global.$loadLib = function (name) {
     if (name === "s3sdk.js") {
-        return makeFakeS3sdk();
+        return fakeS3sdk;
     }
     if (name === "csvReader.js") {
         return require("../../modules/csv/csvReader.js");
@@ -43,6 +73,9 @@ global.$loadLib = function (name) {
     }
     if (name === "seqId.js") {
         return require("../../modules/s3table/seqId.js");
+    }
+    if (name === "s3Lock.js") {
+        return makeFakeS3Lock();
     }
     throw new Error("unexpected $loadLib: " + name);
 };
@@ -349,4 +382,115 @@ test("s3MasterTable: exportCsv→importCsvで内容が往復する", async () =>
         { id: 1, name: "Alice", age: 30 },
         { id: 2, name: "Bob", age: 25 }
     ]);
+});
+
+// フェイクS3(fakeS3sdk.store)に実際にアップロードされた行データを直接取得する
+// (無ければundefined). bucket 対象バケット名. tableName 対象テーブル名.
+const rawStoredRows = function (bucket, tableName) {
+    const key = bucket + "/table/" + tableName + "/data.json";
+    if (!fakeS3sdk.store.has(key)) {
+        return undefined;
+    }
+    return JSON.parse(fakeS3sdk.store.get(key));
+};
+
+test("s3MasterTable: insert/update/deleteはflushするまでS3(相当)に反映されない", async () => {
+    const db = createDb();
+    const bucket = "test-bucket-" + (bucketSeq - 1);
+    await db.createTable("users", {
+        columns: { id: { type: "int" }, name: { type: "string" } }
+    });
+    // createTableの時点で空配列が即時アップロードされている.
+    assert.deepEqual(rawStoredRows(bucket, "users"), []);
+
+    await db.insert("users", { id: 1, name: "Alice" });
+    // flush前なのでS3(相当)にはまだ反映されていない.
+    assert.deepEqual(rawStoredRows(bucket, "users"), []);
+    // 一方でselect(同一db内)は未flushの変更を参照できる(read-your-own-writes).
+    assert.equal((await db.select("users", {})).length, 1);
+
+    await db.flush("users");
+    assert.deepEqual(rawStoredRows(bucket, "users"), [{ id: 1, name: "Alice" }]);
+
+    await db.update("users", { where: { id: { eq: 1 } } }, { name: "Alice2" });
+    await db.delete("users", { where: { id: { eq: 99 } } });
+    // update/delete後もflush前はS3(相当)は直前のflush時点のまま.
+    assert.deepEqual(rawStoredRows(bucket, "users"), [{ id: 1, name: "Alice" }]);
+
+    await db.flush("users");
+    assert.deepEqual(rawStoredRows(bucket, "users"), [{ id: 1, name: "Alice2" }]);
+});
+
+test("s3MasterTable: transactionは成功時にロック取得→flush→ロック解放まで行う", async () => {
+    const db = createDb();
+    const bucket = "test-bucket-" + (bucketSeq - 1);
+    await db.createTable("users", {
+        columns: { id: { type: "int" }, name: { type: "string" } }
+    });
+
+    await db.transaction("users", async () => {
+        await db.insert("users", { id: 1, name: "Alice" });
+        // flush前なのでこの時点ではまだS3(相当)には反映されない.
+        assert.deepEqual(rawStoredRows(bucket, "users"), []);
+    });
+
+    // transaction完了後はflushされている.
+    assert.deepEqual(rawStoredRows(bucket, "users"), [{ id: 1, name: "Alice" }]);
+
+    // ロックは解放されているので再度transactionを実行できる.
+    await db.transaction("users", async () => {
+        await db.insert("users", { id: 2, name: "Bob" });
+    });
+    assert.deepEqual(rawStoredRows(bucket, "users"), [
+        { id: 1, name: "Alice" }, { id: 2, name: "Bob" }
+    ]);
+});
+
+test("s3MasterTable: transaction内で例外が発生した場合はロールバックしS3(相当)に反映されない", async () => {
+    const db = createDb();
+    const bucket = "test-bucket-" + (bucketSeq - 1);
+    await db.createTable("users", {
+        columns: { id: { type: "int" }, name: { type: "string" } }
+    });
+    await db.insert("users", { id: 1, name: "Alice" });
+    await db.flush("users");
+    assert.deepEqual(rawStoredRows(bucket, "users"), [{ id: 1, name: "Alice" }]);
+
+    await assert.rejects(() => db.transaction("users", async () => {
+        await db.insert("users", { id: 2, name: "Bob" });
+        throw new Error("boom");
+    }), /boom/);
+
+    // ロールバックにより、メモリ・S3(相当)ともにtransaction前の状態のまま.
+    assert.deepEqual(rawStoredRows(bucket, "users"), [{ id: 1, name: "Alice" }]);
+    assert.deepEqual(await db.select("users", {}), [{ id: 1, name: "Alice" }]);
+
+    // ロックは例外発生時も解放されているので、再度transactionを実行できる.
+    await db.transaction("users", async () => {
+        await db.insert("users", { id: 2, name: "Bob" });
+    });
+    assert.deepEqual(rawStoredRows(bucket, "users"), [
+        { id: 1, name: "Alice" }, { id: 2, name: "Bob" }
+    ]);
+});
+
+test("s3MasterTable: 同じテーブルで既にtransactionが実行中の場合は即座にエラーになる", async () => {
+    const db = createDb();
+    await db.createTable("users", {
+        columns: { id: { type: "int" }, name: { type: "string" } }
+    });
+
+    let releaseFirst;
+    const firstTransaction = db.transaction("users", async () => {
+        await new Promise((resolve) => { releaseFirst = resolve; });
+        await db.insert("users", { id: 1, name: "Alice" });
+    });
+
+    // 1つ目のtransactionがロックを保持している間に、2つ目を実行すると失敗する.
+    await assert.rejects(() => db.transaction("users", async () => {
+        await db.insert("users", { id: 2, name: "Bob" });
+    }), /Failed to acquire lock/);
+
+    releaseFirst();
+    await firstTransaction;
 });

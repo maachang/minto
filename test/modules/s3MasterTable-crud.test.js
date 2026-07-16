@@ -90,6 +90,9 @@ global.$loadLib = function (name) {
     if (name === "seqId.js") {
         return require("../../modules/s3table/seqId.js");
     }
+    if (name === "s3Lock.js") {
+        return require("../../modules/s3table/s3Lock.js");
+    }
     throw new Error("unexpected $loadLib: " + name);
 };
 global.$require = function (name) {
@@ -349,4 +352,63 @@ test("s3MasterTable: exportCsv/importCsvでテーブル内容を往復できる"
     const rows = await db.select(table2, { orderBy: { name: "asc" } });
     assert.deepEqual(rows.map((r) => r.name), ["alice", "bob"]);
     assert.deepEqual(rows.map((r) => r.age), [20, 30]);
+});
+
+// S3(localS3)上の生の行データを直接取得する(flushされたかどうかの確認用).
+const rawStoredRows = async function (table) {
+    const res = await s3sdk.get(BUCKET, "table/" + table, "data.json", { noError: true });
+    if (res == null) {
+        return undefined;
+    }
+    return JSON.parse(await res.Body.transformToString("utf-8"));
+};
+
+test("s3MasterTable: insertはflushするまで実際のS3に反映されず、flush後に反映される", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+
+    await db.insert(table, { name: "alice" });
+    assert.deepEqual(await rawStoredRows(table), []);
+
+    await db.flush(table);
+    assert.deepEqual(await rawStoredRows(table), [{ name: "alice" }]);
+});
+
+test("s3MasterTable: transactionは実際のS3上でテーブルロック(master.テーブル名)を使い、成功時にflushする", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+
+    await db.transaction(table, async () => {
+        await db.insert(table, { name: "alice" });
+    });
+    assert.deepEqual(await rawStoredRows(table), [{ name: "alice" }]);
+
+    // transaction完了後はロックが解放されているため、既存のs3Lock.js経由でも
+    // 同じロックキー("master."+テーブル名)を取得できる.
+    const s3Lock = require("../../modules/s3table/s3Lock.js");
+    const lock = s3Lock.create({ bucket: BUCKET });
+    const acquired = await lock.acquire("master." + table);
+    assert.equal(acquired, true);
+    await lock.release("master." + table);
+});
+
+test("s3MasterTable: 実際のS3上で既にロックが取得されている場合、transactionは失敗する", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+
+    const s3Lock = require("../../modules/s3table/s3Lock.js");
+    const lock = s3Lock.create({ bucket: BUCKET });
+    await lock.acquire("master." + table);
+
+    await assert.rejects(() => db.transaction(table, async () => {
+        await db.insert(table, { name: "alice" });
+    }), /Failed to acquire lock/);
+
+    // 失敗時は何もアップロードされていない.
+    assert.deepEqual(await rawStoredRows(table), []);
+
+    await lock.release("master." + table);
 });

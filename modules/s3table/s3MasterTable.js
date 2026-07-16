@@ -30,7 +30,18 @@
 // - テーブル定義(カラム定義)は、テーブル単位ファイルではなく
 //   {prefix}table.json という1つの集約ファイルにテーブル名をキーにして
 //   まとめて保持する(show tables的な一覧参照・キャッシュ効率のため).
-// - join・transactionは不要機能として提供しない(旧実装にはあったが削除).
+// - joinは不要機能として提供しない(旧実装にはあったが削除)。transactionは
+//   後日「テーブル単位ロック+バッファリング書き込み」という形で復活させた
+//   (下記参照)。
+// - insert/update/delete/importCsvはS3への即時アップロードを行わず、
+//   メモリキャッシュ(_rowsCache/_dirty)にのみ変更を保持する。実際の
+//   アップロードはflush(tableName)を呼んだ時点、またはtransaction()経由で
+//   行う(書き込み回数を減らすため)。flush()を呼ばない限りS3には反映
+//   されない点に注意(Lambda実行が終了すると変更は失われる)。
+// - transaction(tableName, fn)は、s3Lock.jsで"master."+tableNameという
+//   キーのロックを取得→fn実行→flush→ロック解放、という流れを提供する。
+//   fn内で例外が発生した場合は、実行前のメモリ状態にロールバックし
+//   (S3へは一切アップロードしない)、ロック解放後に例外を再throwする.
 // - カラム型システム(string/int/float/boolean/date/json/seqId)は
 //   s3IndexTable.jsと共通の考え方. date型はinsert時にDateオブジェクトを
 //   受け取り、内部的にはUnixTimeミリ秒のnumberとして保存し、
@@ -47,6 +58,9 @@
 
     // Snowflake ID方式のユニークID発行(autoIncrementの代替).
     const seqId = $loadLib("seqId.js");
+
+    // テーブル単位の排他ロック(transaction用).
+    const s3Lock = $loadLib("s3Lock.js");
 
     // StreamをStringに変換.
     // (llrtでは for-await-of 構文が動作しない事例があるため
@@ -203,18 +217,79 @@
             return all[tableName];
         };
 
+        // 行データのメモリキャッシュ(1回のLambda実行中のみ有効)と、
+        // S3へ未反映の変更があるかどうかのフラグ(flush/transaction用).
+        const _rowsCache = {};
+        const _dirty = {};
+
         // 行データ全件を取得する(存在しない場合は空配列).
+        // キャッシュがあればそれを返す(flush前の変更もここで参照できる
+        // ようにするため、S3へは問い合わせない).
         const _loadRows = async function (tableName) {
-            const res = await s3sdk.get(_bucket, _dataPrefix(tableName), _dataKey(), _s3opts);
-            if (res == null) {
-                return [];
+            if (_rowsCache[tableName] !== undefined) {
+                return _rowsCache[tableName];
             }
-            return JSON.parse(await _streamToString(res.Body));
+            const res = await s3sdk.get(_bucket, _dataPrefix(tableName), _dataKey(), _s3opts);
+            const rows = (res == null) ? [] : JSON.parse(await _streamToString(res.Body));
+            _rowsCache[tableName] = rows;
+            return rows;
         };
 
         const _saveRows = async function (tableName, rows) {
             await s3sdk.put(_bucket, _dataPrefix(tableName), _dataKey(),
                 JSON.stringify(rows), _s3opts);
+        };
+
+        // 保留中の変更(_dirty)があれば、実際にS3へアップロードする.
+        // tableName 対象のテーブル名を設定します.
+        // 戻り値: アップロードを実施した場合true、変更が無く何もしなかった場合false.
+        const flush = async function (tableName) {
+            if (_dirty[tableName] !== true) {
+                return false;
+            }
+            await _saveRows(tableName, _rowsCache[tableName] || []);
+            _dirty[tableName] = false;
+            return true;
+        };
+
+        // テーブル単位ロック(s3Lock.js)の遅延生成.
+        let _lock = null;
+        const _getLock = function () {
+            if (_lock == null) {
+                _lock = s3Lock.create({
+                    bucket: _bucket, region: _s3opts.region, credentials: _s3opts.credentials
+                });
+            }
+            return _lock;
+        };
+
+        // テーブル単位ロックを取得したうえでfnを実行し、成功時はflushして
+        // ロックを解放する。fn内で例外が発生した場合は、実行前のメモリ状態に
+        // ロールバックし(S3へは一切アップロードしない)、ロックを解放してから
+        // 例外を再throwする.
+        // tableName ロック対象・flush対象のテーブル名を設定します.
+        // fn 実行する処理(引数無しのasync関数)を設定します.
+        // 戻り値: 正常終了時true.
+        const transaction = async function (tableName, fn) {
+            const lockKey = "master." + tableName;
+            const lock = _getLock();
+            if (!(await lock.acquire(lockKey))) {
+                throw new Error("Failed to acquire lock for table: " + tableName);
+            }
+            // ロールバック用に現在のメモリ状態をバックアップ(S3への影響は無い).
+            const backupRows = JSON.parse(JSON.stringify(await _loadRows(tableName)));
+            const backupDirty = _dirty[tableName] === true;
+            try {
+                await fn();
+                await flush(tableName);
+            } catch (e) {
+                _rowsCache[tableName] = backupRows;
+                _dirty[tableName] = backupDirty;
+                throw e;
+            } finally {
+                await lock.release(lockKey);
+            }
+            return true;
         };
 
         // テーブル作成.
@@ -232,6 +307,8 @@
             await s3sdk.put(_bucket, _defsPrefix(), _defsKey(),
                 JSON.stringify(all), _s3opts);
             await _saveRows(tableName, []);
+            _rowsCache[tableName] = [];
+            _dirty[tableName] = false;
             return true;
         };
 
@@ -242,6 +319,8 @@
             await s3sdk.put(_bucket, _defsPrefix(), _defsKey(),
                 JSON.stringify(all), _s3opts);
             await s3sdk.delete(_bucket, _dataPrefix(tableName), _dataKey(), _s3opts);
+            delete _rowsCache[tableName];
+            delete _dirty[tableName];
             return true;
         };
 
@@ -328,7 +407,8 @@
                 rows.push(row);
                 inserted.push(row);
             }
-            await _saveRows(tableName, rows);
+            _rowsCache[tableName] = rows;
+            _dirty[tableName] = true;
             return inserted;
         };
 
@@ -474,7 +554,8 @@
                     cnt++;
                 }
             }
-            await _saveRows(tableName, rows);
+            _rowsCache[tableName] = rows;
+            _dirty[tableName] = true;
             return cnt;
         };
 
@@ -488,7 +569,8 @@
             const rows = await _loadRows(tableName);
             const remaining = rows.filter((r) => !_matchesWhere(schema, r, query.where));
             const cnt = rows.length - remaining.length;
-            await _saveRows(tableName, remaining);
+            _rowsCache[tableName] = remaining;
+            _dirty[tableName] = true;
             return cnt;
         };
 
@@ -522,7 +604,9 @@
         };
 
         // CSV文字列からテーブル全体を置き換える(インポート).
-        // 既存の行データは全て破棄され、CSVの内容で丸ごと置き換わる.
+        // 既存の行データは全て破棄され、CSVの内容で丸ごと置き換わる。
+        // insert等と同様にメモリキャッシュへの反映のみ行い、S3への
+        // アップロードはflush(tableName)またはtransaction()経由で行う.
         // notNull/default/primaryKey/unique/型検証は
         // insertと同様に適用される(一意性チェックはCSV内の行同士でも行う).
         // tableName 対象のテーブル名を設定します.
@@ -568,7 +652,8 @@
                 }
                 newRows.push(_prepareInsertRow(schema, newRows, raw));
             }
-            await _saveRows(tableName, newRows);
+            _rowsCache[tableName] = newRows;
+            _dirty[tableName] = true;
             return newRows.length;
         };
 
@@ -583,7 +668,9 @@
             update: update,
             delete: del,
             exportCsv: exportCsv,
-            importCsv: importCsv
+            importCsv: importCsv,
+            flush: flush,
+            transaction: transaction
         };
     };
 })();
