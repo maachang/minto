@@ -29,16 +29,25 @@
 
 # ローカル実行・デプロイ手順
 
-- ローカル検証環境の起動:
-  ~~~sh
-  npm install    # package.json記載の@aws-sdk/client-s3をインストール(s3table利用時に必要)
-  minto          # ローカルでURL Function相当の検証サーバーを起動(デフォルト http://127.0.0.1:3210/)
-  ~~~
-- AWS Lambdaへのデプロイパッケージ作成:
-  ~~~sh
-  mtpk -t all    # modules配下を全て含めてzip化する場合
-  ~~~
-  必要なモジュールカテゴリだけに絞りたい場合は `mtpk -t {カテゴリ名}` を対象数分指定する(詳細は`${MINTO_HOME}/bin/README.md`のmtpkコマンド節を参照)。
+`${MINTO_HOME}/bin` にPATHが通っているため、以下のコマンドがそのままシェルで
+実行できる(詳細は`${MINTO_HOME}/bin/README.md`を参照)。
+
+- `npm install`: `package.json`記載の`@aws-sdk/client-s3`をインストールする
+  (`modules/s3table`利用時に必要)。
+- `minto`: ローカルでURL Function相当の検証サーバーを起動する
+  (デフォルト http://127.0.0.1:3210/)。カレントディレクトリ(本プロジェクト
+  ディレクトリ)を対象として実行すること。
+- `mtpk [-t {カテゴリ名} ...] [-t all] [-m] [-e] [-z] [-c]`: AWS Lambda
+  デプロイ用のzip(`mtpack.zip`)を作成する。`modules/`配下を含めたい場合は
+  `-t`指定が必須(前述「コーディング規約」の注意を参照)。
+- `localS3 [-p {ポート}] [-d {ディレクトリ}]`: 実AWS S3の代わりにファイル/
+  ディレクトリベースで動作確認できるローカルS3エミュレータを起動する
+  (デフォルトポート`9911`)。`modules/s3table`の動作確認時に、実際のAWS
+  Credentialを用意せず検証したい場合に使う。
+- `tableTool -t <master|index> -c <createTable|dropTable|alterTable|alterIndex> [-n <テーブル名>]`:
+  `modules/s3table`(s3MasterTable.js/s3IndexTable.js)が管理するテーブル定義を
+  作成・変更・削除する。事前に`conf/table/master.json`・`conf/table/index.json`
+  へ「あるべきテーブル定義」を記載してから実行すること。
 
 # ディレクトリ構成
 
