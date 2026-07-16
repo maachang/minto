@@ -141,7 +141,6 @@ test/
 
 以下は実際のAWS/Slack/GitHubへの通信が発生するため、`fetch`のモック化などの追加設計が必要になります。今回は対象外としています。
 
-- `modules/no-sdk/*`(s3client.js, sqs.js, asv4.js)
 - `modules/notification/*`(sendSlack.js, sendGithub.js)
 - `modules/sdk/dynamoDbSdk.js`・`sqsSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`(S3以外のAWSサービス。`tools/localS3.js`はS3のみが対象のため未対応)
 

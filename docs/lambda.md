@@ -22,11 +22,11 @@
 URL: https://github.com/awslabs/llrt/releases
 
 まず上のURLリンクを押下して、以下をダウンロードします。
--  llrt-lambda-arm64-no-sdk.zip
+-  llrt-lambda-arm64-full-sdk.zip
 
 今回作成する AWS Lambda は実行効率の良いとAWSが言ってる `arm64` 環境を対象とします。
 
-上の zip ファイルは AWS-SDK-V3 環境が入ってないもので、最も軽量な LLRT ランタイムとなりますので、これをダウンロードします。
+minto は `modules/s3table`(S3をデータストアとして使う中核モジュール群)で `@aws-sdk/client-s3` を利用するため、AWS-SDK-V3 環境が含まれる `full-sdk` 版の LLRT ランタイムをダウンロードします。
 
 ## ③ ダウンロードした LLRT ランタイムを AWS レイヤー登録する
 
@@ -39,8 +39,8 @@ URL: https://github.com/awslabs/llrt/releases
 上記の流れで Lambda レイヤー作成を行います。
 
 - 名前: llrt
-- 説明 - オプション: llrt v0.7.0-beta no-sdk
-- zipファイルをアップロード -> ファイルを選択(llrt-lambda-arm64-no-sdk.zip を選択)
+- 説明 - オプション: llrt v0.7.0-beta full-sdk
+- zipファイルをアップロード -> ファイルを選択(llrt-lambda-arm64-full-sdk.zip を選択)
 - 互換性のあるアーキテクチャー オプション: arm64
 - 互換性のあるランタイム- オプション: Amazon Linux 2023
 

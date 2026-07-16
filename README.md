@@ -27,46 +27,29 @@ Node.jsの代替ランタイムである[llrt（Low Latency Runtime）](https://
 - アーキテクチャー: arm64
 - メモリ: 128MB
 - ランタイム: Amazon Linux 2023
-- llrt（レイヤー）: llrt v0.7.0-beta（Commits on Feb 9, 2025）no-sdk（https://github.com/awslabs/llrt/releases）
+- llrt（レイヤー）: llrt v0.7.0-beta full-sdk（https://github.com/awslabs/llrt/releases）
 
 実行ソース:
 ~~~js
-const s3 = $loadLib("s3client.js");
+const s3sdk = $loadLib("s3sdk.js");
 
 exports.handler = async function () {
-    let text = "";
-    const s3cl = s3.create();
-    text = await s3cl.getObject(
-        { Bucket: "test-minto", Key: "test/hogehoge", resultType: "text" });
+    const res = await s3sdk.get("test-minto", null, "test/hogehoge");
+    const text = await res.Body.transformToString("utf-8");
     return { "hoge": 100, "hogehoge": text }
 }
 ~~~
 
 | 実行環境 | 実行パターン | Billed Duration | Init Duration | Max Memory Used |
 |---|---|---|---|---|
-| llrt v0.7.0-beta no-sdk（fetch + AWS Signature V4） | コールドスタート | 158 ms | 53.69 ms | 24 MB |
-| llrt v0.7.0-beta no-sdk（fetch + AWS Signature V4） | ウォームスタート | 15 ms | - | 24 MB |
 | llrt v0.7.0-beta full（AWS-SDK-V3） | コールドスタート | 258 ms | 67.85 ms | 31 MB |
 | Node.js v22（AWS-SDK-V3） | コールドスタート | 4802 ms | 156.66 ms | 97 MB |
 
-- コールドスタートでも「AWS Lambdaとは思えないほど高速」（158 ms）に実行され、ウォームスタートではさらに高速（15 ms）です。
-- AWS-SDK-V3を使うllrt full版でも258 msと、Node.js版（4802 ms）に比べれば十分高速なので、S3以外のAWSサービスを利用する場合はこちらでも実用的です。
+- AWS-SDK-V3を使うllrt full版でも258 msと、Node.js版（4802 ms）に比べれば十分高速です。
 - 比較用に計測したNode.js（v22, AWS-SDK-V3）でのコールドスタートは4802 ms・97 MBとなり、llrtランタイムの軽量さが際立つ結果となっています。
 
 <details>
 <summary>各実行結果の生ログ</summary>
-
-AWS lambda URL Function実行結果（コールドスタート / no-sdk）:
-> REPORT RequestId: 82c60798-6ea5-4f3d-befd-5957174db2c0 Duration: 103.77 ms Billed Duration: 158 ms Memory Size: 128 MB Max Memory Used: 24 MB Init Duration: 53.69 ms
-
-実行結果:
-~~~
-hoge	100
-hogehoge	"testHogehoge"
-~~~
-
-AWS lambda URL Function実行結果（ウォームスタート / no-sdk）:
-> REPORT RequestId: a5465a5b-94d2-4b7e-badb-e21690211f9a Duration: 14.69 ms Billed Duration: 15 ms Memory Size: 128 MB Max Memory Used: 24 MB
 
 AWS lambda URL Function実行結果（コールドスタート / llrt full, AWS-SDK-V3）:
 > REPORT RequestId: 3851698e-8163-4f38-a9f6-3d943a064465 Duration: 190.13 ms Billed Duration: 258 ms Memory Size: 128 MB Max Memory Used: 31 MB Init Duration: 67.85 ms
