@@ -7,11 +7,19 @@
     // fs.
     const fs = require('fs');
 
+    // path.
+    const path = require('path');
+
     // args.
     const args = require("./args.js");
 
     // mintoUtil.
     const mintoUtil = require("./mintoUtil.js");
+
+    // プロジェクト生成テンプレートファイル(package.json, claude.md等)の
+    // 配置先ディレクトリ. 編集して雛形の内容を変更できるようにするため、
+    // ハードコードせずファイルとして切り出している.
+    const _PROJECT_CONF_DIR = path.join(__dirname, "projectConf");
 
     // 作成対象フォルダ: public.
     const _PUBLIC_FOLDER = "public";
@@ -68,6 +76,20 @@
         return true;
     }
 
+    // tools/projectConf/配下のテンプレートファイルを読み込み、"${変数名}"を
+    // 置き換えた内容を返す.
+    // templateName 対象のテンプレートファイル名(tools/projectConf/直下)を設定します.
+    // vars 置き換える変数({変数名: 置き換え文字列})を設定します.
+    // 戻り値: 置き換え後のテキストが返却されます.
+    const renderTemplate = function (templateName, vars) {
+        let text = fs.readFileSync(
+            path.join(_PROJECT_CONF_DIR, templateName), "utf-8");
+        for (const key in vars) {
+            text = text.split("${" + key + "}").join(vars[key]);
+        }
+        return text;
+    }
+
     // conf/xxx.json を作成.
     const createConfJson = function (projectName, confName, writeText) {
         // 既にプロジェクトディレクトリが存在する場合.
@@ -94,7 +116,7 @@
         );
     }
 
-    // package.json を作成.
+    // package.json を作成(tools/projectConf/package.json テンプレートより).
     // modules/s3table が実行時に必要とする @aws-sdk/client-s3 を、プロジェクト
     // ローカルへ npm install できるようにするためのもの(ローカル検証専用。
     // AWS Lambda本番実行時は llrt-lambda-{cpu名}-full-sdk.zip のLayerが
@@ -107,14 +129,23 @@
         }
         fs.writeFileSync(
             projectName + "/package.json",
-            "{\n" +
-            "    \"name\": \"" + projectName + "\",\n" +
-            "    \"version\": \"1.0.0\",\n" +
-            "    \"private\": true,\n" +
-            "    \"dependencies\": {\n" +
-            "        \"@aws-sdk/client-s3\": \"latest\"\n" +
-            "    }\n" +
-            "}"
+            renderTemplate("package.json", { PROJECT_NAME: projectName })
+        );
+    }
+
+    // .claude/CLAUDE.md を作成(tools/projectConf/claude.md テンプレートより).
+    // Claude Codeがセッション開始時に自動的に読み込む、プロジェクト固有情報
+    // ファイルの雛形.
+    const createClaudeMd = function (projectName) {
+        if (!mintoUtil.existsDirSync(projectName)) {
+            p("[ERROR] Project directory does not exist: " + projectName);
+            return false;
+        }
+        const claudeDir = projectName + "/.claude";
+        createDir(claudeDir);
+        fs.writeFileSync(
+            claudeDir + "/CLAUDE.md",
+            renderTemplate("claude.md", { PROJECT_NAME: projectName })
         );
     }
 
@@ -164,6 +195,9 @@
 
         // package.json を作成.
         createPackageJson(projectName);
+
+        // .claude/CLAUDE.md を作成.
+        createClaudeMd(projectName);
 
         // プロジェクト作成完了.
         p("[success] " + projectName + " project created.");

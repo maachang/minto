@@ -47,9 +47,22 @@ mkmt [PROJECT NAME]
 ├── conf/            # 設定ファイル格納ディレクトリ
 │   ├── env.json     # 環境設定ファイル
 │   └── minto.json   # minto サーバー設定ファイル
-└── package.json     # modules/s3table が必要とする @aws-sdk/client-s3 の
-                        ローカルインストール用
+├── package.json     # modules/s3table が必要とする @aws-sdk/client-s3 の
+│                       ローカルインストール用
+└── .claude/
+    └── CLAUDE.md    # Claude Code がセッション開始時に自動読み込みする
+                        プロジェクト固有情報ファイルの雛形
 ```
+
+## テンプレートファイルについて
+
+`package.json`・`.claude/CLAUDE.md`は、`tools/projectConf/`配下に置かれた
+テンプレートファイル(`package.json`、`claude.md`)から生成されます。
+テンプレート内の`${PROJECT_NAME}`のような`${変数名}`は、生成時にプロジェクト名等へ
+置き換えられます。
+
+雛形の内容を変更したい場合は、`tools/projectConf/`配下の該当ファイルを
+直接編集してください(`mkmt`のソースコードを変更する必要はありません)。
 
 ## 生成される設定ファイル
 
@@ -88,6 +101,10 @@ mkmt [PROJECT NAME]
 > cd <PROJECT NAME>
 > npm install
 ```
+
+### .claude/CLAUDE.md
+
+Claude Codeがセッション開始時に自動的に読み込む、プロジェクト固有情報ファイルの雛形です。プロジェクト概要・ディレクトリ構成・コーディング規約等のセクションが空欄付きで用意されるので、プロジェクトの内容に合わせて編集してください。
 
 ### conf/minto.json
 
