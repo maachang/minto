@@ -1,0 +1,76 @@
+#!/bin/sh
+# minto初期セットアップスクリプト.
+#
+# git リポジトリから取得した minto を利用可能にするため、
+# MINTO_HOME環境変数の設定とPATHへのbin追加を、シェル設定ファイルへ
+# 自動的に追記する。
+#
+# 対応シェル: bash(.bashrc / macOSのみ.bash_profile), zsh(.zshrc)
+# 対応環境: Linux, macOS, WSL2(Linuxと同じ扱いになる)
+#
+# 使い方:
+#   cd minto
+#   ./bin/initMinto.sh
+#   (追記後は `source <表示された設定ファイル>` するか、ターミナルを再起動)
+
+set -e
+
+# このスクリプト自身の絶対パスから、mintoのルートディレクトリ(MINTO_HOME)を算出する.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MINTO_HOME="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# 追記対象のシェル設定ファイルを決定する.
+# $SHELL(ログインシェル)を基準に、bash/zshのみ対応する.
+detect_profile() {
+    shell_name="$(basename "${SHELL:-bash}")"
+    case "${shell_name}" in
+        zsh)
+            echo "${HOME}/.zshrc"
+            ;;
+        bash)
+            if [ "$(uname)" = "Darwin" ]; then
+                # macOSのTerminal.appはログインシェルとして起動し、
+                # 非ログインシェル用の.bashrcではなく.bash_profileを読み込むため.
+                echo "${HOME}/.bash_profile"
+            else
+                # Linux・WSL2はどちらも.bashrcで統一.
+                echo "${HOME}/.bashrc"
+            fi
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+PROFILE_FILE="$(detect_profile)"
+
+if [ -z "${PROFILE_FILE}" ]; then
+    echo "[minto] 対応していないシェルです(bash/zshのみ対応): \$SHELL=${SHELL:-未設定}" >&2
+    echo "[minto] 以下の内容を、利用しているシェルの設定ファイルへ手動で追記してください。" >&2
+    echo "" >&2
+    echo "export MINTO_HOME=${MINTO_HOME}" >&2
+    echo "export PATH=\${MINTO_HOME}/bin:\${PATH}" >&2
+    exit 1
+fi
+
+MARKER_BEGIN="# >>> minto initialize >>>"
+MARKER_END="# <<< minto initialize <<<"
+
+if [ -f "${PROFILE_FILE}" ] && grep -qF "${MARKER_BEGIN}" "${PROFILE_FILE}" 2>/dev/null; then
+    echo "[minto] 既に ${PROFILE_FILE} に設定済みのため、追記をスキップしました。"
+else
+    {
+        echo ""
+        echo "${MARKER_BEGIN}"
+        echo "export MINTO_HOME=${MINTO_HOME}"
+        echo "export PATH=\${MINTO_HOME}/bin:\${PATH}"
+        echo "${MARKER_END}"
+    } >> "${PROFILE_FILE}"
+    echo "[minto] MINTO_HOME=${MINTO_HOME} を ${PROFILE_FILE} に追記しました。"
+fi
+
+echo ""
+echo "設定を反映するには、以下のいずれかを実行してください。"
+echo "  source ${PROFILE_FILE}"
+echo "  (または、ターミナルを再起動してください)"
