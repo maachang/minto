@@ -42,7 +42,8 @@
 
 ## 利用側(s3sdk.js/s3Lock.js)の設定
 
-`minto`コマンド実行時に読み込まれる `conf/env.json` (詳細は[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#ローカル実行用環境変数コンフィグ定義)を参照)に、以下の環境変数を設定します。
+`mkmt`でプロジェクトを作成すると、`minto`コマンド実行時に読み込まれる
+`conf/env.json` (詳細は[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#ローカル実行用環境変数コンフィグ定義)を参照)に、以下の環境変数がデフォルトで設定されます(手動設定は不要です)。
 
 ~~~json
 {

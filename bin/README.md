@@ -75,26 +75,23 @@ mkmt で作成された mintoプロジェクトによるWebアプリ実装ディ
     +-- lib: minto 対象の モジュールjs の配置先.
     |
     +-- conf: minto 実行に対する conf ファイル(json) 配置先.
-          |
-          +-- env.json: ローカル環境で 環境変数定義が設定出来ます.
-          |
-          +-- minto.json ローカルminto定義(bindPortなど).
+    |     |
+    |     +-- env.json: ローカル環境で 環境変数定義が設定出来ます.
+    |     |
+    |     +-- minto.json ローカルminto定義(bindPortなど).
+    |
+    +-- package.json: modules/s3table が必要とする @aws-sdk/client-s3 を
+          ローカルインストールするためのもの.
 ~~~
 
-※ 以下対応は不要かも
-<<開始>>
-また このコマンド利用に対して `aws-sdk-v3(nodejs)` をインストールして利用可能にする必要があります.
+`mkmt`で作成したプロジェクトには`package.json`(`@aws-sdk/client-s3`依存)が
+含まれているため、`modules/s3table`(S3をデータストアとして使うモジュール群)を
+利用する場合は、以下の通りローカルインストールしてください。
 
-- S3Client利用の場合は以下の形でグローバルインストール
 ~~~sh
-> npm i @aws-sdk/client-s3 -g
+> cd {mintoプロジェクト名}
+> npm install
 ~~~
-
-その後以下のパスを設定する事でグローバルインストールされたnpmモジュール利用が可能となります.
-~~~sh
-export NODE_PATH=`npm root -g`
-~~~
-<<終了>>
 
 ※ ちなみに llrt だと http or https モジュールが利用できないようなので、minto=nodeしか利用できません.
 

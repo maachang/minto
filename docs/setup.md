@@ -71,10 +71,13 @@ mintoによるWebアプリ実装ディレクトリ:
     +-- lib: minto 対象の モジュールjs の配置先.
     |
     +-- conf: minto 実行に対する conf ファイル(json) 配置先.
-          |
-          +-- env.json: ローカル環境で 環境変数定義が設定出来ます.
-          |
-          +-- minto.json ローカルminto定義(bindPortなど).
+    |     |
+    |     +-- env.json: ローカル環境で 環境変数定義が設定出来ます.
+    |     |
+    |     +-- minto.json ローカルminto定義(bindPortなど).
+    |
+    +-- package.json: modules/s3table(S3をデータストアとして使うモジュール群)が
+          必要とする @aws-sdk/client-s3 をローカルインストールするためのもの.
 ~~~
 
 まず検証環境を作成する「対象ディレクトリ」を作成し、その配下に上のディレクトリを作成して、検証環境を生成します。
@@ -86,9 +89,13 @@ mintoによるWebアプリ実装ディレクトリ:
 ~~~sh
 cd {mintoプロジェクトを作成するディレクトリ名}
 > mkmt {mintoプロジェクト名}
+> cd {mintoプロジェクト名}
+> npm install
 ~~~
 
-これで新しいmintoプロジェクトが作成されます.
+これで新しいmintoプロジェクトが作成されます(`package.json`が生成されるため、
+`modules/s3table`を使う場合に備えて`npm install`で`@aws-sdk/client-s3`を
+ローカルインストールしておくことを推奨します)。
 
 あと、コマンドについて詳しくは [このURL](https://github.com/maachang/minto/tree/main/bin) の `README.md` を参照してください.
 
@@ -168,18 +175,29 @@ minto
 
 ### ローカル実行用環境変数コンフィグ定義.
 - `conf/env.json`
-~~~
+
+`mkmt`でプロジェクトを作成すると、以下の内容(`modules/s3table`のローカル検証環境
+(`localS3`)向けの環境変数)がデフォルトで生成されます。
+
+~~~json
 {
-    "SLACK_TOKEN": "xxxxxxxxxxxxxxxxxxxxxxx"
+    "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911",
+    "AWS_ACCESS_KEY_ID": "local",
+    "AWS_SECRET_ACCESS_KEY": "local"
 }
 ~~~
+
+s3table関連(`modules/s3table/s3sdk.js`・`s3Lock.js`・`s3MasterTable.js`・
+`s3IndexTable.js`)を利用しない場合はこれらを削除しても問題ありません。詳しくは
+[localS3.md](https://github.com/maachang/minto/blob/main/docs/localS3.md)を
+参照してください。
 
 AWS Lambda では環境変数が利用できますが、これを ローカルminto環境では、わざわざ環境変数定義をせずとも、この定義ファイルで環境変数定義が行えます.
 
 環境変数の定義方法としては
 - {key: value, key: value ....}
 
-このように行う事で環境変数の利用が可能となります.
+このように行う事で環境変数の利用が可能となります(上記の`MINTO_LOCAL_S3_ENDPOINT`等以外にも、`SLACK_TOKEN`のような任意のキーを追加できます).
 
 ### mintoローカル実行用コンフィグ定義.
 - `conf/minto.json`

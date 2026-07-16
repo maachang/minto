@@ -82,8 +82,40 @@
     }
 
     // conf/env.json を作成.
+    // modules/s3table(s3sdk.js/s3Lock.js/s3MasterTable.js/s3IndexTable.js)の
+    // ローカル検証環境(tools/localS3.js)向けの環境変数をデフォルトで含める.
     const createEnvJson = function (projectName) {
-        createConfJson(projectName, "env", "{\n}");
+        createConfJson(projectName, "env",
+            "{\n" +
+            "    \"MINTO_LOCAL_S3_ENDPOINT\": \"http://localhost:9911\",\n" +
+            "    \"AWS_ACCESS_KEY_ID\": \"local\",\n" +
+            "    \"AWS_SECRET_ACCESS_KEY\": \"local\"\n" +
+            "}"
+        );
+    }
+
+    // package.json を作成.
+    // modules/s3table が実行時に必要とする @aws-sdk/client-s3 を、プロジェクト
+    // ローカルへ npm install できるようにするためのもの(ローカル検証専用。
+    // AWS Lambda本番実行時は llrt-lambda-{cpu名}-full-sdk.zip のLayerが
+    // @aws-sdk/client-s3 を提供するため、このpackage.json自体はデプロイ
+    // パッケージ(mtpk)には含まれない).
+    const createPackageJson = function (projectName) {
+        if (!mintoUtil.existsDirSync(projectName)) {
+            p("[ERROR] Project directory does not exist: " + projectName);
+            return false;
+        }
+        fs.writeFileSync(
+            projectName + "/package.json",
+            "{\n" +
+            "    \"name\": \"" + projectName + "\",\n" +
+            "    \"version\": \"1.0.0\",\n" +
+            "    \"private\": true,\n" +
+            "    \"dependencies\": {\n" +
+            "        \"@aws-sdk/client-s3\": \"latest\"\n" +
+            "    }\n" +
+            "}"
+        );
     }
 
     // conf/minto.json を作成.
@@ -130,8 +162,12 @@
         // minto.json を作成.
         createMintoJson(projectName);
 
+        // package.json を作成.
+        createPackageJson(projectName);
+
         // プロジェクト作成完了.
         p("[success] " + projectName + " project created.");
+        p("  > cd " + projectName + " && npm install");
     }
 
     // コマンド実行処理.

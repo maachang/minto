@@ -25,6 +25,9 @@ mintoによるWebアプリ実装ディレクトリ:
     +-- lib: minto 対象の モジュールjs の配置先.
     |
     +-- conf: minto 実行に対する conf ファイル(json) 配置先.
+    |
+    +-- package.json: modules/s3table が必要とする @aws-sdk/client-s3 を
+          ローカルインストールするためのもの.
 ~~~
 
 mintoローカル実行を行なうための環境を作成します.
@@ -32,6 +35,7 @@ mintoローカル実行を行なうための環境を作成します.
 cd {mintoプロジェクトを作成するディレクトリ名}
 mkmt {mintoプロジェクト名}
 cd {mintoプロジェクト名}
+npm install
 echo "test" >> public/index.html
 minto
 ~~~
