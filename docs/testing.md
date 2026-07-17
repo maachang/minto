@@ -111,6 +111,9 @@ test/
   - backupTable/restoreTable/listBackups(行データ・インデックス・スキーマの
     バックアップ世代管理、バックアップ時点への全置換リストア、存在しない
     backupId指定時のエラー)
+  - previewRestore(restoreTableを実行せずに現在/バックアップの行数を比較、
+    存在しないbackupId指定時のエラー)、pruneBackups(直近keep世代だけを
+    残して古い世代を削除、keep以下の世代数なら何もしないこと)
 
   ポートは`test/e2e/webapps.test.js`と同様に`net`モジュールでOSに空きポートを割り当てる方式、ストレージ先は`os.tmpdir()`配下の一時ディレクトリを使い、テスト終了後に削除しています。
 - **s3MasterTable-crud.test.js**: `modules/s3table/s3MasterTable.js`(テーブル全体1JSON方式)のCRUD/検索エンジン本体を、`s3IndexTable-crud.test.js`と同じ方式(`tools/localS3.js`を子プロセスとして起動)で検証します。
@@ -131,6 +134,9 @@ test/
   - backupTable/restoreTable/listBackups(行データ・スキーマのバックアップ
     世代管理、バックアップ時点への全置換リストア、backupTableがflush前の
     未反映な変更も対象に含むこと、存在しないbackupId指定時のエラー)
+  - previewRestore(restoreTableを実行せずに現在/バックアップの行数を比較、
+    存在しないbackupId指定時のエラー)、pruneBackups(直近keep世代だけを
+    残して古い世代を削除、keep以下の世代数なら何もしないこと)
 
 ### e2e/
 
@@ -142,7 +148,7 @@ test/
 
   ポートは`net`モジュールでOSに空きポートを割り当ててもらう方式にしており、固定ポートによる競合を避けています。
 
-- **tableTool.test.js**: `tools/tableTool.js`(テーブル管理コマンド: createTable/dropTable/alterTable/alterIndex/backupTable/restoreTable/listBackups)を、`tools/localS3.js`を子プロセスとして起動した上で、実際に`node tools/tableTool.js -t ... -c ...`を子プロセス実行して標準出力のJSON結果を検証します。以下を確認しています。
+- **tableTool.test.js**: `tools/tableTool.js`(テーブル管理コマンド: createTable/dropTable/alterTable/alterIndex/backupTable/restoreTable/listBackups/previewRestore/pruneBackups)を、`tools/localS3.js`を子プロセスとして起動した上で、実際に`node tools/tableTool.js -t ... -c ...`を子プロセス実行して標準出力のJSON結果を検証します。以下を確認しています。
   - createTableが未作成テーブルのみを作成すること(べき等性)
   - alterTableがカラムの追加・削除を反映すること
   - alterTableがnotNullカラム追加時にdefault未指定だと検証エラーで中断すること(何も適用されない)
@@ -152,6 +158,8 @@ test/
   - backupTable/restoreTable/listBackupsの呼び出し・世代管理・JSON出力の形
     (target=master/index両方。実際の行データ・インデックスの複製内容の検証は
     s3IndexTable-crud.test.js・s3MasterTable-crud.test.js側で行う)
+  - previewRestore(呼び出し・backupId未指定時のエラー)、pruneBackups
+    (直近keep世代だけを残すこと、keep未指定時のエラー)
   - backupTable等でtableName未指定時のエラー
   - 定義ファイル(`conf/table/{target}.json`)が存在しない場合のエラー応答
 

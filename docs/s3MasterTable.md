@@ -49,16 +49,19 @@ aws lambda(LLRM) での 関数URLの実装に対して、AWS RDS を使う事は
 | **BACKUP** | `backupTable(name)` | 行データ・スキーマの新しいバックアップ世代を作成。`bin/tableTool`経由での利用を想定 |
 | **SHOW BACKUPS** | `listBackups(name)` | 既存バックアップ世代(backupId)一覧を古い順で取得 |
 | **RESTORE** | `restoreTable(name, backupId)` | 指定世代の内容でテーブルを全置換(差分マージなし) |
+| **PREVIEW RESTORE** | `previewRestore(name, backupId)` | `restoreTable`のdry-run。現在とバックアップの行数を比較するだけで復元はしない |
+| **PRUNE BACKUPS** | `pruneBackups(name, keep)` | 直近`keep`世代だけ残し、古いバックアップ世代を削除する |
 
 `join`は不要機能として提供していません（過去バージョンにはありましたが削除しました）。`transaction`は後述の形で復活させています。
 
 ### バックアップ/リストア
 
-`backupTable`/`listBackups`/`restoreTable`は`s3IndexTable.js`と共通の物理コピー方式(S3の`CopyObject`は使わず既存の`get`/`put`経由で複製)です。本モジュールはテーブル全体1JSON(`data.json`)方式なのでインデックスは無く、`data.json`＋スキーマ定義の2ファイルを`backup/{テーブル名}/{backupId}/`配下(`backupId`は実行時のUnixTimeミリ秒)に複製するだけで済みます(`s3IndexTable.js`より単純)。
+`backupTable`/`listBackups`/`restoreTable`/`previewRestore`/`pruneBackups`は`s3IndexTable.js`と共通の物理コピー方式(S3の`CopyObject`は使わず既存の`get`/`put`経由で複製)です。本モジュールはテーブル全体1JSON(`data.json`)方式なのでインデックスは無く、`data.json`＋スキーマ定義の2ファイルを`backup/{テーブル名}/{backupId}/`配下(`backupId`は実行時のUnixTimeミリ秒)に複製するだけで済みます(`s3IndexTable.js`より単純)。
 
 - `backupTable`は`_loadRows`経由で行データを取得するため、`flush`前の未反映な変更(自分がinsertした内容)もバックアップ対象に含まれます(`select`と同じ「現在の実効値」を見る挙動)
-- 複数世代を保持でき、古い世代の削除は現状自動では行われません(必要であれば別途手動でS3オブジェクトを削除してください)
+- 複数世代を保持でき、`pruneBackups(name, keep)`で直近`keep`世代だけを残して古い世代を削除できます(`keep`以下の世代数なら何もしません)。`pruneBackups`を呼ばない限り古い世代は自動では削除されません
 - `restoreTable`は指定世代の内容で現在のテーブル(行データ・スキーマ)を**全置換**します(差分マージはしない)。復元後は即座にS3へ書き込まれ、メモリキャッシュも復元後の内容にリセットされるため`flush`は不要です
+- `previewRestore(name, backupId)`は`restoreTable`実行前のdry-runです。現在の行数とバックアップの行数を比較するだけで、実際の復元・削除は一切行いません(行数以外のスキーマ差分等は表示しません)
 - バックアップ/リストア実行中も通常のCRUD処理自体はロックされないため、整合性の取れたバックアップ/リストアを行うにはメンテナンス時間帯に実行する運用が前提となります(`bin/tableTool`のメンテナンスロックにより、他の管理コマンドとの多重実行のみ防止されます)
 
 ### 書き込みのバッファリングとflush/transaction

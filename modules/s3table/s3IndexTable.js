@@ -529,6 +529,53 @@
             return { tableName: tableName, backupId: backupId, rowCount: rowCount, indexEntryCount: indexEntryCount };
         };
 
+        // 指定prefix配下のオブジェクト数を数える(内部ユーティリティ).
+        const _countUnder = async function (prefix) {
+            let count = 0;
+            let token = undefined;
+            do {
+                const res = await s3sdk.list(_bucket, prefix,
+                    Object.assign({}, _s3opts, { continuationToken: token, maxKey: 1000 }));
+                count += (res.Contents || []).length;
+                token = res.IsTruncated ? res.NextContinuationToken : undefined;
+            } while (token);
+            return count;
+        };
+
+        // restoreTable実行前に、現在の行数とバックアップの行数を比較できる
+        // dry-run用の確認API(実際の復元・削除は一切行わない).
+        // tableName 対象のテーブル名を設定します.
+        // backupId 確認対象のバックアップ世代IDを設定します.
+        // 戻り値: { tableName, backupId, currentRowCount, backupRowCount }
+        const previewRestore = async function (tableName, backupId) {
+            const backupBase = _backupPrefix(tableName, backupId);
+            const schemaRes = await s3sdk.get(_bucket, backupBase, "schema.json", _s3opts);
+            if (schemaRes == null) {
+                throw new Error("Backup not found: " + tableName + "/" + backupId);
+            }
+            const currentRowCount = await _countUnder(_tablePrefix(tableName));
+            const backupRowCount = await _countUnder(backupBase + "/rows");
+            return { tableName: tableName, backupId: backupId,
+                currentRowCount: currentRowCount, backupRowCount: backupRowCount };
+        };
+
+        // 古いバックアップ世代を削除し、直近keep世代分だけを残す.
+        // tableName 対象のテーブル名を設定します.
+        // keep 残す世代数(0以上の整数)を設定します.
+        // 戻り値: { tableName, keep, deleted }(deletedは削除したbackupIdの配列、古い順).
+        const pruneBackups = async function (tableName, keep) {
+            const backups = await listBackups(tableName);
+            const deleted = [];
+            if (backups.length > keep) {
+                const toDelete = backups.slice(0, backups.length - keep);
+                for (let i = 0; i < toDelete.length; i++) {
+                    await _removeAllUnder(_backupPrefix(tableName, toDelete[i]));
+                    deleted.push(toDelete[i]);
+                }
+            }
+            return { tableName: tableName, keep: keep, deleted: deleted };
+        };
+
         // 既存テーブルにインデックスを追加(既存行に対してバックフィルする).
         // tableName 対象のテーブル名を設定します.
         // indexName 追加するインデックス名を設定します.
@@ -1013,6 +1060,8 @@
             backupTable: backupTable,
             listBackups: listBackups,
             restoreTable: restoreTable,
+            previewRestore: previewRestore,
+            pruneBackups: pruneBackups,
             createIndex: createIndex,
             dropIndex: dropIndex,
             insert: insert,

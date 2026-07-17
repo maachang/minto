@@ -51,7 +51,7 @@
         let rawPath = event.rawPath;
         // rawPathが無く、event.targetが指定されている場合はテーブル管理
         // コマンド(createTable/dropTable/alterTable/alterIndex/backupTable/
-        // restoreTable/listBackups)の実行と判定する.
+        // restoreTable/listBackups/previewRestore/pruneBackups)の実行と判定する.
         // AWSコンソールの「テスト実行」やtools/tableTool.jsから、Function URL
         // 形式ではないevent({ target, command, ... })が渡されるケース.
         if (rawPath == null && event.target != null) {
@@ -297,7 +297,7 @@
 
     ///////////////////////////////////////////////
     // テーブル管理コマンド(createTable/dropTable/alterTable/alterIndex/
-    // backupTable/restoreTable/listBackups).
+    // backupTable/restoreTable/listBackups/previewRestore/pruneBackups).
     //
     // AIメモ: masterとindexは同一実行内で同時に処理しない
     // (タイムアウト対策のため、対象は必ずどちらか一方のみ). 定義ファイルは
@@ -309,11 +309,13 @@
     // あれば何も適用せず中断する。多重実行防止はs3Lock.jsによる単一の
     // メンテナンスロックで行う(タイムアウトは実質無し。異常終了時は手動で
     // ロック解除する運用).
-    // backupTable/restoreTable/listBackupsはmaster/index両対応の機能で、
-    // conf/table/{target}.jsonの「あるべき定義」との差分比較は行わず、
-    // 指定したテーブルの現在のS3上のデータ(行データ・スキーマ、
-    // target=indexの場合はインデックスも含む)をそのまま対象にする.
-    // 詳細はdocs/s3-row-store-design.md・docs/s3MasterTable.md参照.
+    // backupTable/restoreTable/listBackups/previewRestore/pruneBackupsは
+    // master/index両対応の機能で、conf/table/{target}.jsonの「あるべき定義」
+    // との差分比較は行わず、指定したテーブルの現在のS3上のデータ(行データ・
+    // スキーマ、target=indexの場合はインデックスも含む)をそのまま対象にする.
+    // previewRestoreはrestoreTableのdry-run(行数比較のみ、実際の復元・削除は
+    // 行わない)、pruneBackupsは古いバックアップ世代を削除し直近keep世代分だけ
+    // 残す機能. 詳細はdocs/s3-row-store-design.md・docs/s3MasterTable.md参照.
     ///////////////////////////////////////////////
 
     // メンテナンスロックのキー名.
@@ -397,19 +399,22 @@
     // テーブル管理コマンド実行本体.
     // event.target "master"|"index" を設定します.
     // event.command "createTable"|"dropTable"|"alterTable"|"alterIndex"|
-    //   "backupTable"|"restoreTable"|"listBackups" を設定します.
-    // event.tableName alterIndex/backupTable/restoreTable/listBackups
-    //   の場合に必須の対象テーブル名(alterIndexのみtarget="index"限定、
-    //   backupTable/restoreTable/listBackupsはmaster/index両対応).
-    // event.backupId restoreTableの場合のみ必須のバックアップ世代ID
-    //   (backupTableの実行結果で返るbackupId).
+    //   "backupTable"|"restoreTable"|"listBackups"|"previewRestore"|
+    //   "pruneBackups" を設定します.
+    // event.tableName alterIndex/backupTable/restoreTable/listBackups/
+    //   previewRestore/pruneBackupsの場合に必須の対象テーブル名
+    //   (alterIndexのみtarget="index"限定、それ以外はmaster/index両対応).
+    // event.backupId restoreTable/previewRestoreの場合のみ必須の
+    //   バックアップ世代ID(backupTableの実行結果で返るbackupId).
+    // event.keep pruneBackupsの場合のみ必須の残す世代数(0以上の整数).
     const _responseTableCommand = async function (event) {
         const target = event.target;
         const command = event.command;
         if (target !== "master" && target !== "index") {
             return { error: "不正なtargetです: " + target };
         }
-        const _TABLE_NAME_REQUIRED_COMMANDS = ["alterIndex", "backupTable", "restoreTable", "listBackups"];
+        const _TABLE_NAME_REQUIRED_COMMANDS = ["alterIndex", "backupTable", "restoreTable",
+            "listBackups", "previewRestore", "pruneBackups"];
         if (["createTable", "dropTable", "alterTable"].concat(_TABLE_NAME_REQUIRED_COMMANDS).indexOf(command) === -1) {
             return { error: "不正なcommandです: " + command };
         }
@@ -420,8 +425,12 @@
             if (event.tableName == null) {
                 return { error: command + "にはtableNameの指定が必須です。" };
             }
-            if (command === "restoreTable" && event.backupId == null) {
-                return { error: "restoreTableにはbackupIdの指定が必須です。" };
+            if ((command === "restoreTable" || command === "previewRestore") && event.backupId == null) {
+                return { error: command + "にはbackupIdの指定が必須です。" };
+            }
+            if (command === "pruneBackups" &&
+                !(Number.isInteger(event.keep) && event.keep >= 0)) {
+                return { error: "pruneBackupsにはkeep(0以上の整数)の指定が必須です。" };
             }
         }
 
@@ -460,8 +469,12 @@
                 return await _tableCommandBackup(db, target, event.tableName);
             } else if (command === "listBackups") {
                 return await _tableCommandListBackups(db, target, event.tableName);
-            } else {
+            } else if (command === "restoreTable") {
                 return await _tableCommandRestore(db, target, event.tableName, event.backupId);
+            } else if (command === "previewRestore") {
+                return await _tableCommandPreviewRestore(db, target, event.tableName, event.backupId);
+            } else {
+                return await _tableCommandPruneBackups(db, target, event.tableName, event.keep);
             }
         } catch (e) {
             console.error("[error][" + $requestId() + "]tableCommand: ", e);
@@ -585,6 +598,22 @@
             ret.indexEntryCount = result.indexEntryCount;
         }
         return ret;
+    };
+
+    // previewRestore: restoreTable実行前に、現在の行数とバックアップの
+    // 行数を比較できるdry-run用の確認API(master/index両対応. 実際の
+    // 復元・削除は一切行わない).
+    const _tableCommandPreviewRestore = async function (db, target, tableName, backupId) {
+        const result = await db.previewRestore(tableName, backupId);
+        return { command: "previewRestore", target: target, tableName: tableName, backupId: backupId,
+            currentRowCount: result.currentRowCount, backupRowCount: result.backupRowCount };
+    };
+
+    // pruneBackups: 古いバックアップ世代を削除し、直近keep世代分だけを
+    // 残す(master/index両対応).
+    const _tableCommandPruneBackups = async function (db, target, tableName, keep) {
+        const result = await db.pruneBackups(tableName, keep);
+        return { command: "pruneBackups", target: target, tableName: tableName, keep: keep, deleted: result.deleted };
     };
 
     // requestオブジェクトを取得.

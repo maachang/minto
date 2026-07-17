@@ -468,3 +468,72 @@ test("s3MasterTable: restoreTableは存在しないbackupIdを指定するとエ
     await db.createTable(table, { columns: { name: { type: "string" } } });
     await assert.rejects(() => db.restoreTable(table, "no-such-backup"));
 });
+
+test("s3MasterTable: previewRestoreはrestoreTableを実行せずに現在とバックアップの行数を比較できる", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+    await db.insert(table, { name: "alice" });
+    await db.flush(table);
+    const backup1 = await db.backupTable(table);
+
+    await db.insert(table, { name: "bob" });
+    await db.insert(table, { name: "carol" });
+    await db.flush(table);
+
+    const preview = await db.previewRestore(table, backup1.backupId);
+    assert.equal(preview.tableName, table);
+    assert.equal(preview.backupId, backup1.backupId);
+    assert.equal(preview.currentRowCount, 3);
+    assert.equal(preview.backupRowCount, 1);
+
+    // previewRestoreは実際には何も変更しない(現在の3件がそのまま残っている).
+    assert.equal((await db.select(table, {})).length, 3);
+});
+
+test("s3MasterTable: previewRestoreは存在しないbackupIdを指定するとエラーになる", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+    await assert.rejects(() => db.previewRestore(table, "no-such-backup"));
+});
+
+test("s3MasterTable: pruneBackupsは直近keep世代だけを残し、古い世代を削除する", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+
+    const backupIds = [];
+    for (let i = 0; i < 3; i++) {
+        const b = await db.backupTable(table);
+        backupIds.push(b.backupId);
+        // backupIdはUnixTimeミリ秒のため、連続実行時に同一世代になる
+        // 衝突を避けるテスト用の小待機.
+        await new Promise((r) => setTimeout(r, 5));
+    }
+
+    const before = await db.listBackups(table);
+    assert.deepEqual(before, backupIds);
+
+    const result = await db.pruneBackups(table, 1);
+    assert.equal(result.tableName, table);
+    assert.equal(result.keep, 1);
+    assert.deepEqual(result.deleted, backupIds.slice(0, 2));
+
+    const after = await db.listBackups(table);
+    assert.deepEqual(after, [backupIds[2]]);
+
+    // 削除された世代からはリストアできない(実体が消えていること)の確認.
+    await assert.rejects(() => db.restoreTable(table, backupIds[0]));
+});
+
+test("s3MasterTable: pruneBackupsはkeep以下の世代数なら何も削除しない", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+    const b1 = await db.backupTable(table);
+
+    const result = await db.pruneBackups(table, 5);
+    assert.deepEqual(result.deleted, []);
+    assert.deepEqual(await db.listBackups(table), [b1.backupId]);
+});

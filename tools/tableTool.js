@@ -3,7 +3,8 @@
 //
 // s3MasterTable.js/s3IndexTable.jsが管理するテーブル定義に対する
 // createTable/dropTable/alterTable/alterIndex、および両モジュール共通の
-// backupTable/restoreTable/listBackupsを、ローカルから実行するためのコマンド。
+// backupTable/restoreTable/listBackups/previewRestore/pruneBackupsを、
+// ローカルから実行するためのコマンド。
 //
 // 実装はlambda/src/index.jsの_responseTableCommand()に集約されており、
 // AWSコンソールの「テスト実行」で渡すevent({ target, command, tableName })
@@ -13,8 +14,10 @@
 //
 // 起動パラメータ: -t/--target (master|index), -c/--command
 // (createTable|dropTable|alterTable|alterIndex|backupTable|restoreTable|
-// listBackups), -n/--table (alterIndex/backupTable/restoreTable/listBackups時
-// 必須), -b/--backupId (restoreTable時必須).
+// listBackups|previewRestore|pruneBackups), -n/--table (alterIndex/
+// backupTable/restoreTable/listBackups/previewRestore/pruneBackups時必須),
+// -b/--backupId (restoreTable/previewRestore時必須),
+// -k/--keep (pruneBackups時必須).
 ///////////////////////////////////////////////
 (function () {
     'use strict';
@@ -28,17 +31,20 @@
     // 対象プロジェクトのカレントパス.
     const _CURRENT_PATH = path.resolve() + "/";
 
-    // 起動パラメータ取得(-t/--target, -c/--command, -n/--table, -b/--backupId).
+    // 起動パラメータ取得(-t/--target, -c/--command, -n/--table,
+    // -b/--backupId, -k/--keep).
     const _target = args.get("-t", "--target");
     const _command = args.get("-c", "--command");
     const _tableName = args.get("-n", "--table");
     const _backupId = args.get("-b", "--backupId");
+    const _keep = args.get("-k", "--keep");
 
     const main = async function () {
         if (_target == null || _command == null) {
             console.error("使い方: tableTool -t <master|index> -c " +
                 "<createTable|dropTable|alterTable|alterIndex|backupTable|" +
-                "restoreTable|listBackups> [-n <tableName>] [-b <backupId>]");
+                "restoreTable|listBackups|previewRestore|pruneBackups> " +
+                "[-n <tableName>] [-b <backupId>] [-k <keep>]");
             process.exitCode = 1;
             return;
         }
@@ -51,6 +57,9 @@
         }
         if (_backupId != null) {
             event.backupId = _backupId;
+        }
+        if (_keep != null) {
+            event.keep = parseInt(_keep, 10);
         }
         const result = await mintoLambdaIndex.handler(event, {});
         console.log(JSON.stringify(result, null, 2));

@@ -459,6 +459,43 @@
             return { tableName: tableName, backupId: backupId, rowCount: rows.length };
         };
 
+        // restoreTable実行前に、現在の行数とバックアップの行数を比較できる
+        // dry-run用の確認API(実際の復元は一切行わない).
+        // tableName 対象のテーブル名を設定します.
+        // backupId 確認対象のバックアップ世代IDを設定します.
+        // 戻り値: { tableName, backupId, currentRowCount, backupRowCount }
+        const previewRestore = async function (tableName, backupId) {
+            const backupBase = _backupPrefix(tableName, backupId);
+            const schemaRes = await s3sdk.get(_bucket, backupBase, "schema.json", _s3opts);
+            if (schemaRes == null) {
+                throw new Error("Backup not found: " + tableName + "/" + backupId);
+            }
+            const dataRes = await s3sdk.get(_bucket, backupBase, _dataKey(), _s3opts);
+            const backupRows = (dataRes == null) ? [] : JSON.parse(await _streamToString(dataRes.Body));
+            const currentRows = await _loadRows(tableName);
+            return { tableName: tableName, backupId: backupId,
+                currentRowCount: currentRows.length, backupRowCount: backupRows.length };
+        };
+
+        // 古いバックアップ世代を削除し、直近keep世代分だけを残す.
+        // tableName 対象のテーブル名を設定します.
+        // keep 残す世代数(0以上の整数)を設定します.
+        // 戻り値: { tableName, keep, deleted }(deletedは削除したbackupIdの配列、古い順).
+        const pruneBackups = async function (tableName, keep) {
+            const backups = await listBackups(tableName);
+            const deleted = [];
+            if (backups.length > keep) {
+                const toDelete = backups.slice(0, backups.length - keep);
+                for (let i = 0; i < toDelete.length; i++) {
+                    const backupBase = _backupPrefix(tableName, toDelete[i]);
+                    await s3sdk.delete(_bucket, backupBase, "schema.json", _s3opts);
+                    await s3sdk.delete(_bucket, backupBase, _dataKey(), _s3opts);
+                    deleted.push(toDelete[i]);
+                }
+            }
+            return { tableName: tableName, keep: keep, deleted: deleted };
+        };
+
         // 1件分の行データを、カラム定義(notNull/default/primaryKey/unique/
         // seqId/型)に従って検証・補完する.
         // rows 一意性チェック対象の既存行配列を設定します.
@@ -771,6 +808,8 @@
             backupTable: backupTable,
             listBackups: listBackups,
             restoreTable: restoreTable,
+            previewRestore: previewRestore,
+            pruneBackups: pruneBackups,
             insert: insert,
             select: select,
             update: update,
