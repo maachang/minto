@@ -17,3 +17,6 @@
 
 - テーブル管理コマンド
   - createTable/dropTable/alterTable/alterIndex（`bin/tableTool`）: https://github.com/maachang/minto/blob/main/bin/README.md
+
+- メモ・補足資料
+  - s3IndexTable.jsのS3 I/Oコスト試算: https://github.com/maachang/minto/blob/main/docs/memo/s3IndexTable-cost-estimate.md

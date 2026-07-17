@@ -21,6 +21,14 @@
 //   なったら、その場でそのインデックスエントリだけ削除する(自己修復).
 //   tombstone+Vacuum方式は「後始末をリクエスト処理の外に出せる」
 //   というメリットが無い割に複雑になるため採用していない.
+// - backupTable/restoreTable/listBackupsは物理コピー方式(S3のCopyObjectは
+//   使わず既存のget/put経由で複製する). backup/{table名}/{backupId}/配下に
+//   行データ・インデックス・スキーマをそのまま複製し、複数世代を保持できる.
+//   restoreTableは指定世代の内容で現在のテーブルを全置換する(差分マージは
+//   しない). listBackupsはdelimiter指定によるCommonPrefixes方式だと
+//   s3sdk.jsの_prefix()が末尾スラッシュを除去する影響で区切り位置がずれる
+//   (実際に踏んだ不具合)ため、delimiterは使わず全件Listしてキー名から
+//   backupId部分を切り出す方式にしている.
 // - 数値・日付は固定長バイナリ化+符号ビット反転(整数は符号ビットのみ、
 //   浮動小数点は非負なら符号ビットのみ・負なら全ビット反転)してから
 //   hexエンコードすることで、辞書順ソート=数値順ソートを実現している.
@@ -283,6 +291,13 @@
             return _basePrefix + "index/" + tableName + "/" + columns.join(SEP);
         };
 
+        // backup/{table名}/[{backupId}] のprefixを取得(backupId省略時は
+        // 該当テーブルのバックアップ世代一覧のルート).
+        const _backupPrefix = function (tableName, backupId) {
+            return _basePrefix + "backup/" + tableName +
+                (backupId != null ? "/" + backupId : "");
+        };
+
         // テーブル定義を取得(集約ファイルのキャッシュ経由).
         const _loadSchema = async function (tableName) {
             const all = await _loadAllDefs();
@@ -372,6 +387,146 @@
                 }
                 token = res.IsTruncated ? res.NextContinuationToken : undefined;
             } while (token);
+        };
+
+        // バックアップ(物理コピー方式。CopyObjectは使わず既存のget/put経由で
+        // 複製する). table/{tableName}/(行データ)・index/{tableName}/
+        // (インデックスエントリ)・スキーマ定義を、backup/{tableName}/{backupId}/
+        // 配下にそのままの構造で複製する(backupIdは実行時のUnixTimeミリ秒。
+        // 複数世代を保持でき、世代ごとにディレクトリが分かれる).
+        // tableName 対象のテーブル名を設定します.
+        // 戻り値: { tableName, backupId, rowCount, indexEntryCount }
+        const backupTable = async function (tableName) {
+            const schema = await _loadSchema(tableName);
+            const backupId = String(Date.now());
+            const backupBase = _backupPrefix(tableName, backupId);
+
+            await s3sdk.put(_bucket, backupBase, "schema.json", JSON.stringify(schema), _s3opts);
+
+            let rowCount = 0;
+            let token = undefined;
+            do {
+                const res = await s3sdk.list(_bucket, _tablePrefix(tableName),
+                    Object.assign({}, _s3opts, { continuationToken: token, maxKey: 1000 }));
+                const contents = res.Contents || [];
+                for (let i = 0; i < contents.length; i++) {
+                    const rowId = contents[i].Key.split("/").pop();
+                    const rowRes = await s3sdk.get(_bucket, _tablePrefix(tableName), rowId, _s3opts);
+                    if (rowRes == null) {
+                        continue;
+                    }
+                    const body = await _streamToString(rowRes.Body);
+                    await s3sdk.put(_bucket, backupBase + "/rows", rowId, body, _s3opts);
+                    rowCount++;
+                }
+                token = res.IsTruncated ? res.NextContinuationToken : undefined;
+            } while (token);
+
+            const idxRoot = _basePrefix + "index/" + tableName + "/";
+            let indexEntryCount = 0;
+            token = undefined;
+            do {
+                const res = await s3sdk.list(_bucket, idxRoot,
+                    Object.assign({}, _s3opts, { continuationToken: token, maxKey: 1000 }));
+                const contents = res.Contents || [];
+                for (let i = 0; i < contents.length; i++) {
+                    const relKey = contents[i].Key.substring(idxRoot.length);
+                    // インデックスエントリは0バイトファイルのためget不要でそのまま複製.
+                    await s3sdk.put(_bucket, backupBase + "/index", relKey, "", _s3opts);
+                    indexEntryCount++;
+                }
+                token = res.IsTruncated ? res.NextContinuationToken : undefined;
+            } while (token);
+
+            return { tableName: tableName, backupId: backupId, rowCount: rowCount, indexEntryCount: indexEntryCount };
+        };
+
+        // 指定テーブルの既存バックアップ世代(backupId)一覧を、古い順
+        // (タイムスタンプ昇順)の文字列配列で返す.
+        // AIメモ: delimiter指定によるCommonPrefixes方式は、s3sdk.jsの
+        // _prefix()が末尾スラッシュを除去してS3へのPrefixパラメータとして
+        // 渡すため、区切り位置が1階層ずれてしまい正しく機能しない
+        // (実際にテストで踏んだ不具合). そのためdelimiterは使わず、
+        // 対象prefix配下を全件Listしてキー名から直接backupId部分を
+        // 切り出す方式にしている.
+        // tableName 対象のテーブル名を設定します.
+        const listBackups = async function (tableName) {
+            const marker = _basePrefix + "backup/" + tableName + "/";
+            const backupIds = new Set();
+            let token = undefined;
+            do {
+                const res = await s3sdk.list(_bucket, marker,
+                    Object.assign({}, _s3opts, { continuationToken: token, maxKey: 1000 }));
+                const contents = res.Contents || [];
+                for (let i = 0; i < contents.length; i++) {
+                    const rest = contents[i].Key.substring(marker.length);
+                    backupIds.add(rest.split("/")[0]);
+                }
+                token = res.IsTruncated ? res.NextContinuationToken : undefined;
+            } while (token);
+            return Array.from(backupIds).sort();
+        };
+
+        // 指定した世代(backupId)の内容で、現在のテーブル(行データ・
+        // インデックス・スキーマ)を完全に置き換える(全置換。差分マージは
+        // しない). 事前に現在のtable/index配下を全削除してからバックアップの
+        // 内容を書き戻す.
+        // tableName 対象のテーブル名を設定します.
+        // backupId backupTable()が返したバックアップ世代IDを設定します.
+        // 戻り値: { tableName, backupId, rowCount, indexEntryCount }
+        const restoreTable = async function (tableName, backupId) {
+            const backupBase = _backupPrefix(tableName, backupId);
+            const schemaRes = await s3sdk.get(_bucket, backupBase, "schema.json", _s3opts);
+            if (schemaRes == null) {
+                throw new Error("Backup not found: " + tableName + "/" + backupId);
+            }
+            const schema = JSON.parse(await _streamToString(schemaRes.Body));
+
+            // 現在のtable/index配下を全削除してから復元する(全置換).
+            await _removeAllUnder(_tablePrefix(tableName));
+            await _removeAllUnder(_basePrefix + "index/" + tableName);
+
+            const rowsRoot = backupBase + "/rows/";
+            let rowCount = 0;
+            let token = undefined;
+            do {
+                const res = await s3sdk.list(_bucket, rowsRoot,
+                    Object.assign({}, _s3opts, { continuationToken: token, maxKey: 1000 }));
+                const contents = res.Contents || [];
+                for (let i = 0; i < contents.length; i++) {
+                    const rowId = contents[i].Key.split("/").pop();
+                    const rowRes = await s3sdk.get(_bucket, rowsRoot, rowId, _s3opts);
+                    if (rowRes == null) {
+                        continue;
+                    }
+                    const body = await _streamToString(rowRes.Body);
+                    await s3sdk.put(_bucket, _tablePrefix(tableName), rowId, body, _s3opts);
+                    rowCount++;
+                }
+                token = res.IsTruncated ? res.NextContinuationToken : undefined;
+            } while (token);
+
+            const idxRoot = backupBase + "/index/";
+            let indexEntryCount = 0;
+            token = undefined;
+            do {
+                const res = await s3sdk.list(_bucket, idxRoot,
+                    Object.assign({}, _s3opts, { continuationToken: token, maxKey: 1000 }));
+                const contents = res.Contents || [];
+                for (let i = 0; i < contents.length; i++) {
+                    const relKey = contents[i].Key.substring(idxRoot.length);
+                    await s3sdk.put(_bucket, _basePrefix + "index/" + tableName, relKey, "", _s3opts);
+                    indexEntryCount++;
+                }
+                token = res.IsTruncated ? res.NextContinuationToken : undefined;
+            } while (token);
+
+            // スキーマも復元時点の内容へ上書きする.
+            const all = await _loadAllDefs();
+            all[tableName] = schema;
+            await _saveAllDefs();
+
+            return { tableName: tableName, backupId: backupId, rowCount: rowCount, indexEntryCount: indexEntryCount };
         };
 
         // 既存テーブルにインデックスを追加(既存行に対してバックフィルする).
@@ -855,6 +1010,9 @@
             dropTable: dropTable,
             listTables: listTables,
             alterColumns: alterColumns,
+            backupTable: backupTable,
+            listBackups: listBackups,
+            restoreTable: restoreTable,
             createIndex: createIndex,
             dropIndex: dropIndex,
             insert: insert,

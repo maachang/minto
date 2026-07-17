@@ -108,6 +108,9 @@ test/
   - listTables(全テーブル定義の一覧取得)、alterColumns(カラム定義の差し替え、
     削除したカラムがselect結果から除外されること)
   - seqId型カラムの自動採番、インデックス経由の範囲検索(gt)での生成順ソート確認
+  - backupTable/restoreTable/listBackups(行データ・インデックス・スキーマの
+    バックアップ世代管理、バックアップ時点への全置換リストア、存在しない
+    backupId指定時のエラー)
 
   ポートは`test/e2e/webapps.test.js`と同様に`net`モジュールでOSに空きポートを割り当てる方式、ストレージ先は`os.tmpdir()`配下の一時ディレクトリを使い、テスト終了後に削除しています。
 - **s3MasterTable-crud.test.js**: `modules/s3table/s3MasterTable.js`(テーブル全体1JSON方式)のCRUD/検索エンジン本体を、`s3IndexTable-crud.test.js`と同じ方式(`tools/localS3.js`を子プロセスとして起動)で検証します。
@@ -136,13 +139,16 @@ test/
 
   ポートは`net`モジュールでOSに空きポートを割り当ててもらう方式にしており、固定ポートによる競合を避けています。
 
-- **tableTool.test.js**: `tools/tableTool.js`(テーブル管理コマンド: createTable/dropTable/alterTable/alterIndex)を、`tools/localS3.js`を子プロセスとして起動した上で、実際に`node tools/tableTool.js -t ... -c ...`を子プロセス実行して標準出力のJSON結果を検証します。以下を確認しています。
+- **tableTool.test.js**: `tools/tableTool.js`(テーブル管理コマンド: createTable/dropTable/alterTable/alterIndex/backupTable/restoreTable/listBackups)を、`tools/localS3.js`を子プロセスとして起動した上で、実際に`node tools/tableTool.js -t ... -c ...`を子プロセス実行して標準出力のJSON結果を検証します。以下を確認しています。
   - createTableが未作成テーブルのみを作成すること(べき等性)
   - alterTableがカラムの追加・削除を反映すること
   - alterTableがnotNullカラム追加時にdefault未指定だと検証エラーで中断すること(何も適用されない)
   - alterTableがprimaryKey/unique変更を検知すると中断すること
   - dropTableが定義から消えたテーブルを削除すること
   - target=indexでのcreateTable→alterIndexによるインデックス追加
+  - backupTable/restoreTable/listBackupsの呼び出し・世代管理・JSON出力の形
+    (実際の行データ・インデックスの複製内容の検証はs3IndexTable-crud.test.js側で行う)
+  - backupTable等がtarget=masterでは実行できないこと、tableName未指定時のエラー
   - 定義ファイル(`conf/table/{target}.json`)が存在しない場合のエラー応答
 
   fixtureプロジェクトの`lib/`には、`modules/s3table/*.js`をコピーせず絶対パスでre-exportするスタブファイルを配置し、実体との重複・鮮度ズレを避けています。

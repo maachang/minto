@@ -2,8 +2,8 @@
 // (node専用)テーブル管理コマンド実行ツール.
 //
 // s3MasterTable.js/s3IndexTable.jsが管理するテーブル定義に対する
-// createTable/dropTable/alterTable/alterIndexを、ローカルから実行する
-// ためのコマンド。
+// createTable/dropTable/alterTable/alterIndex、およびs3IndexTable.js専用の
+// backupTable/restoreTable/listBackupsを、ローカルから実行するためのコマンド。
 //
 // 実装はlambda/src/index.jsの_responseTableCommand()に集約されており、
 // AWSコンソールの「テスト実行」で渡すevent({ target, command, tableName })
@@ -12,7 +12,9 @@
 // パターン。ロジックの二重実装を避け、Lambda実行時と全く同じコードパスを通す)。
 //
 // 起動パラメータ: -t/--target (master|index), -c/--command
-// (createTable|dropTable|alterTable|alterIndex), -n/--table (alterIndex時必須).
+// (createTable|dropTable|alterTable|alterIndex|backupTable|restoreTable|
+// listBackups), -n/--table (alterIndex/backupTable/restoreTable/listBackups時
+// 必須), -b/--backupId (restoreTable時必須).
 ///////////////////////////////////////////////
 (function () {
     'use strict';
@@ -26,15 +28,17 @@
     // 対象プロジェクトのカレントパス.
     const _CURRENT_PATH = path.resolve() + "/";
 
-    // 起動パラメータ取得(-t/--target, -c/--command, -n/--table).
+    // 起動パラメータ取得(-t/--target, -c/--command, -n/--table, -b/--backupId).
     const _target = args.get("-t", "--target");
     const _command = args.get("-c", "--command");
     const _tableName = args.get("-n", "--table");
+    const _backupId = args.get("-b", "--backupId");
 
     const main = async function () {
         if (_target == null || _command == null) {
             console.error("使い方: tableTool -t <master|index> -c " +
-                "<createTable|dropTable|alterTable|alterIndex> [-n <tableName>]");
+                "<createTable|dropTable|alterTable|alterIndex|backupTable|" +
+                "restoreTable|listBackups> [-n <tableName>] [-b <backupId>]");
             process.exitCode = 1;
             return;
         }
@@ -44,6 +48,9 @@
         const event = { target: _target, command: _command };
         if (_tableName != null) {
             event.tableName = _tableName;
+        }
+        if (_backupId != null) {
+            event.backupId = _backupId;
         }
         const result = await mintoLambdaIndex.handler(event, {});
         console.log(JSON.stringify(result, null, 2));

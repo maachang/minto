@@ -194,12 +194,18 @@ await db.dropIndex("users", "byAge");
 // 追加API(テーブル管理コマンド bin/tableTool 向け).
 await db.listTables();                 // 全テーブル分の定義を{テーブル名: schema}で取得
 await db.alterColumns("users", {...}); // カラム定義を丸ごと差し替え(データは変更しない)
+
+// バックアップ/リストア(テーブル管理コマンド bin/tableTool 向け).
+const backup = await db.backupTable("users");   // { tableName, backupId, rowCount, indexEntryCount }
+await db.listBackups("users");                  // 既存バックアップ世代(backupId)一覧(古い順)
+await db.restoreTable("users", backup.backupId); // 指定世代の内容でテーブルを全置換
 ~~~
 
 - `dropTable`は`table/`と`index/`配下の全オブジェクトを削除するため、行数分のDeleteObjectを要する
 - 既存テーブルへの`createIndex`は、既存の全行に対してインデックスエントリを遡って作成するバックフィル処理を要する
 - いずれも[想定スケール](#想定スケール)の通り、1万件程度までを前提とした許容範囲のコストとする
 - `listTables`/`alterColumns`は、`bin/tableTool`(createTable/dropTable/alterTable/alterIndex)が現在のテーブル定義との差分を検出・適用するために使用する(詳細は`bin/README.md`のtableToolコマンド節を参照)
+- `backupTable`/`listBackups`/`restoreTable`はs3IndexTable.js専用の機能(s3MasterTable.jsには無い)。行データ(`table/{tableName}/`)・インデックスエントリ(`index/{tableName}/`)・スキーマ定義を`backup/{tableName}/{backupId}/`配下(`backupId`は実行時のUnixTimeミリ秒)にそのまま複製する物理コピー方式で、S3の`CopyObject`は使わず既存の`get`/`put`経由で複製する(コスト度外視・実装のシンプルさを優先)。複数世代を保持でき、`restoreTable`は指定世代の内容で現在のテーブルを**全置換**する(差分マージはしない。事前に現在の`table/`・`index/`配下を全削除してから復元する)。バックアップ/リストア実行中も通常のCRUD処理自体はロックされないため、整合性の取れたバックアップ/リストアを行うにはメンテナンス時間帯に実行する運用が前提となる(`bin/tableTool`のメンテナンスロックにより、他の管理コマンドとの多重実行のみ防止される)。詳細な試算は`docs/memo/s3IndexTable-cost-estimate.md`も参照
 
 ### カラム型・オプション
 

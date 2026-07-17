@@ -50,7 +50,8 @@
 
         let rawPath = event.rawPath;
         // rawPathが無く、event.targetが指定されている場合はテーブル管理
-        // コマンド(createTable/dropTable/alterTable/alterIndex)の実行と判定する.
+        // コマンド(createTable/dropTable/alterTable/alterIndex/backupTable/
+        // restoreTable/listBackups)の実行と判定する.
         // AWSコンソールの「テスト実行」やtools/tableTool.jsから、Function URL
         // 形式ではないevent({ target, command, ... })が渡されるケース.
         if (rawPath == null && event.target != null) {
@@ -295,7 +296,8 @@
     }
 
     ///////////////////////////////////////////////
-    // テーブル管理コマンド(createTable/dropTable/alterTable/alterIndex).
+    // テーブル管理コマンド(createTable/dropTable/alterTable/alterIndex/
+    // backupTable/restoreTable/listBackups).
     //
     // AIメモ: masterとindexは同一実行内で同時に処理しない
     // (タイムアウト対策のため、対象は必ずどちらか一方のみ). 定義ファイルは
@@ -307,6 +309,10 @@
     // あれば何も適用せず中断する。多重実行防止はs3Lock.jsによる単一の
     // メンテナンスロックで行う(タイムアウトは実質無し。異常終了時は手動で
     // ロック解除する運用).
+    // backupTable/restoreTable/listBackupsはs3IndexTable.js専用
+    // (target=indexのみ)の機能で、conf/table/index.jsonの「あるべき定義」との
+    // 差分比較は行わず、指定したテーブルの現在のS3上のデータ(行・インデックス・
+    // スキーマ)をそのまま対象にする. 詳細はdocs/s3-row-store-design.md参照.
     ///////////////////////////////////////////////
 
     // メンテナンスロックのキー名.
@@ -389,23 +395,31 @@
 
     // テーブル管理コマンド実行本体.
     // event.target "master"|"index" を設定します.
-    // event.command "createTable"|"dropTable"|"alterTable"|"alterIndex" を設定します.
-    // event.tableName alterIndex(target="index")の場合のみ必須の対象テーブル名.
+    // event.command "createTable"|"dropTable"|"alterTable"|"alterIndex"|
+    //   "backupTable"|"restoreTable"|"listBackups" を設定します.
+    // event.tableName alterIndex/backupTable/restoreTable/listBackups
+    //   (いずれもtarget="index"のみ対応)の場合に必須の対象テーブル名.
+    // event.backupId restoreTableの場合のみ必須のバックアップ世代ID
+    //   (backupTableの実行結果で返るbackupId).
     const _responseTableCommand = async function (event) {
         const target = event.target;
         const command = event.command;
         if (target !== "master" && target !== "index") {
             return { error: "不正なtargetです: " + target };
         }
-        if (["createTable", "dropTable", "alterTable", "alterIndex"].indexOf(command) === -1) {
+        const _INDEX_ONLY_COMMANDS = ["alterIndex", "backupTable", "restoreTable", "listBackups"];
+        if (["createTable", "dropTable", "alterTable"].concat(_INDEX_ONLY_COMMANDS).indexOf(command) === -1) {
             return { error: "不正なcommandです: " + command };
         }
-        if (command === "alterIndex") {
+        if (_INDEX_ONLY_COMMANDS.indexOf(command) !== -1) {
             if (target !== "index") {
-                return { error: "alterIndexはtarget=indexのみ対応しています。" };
+                return { error: command + "はtarget=indexのみ対応しています。" };
             }
             if (event.tableName == null) {
-                return { error: "alterIndexにはtableNameの指定が必須です。" };
+                return { error: command + "にはtableNameの指定が必須です。" };
+            }
+            if (command === "restoreTable" && event.backupId == null) {
+                return { error: "restoreTableにはbackupIdの指定が必須です。" };
             }
         }
 
@@ -438,8 +452,14 @@
                 return await _tableCommandDrop(db, currentTables, desiredTables, target);
             } else if (command === "alterTable") {
                 return await _tableCommandAlter(db, currentTables, desiredTables, target);
-            } else {
+            } else if (command === "alterIndex") {
                 return await _tableCommandAlterIndex(db, currentTables, desiredTables, event.tableName);
+            } else if (command === "backupTable") {
+                return await _tableCommandBackup(db, event.tableName);
+            } else if (command === "listBackups") {
+                return await _tableCommandListBackups(db, event.tableName);
+            } else {
+                return await _tableCommandRestore(db, event.tableName, event.backupId);
             }
         } catch (e) {
             console.error("[error][" + $requestId() + "]tableCommand: ", e);
@@ -532,6 +552,27 @@
         }
         return { command: "alterIndex", target: "index", tableName: tableName,
             addedIndexes: diff.addedNames, removedIndexes: diff.removedNames };
+    };
+
+    // backupTable: 指定テーブルの新しいバックアップ世代を作成する(target=indexのみ).
+    const _tableCommandBackup = async function (db, tableName) {
+        const result = await db.backupTable(tableName);
+        return { command: "backupTable", target: "index", tableName: tableName,
+            backupId: result.backupId, rowCount: result.rowCount, indexEntryCount: result.indexEntryCount };
+    };
+
+    // listBackups: 指定テーブルの既存バックアップ世代一覧を返す(target=indexのみ).
+    const _tableCommandListBackups = async function (db, tableName) {
+        const backupIds = await db.listBackups(tableName);
+        return { command: "listBackups", target: "index", tableName: tableName, backupIds: backupIds };
+    };
+
+    // restoreTable: 指定した世代の内容でテーブル(行データ・インデックス・
+    // スキーマ)を全置換する(target=indexのみ. 差分マージはしない).
+    const _tableCommandRestore = async function (db, tableName, backupId) {
+        const result = await db.restoreTable(tableName, backupId);
+        return { command: "restoreTable", target: "index", tableName: tableName, backupId: backupId,
+            rowCount: result.rowCount, indexEntryCount: result.indexEntryCount };
     };
 
     // requestオブジェクトを取得.
