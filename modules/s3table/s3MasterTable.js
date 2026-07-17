@@ -431,6 +431,22 @@
             return Array.from(backupIds).sort();
         };
 
+        // バックアップのスキーマ定義・行データを取得する(存在しなければ
+        // エラー). restoreTable/restoreBackupAs/describeBackup共通の
+        // 内部ヘルパー.
+        // 戻り値: { schema, rows }
+        const _loadBackup = async function (sourceTableName, backupId) {
+            const backupBase = _backupPrefix(sourceTableName, backupId);
+            const schemaRes = await s3sdk.get(_bucket, backupBase, "schema.json", _s3opts);
+            if (schemaRes == null) {
+                throw new Error("Backup not found: " + sourceTableName + "/" + backupId);
+            }
+            const schema = JSON.parse(await _streamToString(schemaRes.Body));
+            const dataRes = await s3sdk.get(_bucket, backupBase, _dataKey(), _s3opts);
+            const rows = (dataRes == null) ? [] : JSON.parse(await _streamToString(dataRes.Body));
+            return { schema: schema, rows: rows };
+        };
+
         // 指定した世代(backupId)の内容で、現在のテーブル(行データ・
         // スキーマ)を完全に置き換える(全置換。差分マージはしない)。
         // 復元後の内容は即座にS3へ書き込み、メモリキャッシュも復元後の
@@ -439,24 +455,53 @@
         // backupId backupTable()が返したバックアップ世代IDを設定します.
         // 戻り値: { tableName, backupId, rowCount }
         const restoreTable = async function (tableName, backupId) {
-            const backupBase = _backupPrefix(tableName, backupId);
-            const schemaRes = await s3sdk.get(_bucket, backupBase, "schema.json", _s3opts);
-            if (schemaRes == null) {
-                throw new Error("Backup not found: " + tableName + "/" + backupId);
-            }
-            const schema = JSON.parse(await _streamToString(schemaRes.Body));
+            const backup = await _loadBackup(tableName, backupId);
 
-            const dataRes = await s3sdk.get(_bucket, backupBase, _dataKey(), _s3opts);
-            const rows = (dataRes == null) ? [] : JSON.parse(await _streamToString(dataRes.Body));
-            await _saveRows(tableName, rows);
-            _rowsCache[tableName] = rows;
+            await _saveRows(tableName, backup.rows);
+            _rowsCache[tableName] = backup.rows;
             _dirty[tableName] = false;
 
             const all = await _loadAllDefs();
-            all[tableName] = schema;
+            all[tableName] = backup.schema;
             await s3sdk.put(_bucket, _defsPrefix(), _defsKey(), JSON.stringify(all), _s3opts);
 
-            return { tableName: tableName, backupId: backupId, rowCount: rows.length };
+            return { tableName: tableName, backupId: backupId, rowCount: backup.rows.length };
+        };
+
+        // バックアップの内容を、元とは別のテーブル名(destTableName)として
+        // 新規復元する(クローン用途). destTableNameが既に存在する場合は
+        // 事故防止のためエラーにする(上書きしたい場合は先に明示的に
+        // dropTableすること).
+        // sourceTableName バックアップ取得元のテーブル名を設定します.
+        // backupId 対象のバックアップ世代IDを設定します.
+        // destTableName 複製先の新しいテーブル名を設定します.
+        // 戻り値: { sourceTableName, backupId, destTableName, rowCount }
+        const restoreBackupAs = async function (sourceTableName, backupId, destTableName) {
+            const all = await _loadAllDefs();
+            if (all[destTableName] != null) {
+                throw new Error("Destination table already exists: " + destTableName);
+            }
+            const backup = await _loadBackup(sourceTableName, backupId);
+
+            await _saveRows(destTableName, backup.rows);
+            _rowsCache[destTableName] = backup.rows;
+            _dirty[destTableName] = false;
+
+            all[destTableName] = backup.schema;
+            await s3sdk.put(_bucket, _defsPrefix(), _defsKey(), JSON.stringify(all), _s3opts);
+
+            return { sourceTableName: sourceTableName, backupId: backupId, destTableName: destTableName,
+                rowCount: backup.rows.length };
+        };
+
+        // 指定したバックアップ世代の中身(スキーマ・行数)を、復元せずに
+        // 確認する.
+        // tableName 対象のテーブル名を設定します.
+        // backupId 確認対象のバックアップ世代IDを設定します.
+        // 戻り値: { tableName, backupId, schema, rowCount }
+        const describeBackup = async function (tableName, backupId) {
+            const backup = await _loadBackup(tableName, backupId);
+            return { tableName: tableName, backupId: backupId, schema: backup.schema, rowCount: backup.rows.length };
         };
 
         // restoreTable実行前に、現在の行数とバックアップの行数を比較できる
@@ -465,16 +510,10 @@
         // backupId 確認対象のバックアップ世代IDを設定します.
         // 戻り値: { tableName, backupId, currentRowCount, backupRowCount }
         const previewRestore = async function (tableName, backupId) {
-            const backupBase = _backupPrefix(tableName, backupId);
-            const schemaRes = await s3sdk.get(_bucket, backupBase, "schema.json", _s3opts);
-            if (schemaRes == null) {
-                throw new Error("Backup not found: " + tableName + "/" + backupId);
-            }
-            const dataRes = await s3sdk.get(_bucket, backupBase, _dataKey(), _s3opts);
-            const backupRows = (dataRes == null) ? [] : JSON.parse(await _streamToString(dataRes.Body));
+            const backup = await _loadBackup(tableName, backupId);
             const currentRows = await _loadRows(tableName);
             return { tableName: tableName, backupId: backupId,
-                currentRowCount: currentRows.length, backupRowCount: backupRows.length };
+                currentRowCount: currentRows.length, backupRowCount: backup.rows.length };
         };
 
         // 古いバックアップ世代を削除し、直近keep世代分だけを残す.
@@ -808,6 +847,8 @@
             backupTable: backupTable,
             listBackups: listBackups,
             restoreTable: restoreTable,
+            restoreBackupAs: restoreBackupAs,
+            describeBackup: describeBackup,
             previewRestore: previewRestore,
             pruneBackups: pruneBackups,
             insert: insert,

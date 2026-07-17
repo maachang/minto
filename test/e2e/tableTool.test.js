@@ -328,6 +328,51 @@ test("tableTool: pruneBackupsで直近keep世代だけを残せる", async () =>
     assert.match(pruneErr.error, /keep.*指定が必須/);
 });
 
+test("tableTool: describeBackupで復元せずにバックアップの中身を確認できる", async () => {
+    writeTableConf("index", { bucket: BUCKET, prefix: "idx5/" }, {
+        items: { columns: { name: { type: "string" } } }
+    });
+    await runTableTool(["-t", "index", "-c", "createTable"]);
+    const backup1 = await runTableTool(["-t", "index", "-c", "backupTable", "-n", "items"]);
+
+    const desc = await runTableTool(["-t", "index", "-c", "describeBackup", "-n", "items", "-b", backup1.backupId]);
+    assert.equal(desc.command, "describeBackup");
+    assert.equal(desc.target, "index");
+    assert.equal(desc.tableName, "items");
+    assert.equal(desc.backupId, backup1.backupId);
+    assert.equal(desc.rowCount, 0);
+    assert.deepEqual(desc.schema.columns, { name: { type: "string" } });
+
+    const descErr = await runTableTool(["-t", "index", "-c", "describeBackup", "-n", "items"]);
+    assert.match(descErr.error, /backupIdの指定が必須/);
+});
+
+test("tableTool: restoreBackupAsでバックアップを別テーブル名として複製できる(クローン)", async () => {
+    writeTableConf("index", { bucket: BUCKET, prefix: "idx6/" }, {
+        items: { columns: { name: { type: "string" } } }
+    });
+    await runTableTool(["-t", "index", "-c", "createTable"]);
+    const backup1 = await runTableTool(["-t", "index", "-c", "backupTable", "-n", "items"]);
+
+    const clone1 = await runTableTool(["-t", "index", "-c", "restoreBackupAs",
+        "-n", "items", "-b", backup1.backupId, "-d", "items_clone"]);
+    assert.equal(clone1.command, "restoreBackupAs");
+    assert.equal(clone1.target, "index");
+    assert.equal(clone1.tableName, "items");
+    assert.equal(clone1.destTableName, "items_clone");
+    assert.equal(clone1.backupId, backup1.backupId);
+
+    // 複製先テーブル名が既に存在する場合はエラーになる.
+    const clone2 = await runTableTool(["-t", "index", "-c", "restoreBackupAs",
+        "-n", "items", "-b", backup1.backupId, "-d", "items_clone"]);
+    assert.match(clone2.error, /テーブル管理コマンドの実行に失敗しました/);
+
+    // destTableName未指定だとエラーになる.
+    const cloneErr = await runTableTool(["-t", "index", "-c", "restoreBackupAs",
+        "-n", "items", "-b", backup1.backupId]);
+    assert.match(cloneErr.error, /destTableNameの指定が必須/);
+});
+
 test("tableTool: backupTable/restoreTable/listBackupsはtableName未指定だとエラーになる", async () => {
     writeTableConf("index", { bucket: BUCKET }, {});
     const r1 = await runTableTool(["-t", "index", "-c", "backupTable"]);

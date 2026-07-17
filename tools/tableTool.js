@@ -3,8 +3,8 @@
 //
 // s3MasterTable.js/s3IndexTable.jsが管理するテーブル定義に対する
 // createTable/dropTable/alterTable/alterIndex、および両モジュール共通の
-// backupTable/restoreTable/listBackups/previewRestore/pruneBackupsを、
-// ローカルから実行するためのコマンド。
+// backupTable/restoreTable/listBackups/previewRestore/pruneBackups/
+// restoreBackupAs/describeBackupを、ローカルから実行するためのコマンド。
 //
 // 実装はlambda/src/index.jsの_responseTableCommand()に集約されており、
 // AWSコンソールの「テスト実行」で渡すevent({ target, command, tableName })
@@ -14,10 +14,12 @@
 //
 // 起動パラメータ: -t/--target (master|index), -c/--command
 // (createTable|dropTable|alterTable|alterIndex|backupTable|restoreTable|
-// listBackups|previewRestore|pruneBackups), -n/--table (alterIndex/
-// backupTable/restoreTable/listBackups/previewRestore/pruneBackups時必須),
-// -b/--backupId (restoreTable/previewRestore時必須),
-// -k/--keep (pruneBackups時必須).
+// listBackups|previewRestore|pruneBackups|restoreBackupAs|describeBackup),
+// -n/--table (alterIndex/backupTable/restoreTable/listBackups/
+// previewRestore/pruneBackups/restoreBackupAs/describeBackup時必須),
+// -b/--backupId (restoreTable/previewRestore/restoreBackupAs/
+// describeBackup時必須), -k/--keep (pruneBackups時必須),
+// -d/--dest (restoreBackupAs時必須の複製先テーブル名).
 ///////////////////////////////////////////////
 (function () {
     'use strict';
@@ -32,19 +34,21 @@
     const _CURRENT_PATH = path.resolve() + "/";
 
     // 起動パラメータ取得(-t/--target, -c/--command, -n/--table,
-    // -b/--backupId, -k/--keep).
+    // -b/--backupId, -k/--keep, -d/--dest).
     const _target = args.get("-t", "--target");
     const _command = args.get("-c", "--command");
     const _tableName = args.get("-n", "--table");
     const _backupId = args.get("-b", "--backupId");
     const _keep = args.get("-k", "--keep");
+    const _dest = args.get("-d", "--dest");
 
     const main = async function () {
         if (_target == null || _command == null) {
             console.error("使い方: tableTool -t <master|index> -c " +
                 "<createTable|dropTable|alterTable|alterIndex|backupTable|" +
-                "restoreTable|listBackups|previewRestore|pruneBackups> " +
-                "[-n <tableName>] [-b <backupId>] [-k <keep>]");
+                "restoreTable|listBackups|previewRestore|pruneBackups|" +
+                "restoreBackupAs|describeBackup> " +
+                "[-n <tableName>] [-b <backupId>] [-k <keep>] [-d <destTableName>]");
             process.exitCode = 1;
             return;
         }
@@ -60,6 +64,9 @@
         }
         if (_keep != null) {
             event.keep = parseInt(_keep, 10);
+        }
+        if (_dest != null) {
+            event.destTableName = _dest;
         }
         const result = await mintoLambdaIndex.handler(event, {});
         console.log(JSON.stringify(result, null, 2));

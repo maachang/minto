@@ -467,24 +467,23 @@
             return Array.from(backupIds).sort();
         };
 
-        // 指定した世代(backupId)の内容で、現在のテーブル(行データ・
-        // インデックス・スキーマ)を完全に置き換える(全置換。差分マージは
-        // しない). 事前に現在のtable/index配下を全削除してからバックアップの
-        // 内容を書き戻す.
-        // tableName 対象のテーブル名を設定します.
-        // backupId backupTable()が返したバックアップ世代IDを設定します.
-        // 戻り値: { tableName, backupId, rowCount, indexEntryCount }
-        const restoreTable = async function (tableName, backupId) {
-            const backupBase = _backupPrefix(tableName, backupId);
-            const schemaRes = await s3sdk.get(_bucket, backupBase, "schema.json", _s3opts);
+        // バックアップのスキーマ定義を取得する(存在しなければエラー).
+        // restoreTable/restoreBackupAs/describeBackup共通の内部ヘルパー.
+        const _loadBackupSchema = async function (sourceTableName, backupId) {
+            const schemaRes = await s3sdk.get(_bucket,
+                _backupPrefix(sourceTableName, backupId), "schema.json", _s3opts);
             if (schemaRes == null) {
-                throw new Error("Backup not found: " + tableName + "/" + backupId);
+                throw new Error("Backup not found: " + sourceTableName + "/" + backupId);
             }
-            const schema = JSON.parse(await _streamToString(schemaRes.Body));
+            return JSON.parse(await _streamToString(schemaRes.Body));
+        };
 
-            // 現在のtable/index配下を全削除してから復元する(全置換).
-            await _removeAllUnder(_tablePrefix(tableName));
-            await _removeAllUnder(_basePrefix + "index/" + tableName);
+        // バックアップの行データ・インデックスをdestTableName配下へ複製する
+        // (restoreTable/restoreBackupAs共通の内部ヘルパー。スキーマ取得・
+        // 既存データの削除や存在チェックは呼び出し元が行う).
+        // 戻り値: { rowCount, indexEntryCount }
+        const _copyBackupRows = async function (sourceTableName, backupId, destTableName) {
+            const backupBase = _backupPrefix(sourceTableName, backupId);
 
             const rowsRoot = backupBase + "/rows/";
             let rowCount = 0;
@@ -500,7 +499,7 @@
                         continue;
                     }
                     const body = await _streamToString(rowRes.Body);
-                    await s3sdk.put(_bucket, _tablePrefix(tableName), rowId, body, _s3opts);
+                    await s3sdk.put(_bucket, _tablePrefix(destTableName), rowId, body, _s3opts);
                     rowCount++;
                 }
                 token = res.IsTruncated ? res.NextContinuationToken : undefined;
@@ -515,18 +514,77 @@
                 const contents = res.Contents || [];
                 for (let i = 0; i < contents.length; i++) {
                     const relKey = contents[i].Key.substring(idxRoot.length);
-                    await s3sdk.put(_bucket, _basePrefix + "index/" + tableName, relKey, "", _s3opts);
+                    await s3sdk.put(_bucket, _basePrefix + "index/" + destTableName, relKey, "", _s3opts);
                     indexEntryCount++;
                 }
                 token = res.IsTruncated ? res.NextContinuationToken : undefined;
             } while (token);
+
+            return { rowCount: rowCount, indexEntryCount: indexEntryCount };
+        };
+
+        // 指定した世代(backupId)の内容で、現在のテーブル(行データ・
+        // インデックス・スキーマ)を完全に置き換える(全置換。差分マージは
+        // しない). 事前に現在のtable/index配下を全削除してからバックアップの
+        // 内容を書き戻す.
+        // tableName 対象のテーブル名を設定します.
+        // backupId backupTable()が返したバックアップ世代IDを設定します.
+        // 戻り値: { tableName, backupId, rowCount, indexEntryCount }
+        const restoreTable = async function (tableName, backupId) {
+            // 現在のライブデータを削除する前に、必ずバックアップの存在を
+            // 確認する(存在しない場合に現在のデータだけ消えてしまう事故を防ぐ).
+            const schema = await _loadBackupSchema(tableName, backupId);
+
+            // 現在のtable/index配下を全削除してから復元する(全置換).
+            await _removeAllUnder(_tablePrefix(tableName));
+            await _removeAllUnder(_basePrefix + "index/" + tableName);
+
+            const copied = await _copyBackupRows(tableName, backupId, tableName);
 
             // スキーマも復元時点の内容へ上書きする.
             const all = await _loadAllDefs();
             all[tableName] = schema;
             await _saveAllDefs();
 
-            return { tableName: tableName, backupId: backupId, rowCount: rowCount, indexEntryCount: indexEntryCount };
+            return { tableName: tableName, backupId: backupId,
+                rowCount: copied.rowCount, indexEntryCount: copied.indexEntryCount };
+        };
+
+        // バックアップの内容を、元とは別のテーブル名(destTableName)として
+        // 新規復元する(クローン用途). destTableNameが既に存在する場合は
+        // 事故防止のためエラーにする(上書きしたい場合は先に明示的に
+        // dropTableすること).
+        // sourceTableName バックアップ取得元のテーブル名を設定します.
+        // backupId 対象のバックアップ世代IDを設定します.
+        // destTableName 複製先の新しいテーブル名を設定します.
+        // 戻り値: { sourceTableName, backupId, destTableName, rowCount, indexEntryCount }
+        const restoreBackupAs = async function (sourceTableName, backupId, destTableName) {
+            const all = await _loadAllDefs();
+            if (all[destTableName] != null) {
+                throw new Error("Destination table already exists: " + destTableName);
+            }
+            const schema = await _loadBackupSchema(sourceTableName, backupId);
+            const copied = await _copyBackupRows(sourceTableName, backupId, destTableName);
+
+            all[destTableName] = schema;
+            await _saveAllDefs();
+
+            return { sourceTableName: sourceTableName, backupId: backupId, destTableName: destTableName,
+                rowCount: copied.rowCount, indexEntryCount: copied.indexEntryCount };
+        };
+
+        // 指定したバックアップ世代の中身(スキーマ・行数・インデックス
+        // エントリ数)を、復元せずに確認する.
+        // tableName 対象のテーブル名を設定します.
+        // backupId 確認対象のバックアップ世代IDを設定します.
+        // 戻り値: { tableName, backupId, schema, rowCount, indexEntryCount }
+        const describeBackup = async function (tableName, backupId) {
+            const schema = await _loadBackupSchema(tableName, backupId);
+            const backupBase = _backupPrefix(tableName, backupId);
+            const rowCount = await _countUnder(backupBase + "/rows");
+            const indexEntryCount = await _countUnder(backupBase + "/index");
+            return { tableName: tableName, backupId: backupId, schema: schema,
+                rowCount: rowCount, indexEntryCount: indexEntryCount };
         };
 
         // 指定prefix配下のオブジェクト数を数える(内部ユーティリティ).
@@ -1060,6 +1118,8 @@
             backupTable: backupTable,
             listBackups: listBackups,
             restoreTable: restoreTable,
+            restoreBackupAs: restoreBackupAs,
+            describeBackup: describeBackup,
             previewRestore: previewRestore,
             pruneBackups: pruneBackups,
             createIndex: createIndex,

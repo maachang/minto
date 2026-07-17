@@ -51,7 +51,8 @@
         let rawPath = event.rawPath;
         // rawPathが無く、event.targetが指定されている場合はテーブル管理
         // コマンド(createTable/dropTable/alterTable/alterIndex/backupTable/
-        // restoreTable/listBackups/previewRestore/pruneBackups)の実行と判定する.
+        // restoreTable/listBackups/previewRestore/pruneBackups/
+        // restoreBackupAs/describeBackup)の実行と判定する.
         // AWSコンソールの「テスト実行」やtools/tableTool.jsから、Function URL
         // 形式ではないevent({ target, command, ... })が渡されるケース.
         if (rawPath == null && event.target != null) {
@@ -297,7 +298,8 @@
 
     ///////////////////////////////////////////////
     // テーブル管理コマンド(createTable/dropTable/alterTable/alterIndex/
-    // backupTable/restoreTable/listBackups/previewRestore/pruneBackups).
+    // backupTable/restoreTable/listBackups/previewRestore/pruneBackups/
+    // restoreBackupAs/describeBackup).
     //
     // AIメモ: masterとindexは同一実行内で同時に処理しない
     // (タイムアウト対策のため、対象は必ずどちらか一方のみ). 定義ファイルは
@@ -315,7 +317,11 @@
     // スキーマ、target=indexの場合はインデックスも含む)をそのまま対象にする.
     // previewRestoreはrestoreTableのdry-run(行数比較のみ、実際の復元・削除は
     // 行わない)、pruneBackupsは古いバックアップ世代を削除し直近keep世代分だけ
-    // 残す機能. 詳細はdocs/s3-row-store-design.md・docs/s3MasterTable.md参照.
+    // 残す機能. restoreBackupAsはバックアップ内容を元とは別のテーブル名
+    // (destTableName)として新規復元する(クローン用途、destTableNameが
+    // 既に存在する場合はエラー)。describeBackupは指定バックアップの
+    // スキーマ・行数を復元せずに確認する機能.
+    // 詳細はdocs/s3-row-store-design.md・docs/s3MasterTable.md参照.
     ///////////////////////////////////////////////
 
     // メンテナンスロックのキー名.
@@ -400,13 +406,18 @@
     // event.target "master"|"index" を設定します.
     // event.command "createTable"|"dropTable"|"alterTable"|"alterIndex"|
     //   "backupTable"|"restoreTable"|"listBackups"|"previewRestore"|
-    //   "pruneBackups" を設定します.
+    //   "pruneBackups"|"restoreBackupAs"|"describeBackup" を設定します.
     // event.tableName alterIndex/backupTable/restoreTable/listBackups/
-    //   previewRestore/pruneBackupsの場合に必須の対象テーブル名
-    //   (alterIndexのみtarget="index"限定、それ以外はmaster/index両対応).
-    // event.backupId restoreTable/previewRestoreの場合のみ必須の
-    //   バックアップ世代ID(backupTableの実行結果で返るbackupId).
+    //   previewRestore/pruneBackups/restoreBackupAs/describeBackupの場合に
+    //   必須の対象テーブル名(restoreBackupAsではバックアップ取得元の
+    //   テーブル名。alterIndexのみtarget="index"限定、それ以外はmaster/index
+    //   両対応).
+    // event.backupId restoreTable/previewRestore/restoreBackupAs/
+    //   describeBackupの場合のみ必須のバックアップ世代ID
+    //   (backupTableの実行結果で返るbackupId).
     // event.keep pruneBackupsの場合のみ必須の残す世代数(0以上の整数).
+    // event.destTableName restoreBackupAsの場合のみ必須の複製先テーブル名
+    //   (既に存在する場合はエラーになる).
     const _responseTableCommand = async function (event) {
         const target = event.target;
         const command = event.command;
@@ -414,7 +425,7 @@
             return { error: "不正なtargetです: " + target };
         }
         const _TABLE_NAME_REQUIRED_COMMANDS = ["alterIndex", "backupTable", "restoreTable",
-            "listBackups", "previewRestore", "pruneBackups"];
+            "listBackups", "previewRestore", "pruneBackups", "restoreBackupAs", "describeBackup"];
         if (["createTable", "dropTable", "alterTable"].concat(_TABLE_NAME_REQUIRED_COMMANDS).indexOf(command) === -1) {
             return { error: "不正なcommandです: " + command };
         }
@@ -425,12 +436,16 @@
             if (event.tableName == null) {
                 return { error: command + "にはtableNameの指定が必須です。" };
             }
-            if ((command === "restoreTable" || command === "previewRestore") && event.backupId == null) {
+            if (["restoreTable", "previewRestore", "restoreBackupAs", "describeBackup"].indexOf(command) !== -1 &&
+                event.backupId == null) {
                 return { error: command + "にはbackupIdの指定が必須です。" };
             }
             if (command === "pruneBackups" &&
                 !(Number.isInteger(event.keep) && event.keep >= 0)) {
                 return { error: "pruneBackupsにはkeep(0以上の整数)の指定が必須です。" };
+            }
+            if (command === "restoreBackupAs" && event.destTableName == null) {
+                return { error: "restoreBackupAsにはdestTableNameの指定が必須です。" };
             }
         }
 
@@ -473,8 +488,12 @@
                 return await _tableCommandRestore(db, target, event.tableName, event.backupId);
             } else if (command === "previewRestore") {
                 return await _tableCommandPreviewRestore(db, target, event.tableName, event.backupId);
-            } else {
+            } else if (command === "pruneBackups") {
                 return await _tableCommandPruneBackups(db, target, event.tableName, event.keep);
+            } else if (command === "restoreBackupAs") {
+                return await _tableCommandRestoreBackupAs(db, target, event.tableName, event.backupId, event.destTableName);
+            } else {
+                return await _tableCommandDescribeBackup(db, target, event.tableName, event.backupId);
             }
         } catch (e) {
             console.error("[error][" + $requestId() + "]tableCommand: ", e);
@@ -614,6 +633,32 @@
     const _tableCommandPruneBackups = async function (db, target, tableName, keep) {
         const result = await db.pruneBackups(tableName, keep);
         return { command: "pruneBackups", target: target, tableName: tableName, keep: keep, deleted: result.deleted };
+    };
+
+    // restoreBackupAs: バックアップの内容を、元とは別のテーブル名
+    // (destTableName)として新規復元する(クローン用途。master/index両対応.
+    // destTableNameが既に存在する場合はdb側でエラーになる).
+    const _tableCommandRestoreBackupAs = async function (db, target, tableName, backupId, destTableName) {
+        const result = await db.restoreBackupAs(tableName, backupId, destTableName);
+        const ret = { command: "restoreBackupAs", target: target, tableName: tableName, backupId: backupId,
+            destTableName: destTableName, rowCount: result.rowCount };
+        if (result.indexEntryCount !== undefined) {
+            ret.indexEntryCount = result.indexEntryCount;
+        }
+        return ret;
+    };
+
+    // describeBackup: 指定したバックアップ世代の中身(スキーマ・行数、
+    // target=indexの場合はインデックスエントリ数も含む)を、復元せずに
+    // 確認する(master/index両対応).
+    const _tableCommandDescribeBackup = async function (db, target, tableName, backupId) {
+        const result = await db.describeBackup(tableName, backupId);
+        const ret = { command: "describeBackup", target: target, tableName: tableName, backupId: backupId,
+            schema: result.schema, rowCount: result.rowCount };
+        if (result.indexEntryCount !== undefined) {
+            ret.indexEntryCount = result.indexEntryCount;
+        }
+        return ret;
     };
 
     // requestオブジェクトを取得.
