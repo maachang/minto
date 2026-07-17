@@ -494,3 +494,31 @@ test("s3MasterTable: 同じテーブルで既にtransactionが実行中の場合
     releaseFirst();
     await firstTransaction;
 });
+
+test("s3MasterTable: transactionはロック取得前の古いキャッシュを信用せず、他インスタンスの変更を保持したまま更新する", async () => {
+    // 同じbucketに対する2つの独立したdbインスタンス(別プロセス相当)を用意する.
+    const bucket = "test-bucket-" + (bucketSeq++);
+    const dbA = s3MasterTable.create({ bucket: bucket });
+    await dbA.createTable("users", { columns: { name: { type: "string" } } });
+
+    // dbAが先にselectしてキャッシュを作る(この時点では空).
+    const before = await dbA.select("users", {});
+    assert.deepEqual(before, []);
+
+    // 別インスタンス(dbB)がtransaction経由で1件書き込む.
+    const dbB = s3MasterTable.create({ bucket: bucket });
+    await dbB.transaction("users", async () => {
+        await dbB.insert("users", { name: "Bob" });
+    });
+
+    // dbAは古いキャッシュを持ったままtransactionを実行する.
+    await dbA.transaction("users", async () => {
+        await dbA.insert("users", { name: "Alice" });
+    });
+
+    // dbBが書き込んだBobが失われず、Aliceと両方残っていること
+    // (新しいdbインスタンスで読み直し、キャッシュの影響を受けずに検証する).
+    const dbC = s3MasterTable.create({ bucket: bucket });
+    const rows = await dbC.select("users", {});
+    assert.deepEqual(rows.map((r) => r.name).sort(), ["Alice", "Bob"]);
+});

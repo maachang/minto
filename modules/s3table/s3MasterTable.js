@@ -229,6 +229,14 @@
             if (_rowsCache[tableName] !== undefined) {
                 return _rowsCache[tableName];
             }
+            return await _reloadRows(tableName);
+        };
+
+        // キャッシュの有無に関わらず、必ずS3から最新の行データを取得し
+        // キャッシュを上書きする(transaction()がロック取得直後に使う。
+        // ロック取得前に作られた可能性のある古いキャッシュを信用せず、
+        // 排他区間の開始時点で必ず最新のS3状態と同期するため).
+        const _reloadRows = async function (tableName) {
             const res = await s3sdk.get(_bucket, _dataPrefix(tableName), _dataKey(), _s3opts);
             const rows = (res == null) ? [] : JSON.parse(await _streamToString(res.Body));
             _rowsCache[tableName] = rows;
@@ -264,9 +272,18 @@
         };
 
         // テーブル単位ロックを取得したうえでfnを実行し、成功時はflushして
-        // ロックを解放する。fn内で例外が発生した場合は、実行前のメモリ状態に
-        // ロールバックし(S3へは一切アップロードしない)、ロックを解放してから
-        // 例外を再throwする.
+        // ロックを解放する。fn内で例外が発生した場合は、ロック取得直後の
+        // 状態にロールバックし(S3へは一切アップロードしない)、ロックを
+        // 解放してから例外を再throwする.
+        //
+        // AIメモ: ロック取得直後に必ず_reloadRows()でS3から強制再取得する
+        // (_loadRows()のキャッシュ優先ロジックに任せない)。ロック取得前に
+        // 別の処理(select/insert等)がキャッシュを作っていた場合、それは
+        // 他プロセスの変更を反映していない古い状態である可能性があり、
+        // それをそのままバックアップ・作業対象にしてしまうと、他プロセスが
+        // ロック区間の直前に書き込んだ内容をここでのflushが上書きして
+        // 消してしまう(実際にこの手順で再現・確認済みのバグだったため、
+        // 必ずこの順序を守ること).
         // tableName ロック対象・flush対象のテーブル名を設定します.
         // fn 実行する処理(引数無しのasync関数)を設定します.
         // 戻り値: 正常終了時true.
@@ -276,16 +293,21 @@
             if (!(await lock.acquire(lockKey))) {
                 throw new Error("Failed to acquire lock for table: " + tableName);
             }
-            // ロールバック用に現在のメモリ状態をバックアップ(S3への影響は無い).
-            const backupRows = JSON.parse(JSON.stringify(await _loadRows(tableName)));
-            const backupDirty = _dirty[tableName] === true;
             try {
-                await fn();
-                await flush(tableName);
-            } catch (e) {
-                _rowsCache[tableName] = backupRows;
-                _dirty[tableName] = backupDirty;
-                throw e;
+                // ロック取得直後、キャッシュの有無に関わらず必ずS3から
+                // 最新状態を取得し直す(排他区間開始時点での正しい基準点にする).
+                const freshRows = await _reloadRows(tableName);
+                _dirty[tableName] = false;
+                // ロールバック用にバックアップ(直後に取得した最新状態そのもの).
+                const backupRows = JSON.parse(JSON.stringify(freshRows));
+                try {
+                    await fn();
+                    await flush(tableName);
+                } catch (e) {
+                    _rowsCache[tableName] = backupRows;
+                    _dirty[tableName] = false;
+                    throw e;
+                }
             } finally {
                 await lock.release(lockKey);
             }
