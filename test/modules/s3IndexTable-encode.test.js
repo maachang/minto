@@ -8,6 +8,9 @@ global.$loadLib = function (name) {
     if (name === "seqId.js") {
         return require("../../modules/s3table/seqId.js");
     }
+    if (name === "s3Lock.js") {
+        return {};
+    }
     throw new Error("unexpected $loadLib: " + name);
 };
 global.$require = function (name) {

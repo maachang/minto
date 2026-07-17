@@ -21,6 +21,18 @@
 //   なったら、その場でそのインデックスエントリだけ削除する(自己修復).
 //   tombstone+Vacuum方式は「後始末をリクエスト処理の外に出せる」
 //   というメリットが無い割に複雑になるため採用していない.
+// - transaction(tableName, fn)はs3Lock.jsで"index."+tableNameというキーの
+//   テーブル単位ロックを取得してfnを実行し、成功・失敗に関わらずロックを
+//   解放するだけ(ロールバックは提供しない). s3MasterTable.jsのtransactionと
+//   異なり、本モジュールのinsert/update/delete/dropTable等は呼び出しの度に
+//   即座にS3へ反映される設計(メモリバッファリングが無い)ため、途中まで
+//   書き込んだS3上の変更を安価に巻き戻す手段が無い. 同時実行の排他
+//   (複数のtransactionが同じテーブルに対して同時に走らないこと)のみを
+//   保証する機能として割り切っている.
+// - count(tableName, where)はselectのgroupBy/aggregates(count)と異なり、
+//   インデックスの絞込(LIST)のみで完結し、行データのGetObjectを一切
+//   行わない件数取得専用の軽量API. sum/avg/min/max等の値集計が必要な
+//   場合は引き続きselect+groupBy+aggregatesを使う.
 // - backupTable/restoreTable/listBackupsは物理コピー方式(S3のCopyObjectは
 //   使わず既存のget/put経由で複製する). backup/{table名}/{backupId}/配下に
 //   行データ・インデックス・スキーマをそのまま複製し、複数世代を保持できる.
@@ -60,6 +72,9 @@
 
     // Snowflake ID方式のユニークID発行(autoIncrementの代替).
     const seqId = $loadLib("seqId.js");
+
+    // テーブル単位の排他ロック(transaction用).
+    const s3Lock = $loadLib("s3Lock.js");
 
     // crypto(行ファイル名のランダム部分生成用).
     const crypto = $require("crypto");
@@ -307,6 +322,40 @@
             return all[tableName];
         };
 
+        // テーブル単位ロック(s3Lock.js)の遅延生成.
+        let _lock = null;
+        const _getLock = function () {
+            if (_lock == null) {
+                _lock = s3Lock.create({
+                    bucket: _bucket, region: _s3opts.region, credentials: _s3opts.credentials
+                });
+            }
+            return _lock;
+        };
+
+        // テーブル単位ロックを取得したうえでfnを実行し、成功・失敗に関わらず
+        // ロックを解放する. s3MasterTable.jsのtransaction()と異なり、
+        // ロールバックは提供しない(insert/update/delete等が呼び出しの度に
+        // 即座にS3へ反映される設計のため、途中まで書き込んだ変更を安価に
+        // 巻き戻す手段が無い). 同時実行の排他(複数のtransactionが同じ
+        // テーブルに対して同時に走らないこと)のみを保証する.
+        // tableName ロック対象のテーブル名を設定します.
+        // fn 実行する処理(引数無しのasync関数)を設定します.
+        // 戻り値: 正常終了時true.
+        const transaction = async function (tableName, fn) {
+            const lockKey = "index." + tableName;
+            const lock = _getLock();
+            if (!(await lock.acquire(lockKey))) {
+                throw new Error("Failed to acquire lock for table: " + tableName);
+            }
+            try {
+                await fn();
+            } finally {
+                await lock.release(lockKey);
+            }
+            return true;
+        };
+
         // テーブル作成.
         // tableName 対象のテーブル名を設定します.
         // schema.columns カラム定義({名前: {type, notNull, default}}).
@@ -350,6 +399,12 @@
             delete all[tableName];
             await _saveAllDefs();
             return true;
+        };
+
+        // テーブル定義を取得する(s3MasterTable.jsのdescribeTableと同等).
+        // tableName 対象のテーブル名を設定します.
+        const describeTable = async function (tableName) {
+            return await _loadSchema(tableName);
         };
 
         // 全テーブル分のテーブル定義を取得する({テーブル名: schema}形式).
@@ -895,6 +950,19 @@
             return result;
         };
 
+        // COUNT専用の軽量API. where条件に一致する行数を、インデックスの
+        // 絞込(LIST)のみで数える(行データのGetObjectは一切行わない).
+        // select+groupBy+aggregates(count)と違い、sum/avg/min/max等の
+        // 値集計はできない(その場合は引き続きselectを使うこと).
+        // tableName 対象のテーブル名を設定します.
+        // where selectと同じ形式のwhere条件(必須、1つ以上のインデックスを参照).
+        // 戻り値: 一致した行数(number).
+        const count = async function (tableName, where) {
+            const schema = await _loadSchema(tableName);
+            const candidateSet = await _resolveCandidates(tableName, schema, where);
+            return candidateSet.size;
+        };
+
         // 行ファイルを取得する。存在しない場合(404相当)はnullを返し、
         // 呼び出し元でインデックスの自己修復に使えるようにする.
         // 戻り値は現在のスキーマ(schema.columns)に定義されたキーのみに
@@ -1113,8 +1181,10 @@
         return {
             createTable: createTable,
             dropTable: dropTable,
+            describeTable: describeTable,
             listTables: listTables,
             alterColumns: alterColumns,
+            transaction: transaction,
             backupTable: backupTable,
             listBackups: listBackups,
             restoreTable: restoreTable,
@@ -1126,6 +1196,7 @@
             dropIndex: dropIndex,
             insert: insert,
             select: select,
+            count: count,
             update: update,
             delete: del
         };

@@ -117,6 +117,11 @@ test/
   - describeBackup(復元せずにスキーマ・行数・インデックスエントリ数を確認、
     存在しないbackupId指定時のエラー)、restoreBackupAs(別テーブル名への
     クローン、複製先テーブル名が既に存在する場合のエラー)
+  - describeTable(単一テーブルの定義取得、存在しないテーブル指定時のエラー)
+  - count(行データのGETを行わずインデックスのLISTのみで件数を数えること、
+    自己修復は行わないため行ファイル削除後も件数に影響しないこと)
+  - transaction(実際のS3上での`index.テーブル名`ロック取得・解放、例外発生時も
+    ロックは解放されるがロールバックはしないこと、ロック競合時のエラー)
 
   ポートは`test/e2e/webapps.test.js`と同様に`net`モジュールでOSに空きポートを割り当てる方式、ストレージ先は`os.tmpdir()`配下の一時ディレクトリを使い、テスト終了後に削除しています。
 - **s3MasterTable-crud.test.js**: `modules/s3table/s3MasterTable.js`(テーブル全体1JSON方式)のCRUD/検索エンジン本体を、`s3IndexTable-crud.test.js`と同じ方式(`tools/localS3.js`を子プロセスとして起動)で検証します。
