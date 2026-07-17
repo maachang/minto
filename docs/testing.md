@@ -128,6 +128,9 @@ test/
   - seqId型カラムの自動採番、範囲検索(gt)での生成順ソート確認
   - insert/flushの反映タイミング(flushするまで実際のS3に反映されないこと)、
     transaction(実際のS3上での`master.テーブル名`ロック取得、ロック競合時のエラー)
+  - backupTable/restoreTable/listBackups(行データ・スキーマのバックアップ
+    世代管理、バックアップ時点への全置換リストア、backupTableがflush前の
+    未反映な変更も対象に含むこと、存在しないbackupId指定時のエラー)
 
 ### e2e/
 
@@ -147,8 +150,9 @@ test/
   - dropTableが定義から消えたテーブルを削除すること
   - target=indexでのcreateTable→alterIndexによるインデックス追加
   - backupTable/restoreTable/listBackupsの呼び出し・世代管理・JSON出力の形
-    (実際の行データ・インデックスの複製内容の検証はs3IndexTable-crud.test.js側で行う)
-  - backupTable等がtarget=masterでは実行できないこと、tableName未指定時のエラー
+    (target=master/index両方。実際の行データ・インデックスの複製内容の検証は
+    s3IndexTable-crud.test.js・s3MasterTable-crud.test.js側で行う)
+  - backupTable等でtableName未指定時のエラー
   - 定義ファイル(`conf/table/{target}.json`)が存在しない場合のエラー応答
 
   fixtureプロジェクトの`lib/`には、`modules/s3table/*.js`をコピーせず絶対パスでre-exportするスタブファイルを配置し、実体との重複・鮮度ズレを避けています。

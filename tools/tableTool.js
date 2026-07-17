@@ -2,7 +2,7 @@
 // (node専用)テーブル管理コマンド実行ツール.
 //
 // s3MasterTable.js/s3IndexTable.jsが管理するテーブル定義に対する
-// createTable/dropTable/alterTable/alterIndex、およびs3IndexTable.js専用の
+// createTable/dropTable/alterTable/alterIndex、および両モジュール共通の
 // backupTable/restoreTable/listBackupsを、ローカルから実行するためのコマンド。
 //
 // 実装はlambda/src/index.jsの_responseTableCommand()に集約されており、

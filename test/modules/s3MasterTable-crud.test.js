@@ -418,3 +418,53 @@ test("s3MasterTable: 実際のS3上で既にロックが取得されている場
 
     await lock.release("master." + table);
 });
+
+test("s3MasterTable: backupTable/restoreTableで行データ・スキーマを世代管理して復元できる", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+    await db.insert(table, { name: "alice" });
+    await db.flush(table);
+
+    const backup1 = await db.backupTable(table);
+    assert.equal(backup1.tableName, table);
+    assert.equal(backup1.rowCount, 1);
+    // s3MasterTable.jsにはインデックスが無いためindexEntryCountは含まれない.
+    assert.equal(backup1.indexEntryCount, undefined);
+
+    // バックアップ後にデータを変更(bobを追加、flushして反映).
+    await db.insert(table, { name: "bob" });
+    await db.flush(table);
+    assert.deepEqual((await db.select(table, {})).map((r) => r.name).sort(), ["alice", "bob"]);
+
+    const backups = await db.listBackups(table);
+    assert.deepEqual(backups, [backup1.backupId]);
+
+    // 復元するとバックアップ時点(aliceのみ)の状態に完全に戻る(bobは消える).
+    // 復元は即座にS3へ反映されるためflush不要.
+    const restored = await db.restoreTable(table, backup1.backupId);
+    assert.equal(restored.rowCount, 1);
+    assert.deepEqual(await rawStoredRows(table), [{ name: "alice" }]);
+    assert.deepEqual((await db.select(table, {})).map((r) => r.name), ["alice"]);
+});
+
+test("s3MasterTable: backupTableはflush前の未反映な変更も対象に含む(read-your-own-writes)", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+    // flushせずにinsertした直後にbackupTableを呼ぶ.
+    await db.insert(table, { name: "alice" });
+
+    const backup1 = await db.backupTable(table);
+    assert.equal(backup1.rowCount, 1);
+
+    // 実データ(S3)側にはまだ反映されていないことの確認(flush前のため).
+    assert.deepEqual(await rawStoredRows(table), []);
+});
+
+test("s3MasterTable: restoreTableは存在しないbackupIdを指定するとエラーになる", async () => {
+    const db = createDb();
+    const table = nextTableName();
+    await db.createTable(table, { columns: { name: { type: "string" } } });
+    await assert.rejects(() => db.restoreTable(table, "no-such-backup"));
+});

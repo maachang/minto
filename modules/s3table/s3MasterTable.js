@@ -42,6 +42,13 @@
 //   キーのロックを取得→fn実行→flush→ロック解放、という流れを提供する。
 //   fn内で例外が発生した場合は、実行前のメモリ状態にロールバックし
 //   (S3へは一切アップロードしない)、ロック解放後に例外を再throwする.
+// - backupTable/restoreTable/listBackupsはs3IndexTable.jsと共通の物理コピー
+//   方式(S3のCopyObjectは使わず既存のget/put経由で複製する)。ただし本
+//   モジュールはテーブル全体1JSON(data.json)なのでインデックスは無く、
+//   data.json＋スキーマ定義の2ファイルをbackup/{table名}/{backupId}/配下に
+//   複製するだけで済む(s3IndexTable.jsより単純)。backupTableは_loadRows
+//   経由で行を取得するため、flush前の未反映な変更も対象に含む
+//   (select/exportCsvと同じ「現在の実効値」を見る挙動).
 // - カラム型システム(string/int/float/boolean/date/json/seqId)は
 //   s3IndexTable.jsと共通の考え方. date型はinsert時にDateオブジェクトを
 //   受け取り、内部的にはUnixTimeミリ秒のnumberとして保存し、
@@ -376,6 +383,82 @@
             return true;
         };
 
+        // backup/{table名}/[{backupId}] のprefixを取得(backupId省略時は
+        // 該当テーブルのバックアップ世代一覧のルート).
+        const _backupPrefix = function (tableName, backupId) {
+            return _basePrefix + "backup/" + tableName +
+                (backupId != null ? "/" + backupId : "");
+        };
+
+        // バックアップ(物理コピー方式。s3IndexTable.jsと同じ考え方だが、
+        // 本モジュールはテーブル全体1JSON(data.json)なのでインデックスは
+        // 無く、data.json＋スキーマ定義の2ファイルを複製するだけで済む).
+        // backup/{tableName}/{backupId}/配下に複製する(backupIdは実行時の
+        // UnixTimeミリ秒。複数世代を保持できる)。行データは_loadRows経由で
+        // 取得するため、flush前の未反映な変更(_dirty)もバックアップ対象に
+        // 含まれる(select/exportCsvと同じ「現在の実効値」を見る挙動に合わせている).
+        // tableName 対象のテーブル名を設定します.
+        // 戻り値: { tableName, backupId, rowCount }
+        const backupTable = async function (tableName) {
+            const schema = await _loadSchema(tableName);
+            const backupId = String(Date.now());
+            const backupBase = _backupPrefix(tableName, backupId);
+
+            await s3sdk.put(_bucket, backupBase, "schema.json", JSON.stringify(schema), _s3opts);
+            const rows = await _loadRows(tableName);
+            await s3sdk.put(_bucket, backupBase, _dataKey(), JSON.stringify(rows), _s3opts);
+
+            return { tableName: tableName, backupId: backupId, rowCount: rows.length };
+        };
+
+        // 指定テーブルの既存バックアップ世代(backupId)一覧を、古い順
+        // (タイムスタンプ昇順)の文字列配列で返す.
+        // tableName 対象のテーブル名を設定します.
+        const listBackups = async function (tableName) {
+            const marker = _basePrefix + "backup/" + tableName + "/";
+            const backupIds = new Set();
+            let token = undefined;
+            do {
+                const res = await s3sdk.list(_bucket, marker,
+                    Object.assign({}, _s3opts, { continuationToken: token, maxKey: 1000 }));
+                const contents = res.Contents || [];
+                for (let i = 0; i < contents.length; i++) {
+                    const rest = contents[i].Key.substring(marker.length);
+                    backupIds.add(rest.split("/")[0]);
+                }
+                token = res.IsTruncated ? res.NextContinuationToken : undefined;
+            } while (token);
+            return Array.from(backupIds).sort();
+        };
+
+        // 指定した世代(backupId)の内容で、現在のテーブル(行データ・
+        // スキーマ)を完全に置き換える(全置換。差分マージはしない)。
+        // 復元後の内容は即座にS3へ書き込み、メモリキャッシュも復元後の
+        // 内容にリセットする(flush不要で反映済みの状態になる).
+        // tableName 対象のテーブル名を設定します.
+        // backupId backupTable()が返したバックアップ世代IDを設定します.
+        // 戻り値: { tableName, backupId, rowCount }
+        const restoreTable = async function (tableName, backupId) {
+            const backupBase = _backupPrefix(tableName, backupId);
+            const schemaRes = await s3sdk.get(_bucket, backupBase, "schema.json", _s3opts);
+            if (schemaRes == null) {
+                throw new Error("Backup not found: " + tableName + "/" + backupId);
+            }
+            const schema = JSON.parse(await _streamToString(schemaRes.Body));
+
+            const dataRes = await s3sdk.get(_bucket, backupBase, _dataKey(), _s3opts);
+            const rows = (dataRes == null) ? [] : JSON.parse(await _streamToString(dataRes.Body));
+            await _saveRows(tableName, rows);
+            _rowsCache[tableName] = rows;
+            _dirty[tableName] = false;
+
+            const all = await _loadAllDefs();
+            all[tableName] = schema;
+            await s3sdk.put(_bucket, _defsPrefix(), _defsKey(), JSON.stringify(all), _s3opts);
+
+            return { tableName: tableName, backupId: backupId, rowCount: rows.length };
+        };
+
         // 1件分の行データを、カラム定義(notNull/default/primaryKey/unique/
         // seqId/型)に従って検証・補完する.
         // rows 一意性チェック対象の既存行配列を設定します.
@@ -685,6 +768,9 @@
             describeTable: describeTable,
             listTables: listTables,
             alterColumns: alterColumns,
+            backupTable: backupTable,
+            listBackups: listBackups,
+            restoreTable: restoreTable,
             insert: insert,
             select: select,
             update: update,

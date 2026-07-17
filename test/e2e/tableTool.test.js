@@ -257,15 +257,33 @@ test("tableTool: backupTable/restoreTable/listBackupsでテーブルの世代管
     assert.match(restoreErr.error, /テーブル管理コマンドの実行に失敗しました/);
 });
 
-test("tableTool: backupTable/restoreTable/listBackupsはtarget=masterでは実行できずtableName必須", async () => {
+test("tableTool: backupTable/restoreTable/listBackupsはtarget=masterでも実行できる", async () => {
     writeTableConf("master", { bucket: BUCKET }, {
         users: { columns: { name: { type: "string" } } }
     });
-    const r1 = await runTableTool(["-t", "master", "-c", "backupTable", "-n", "users"]);
-    assert.match(r1.error, /target=indexのみ対応/);
+    await runTableTool(["-t", "master", "-c", "createTable"]);
 
-    const r2 = await runTableTool(["-t", "index", "-c", "backupTable"]);
-    assert.match(r2.error, /tableNameの指定が必須/);
+    const r1 = await runTableTool(["-t", "master", "-c", "backupTable", "-n", "users"]);
+    assert.equal(r1.command, "backupTable");
+    assert.equal(r1.target, "master");
+    assert.equal(r1.tableName, "users");
+    assert.equal(typeof r1.backupId, "string");
+    // s3MasterTable.jsにはインデックスが無いためindexEntryCountは含まれない.
+    assert.equal(r1.indexEntryCount, undefined);
+
+    const list1 = await runTableTool(["-t", "master", "-c", "listBackups", "-n", "users"]);
+    assert.deepEqual(list1, { command: "listBackups", target: "master", tableName: "users", backupIds: [r1.backupId] });
+
+    const restore1 = await runTableTool(["-t", "master", "-c", "restoreTable", "-n", "users", "-b", r1.backupId]);
+    assert.equal(restore1.command, "restoreTable");
+    assert.equal(restore1.target, "master");
+    assert.equal(restore1.backupId, r1.backupId);
+});
+
+test("tableTool: backupTable/restoreTable/listBackupsはtableName未指定だとエラーになる", async () => {
+    writeTableConf("index", { bucket: BUCKET }, {});
+    const r1 = await runTableTool(["-t", "index", "-c", "backupTable"]);
+    assert.match(r1.error, /tableNameの指定が必須/);
 });
 
 test("tableTool: 定義ファイルが存在しない場合はエラーを返す", async () => {
