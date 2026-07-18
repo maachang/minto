@@ -184,7 +184,9 @@
         // util.formatで文字変換.
         const msg = typeof (args) == "string" ?
             args : util.format.apply(null, args);
-        // ログレベルが満たされた場合.
+        // ログレベルが満たされた場合のみ、ファイル出力・元のコンソール出力の両方を行う.
+        // (以前は元のコンソール出力だけログレベルに関係なく常に行われていたが、
+        //  ファイル出力と同じ基準で揃えるように修正した)
         if (logLevel <= level) {
             // ファイル追加出力(同期実行).
             fs.appendFileSync(
@@ -193,9 +195,9 @@
                 // [{yyyy-MM-dd hh:mm:ss.sss}] {mode}{message}\n
                 , "[" + ymdhms + "] " + mode + msg + "\n"
             );
+            // 元のコンソール出力.
+            _g[SRC_CONSOLE_NAME][srcMode](msg);
         }
-        // 元のコンソール出力
-        _g[SRC_CONSOLE_NAME][srcMode](msg);
     }
 
     // 必要な条件以外は空のfunctionをセット.
