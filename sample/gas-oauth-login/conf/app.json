@@ -1,0 +1,6 @@
+{
+    "s3Bucket": "test-minto-gas-oauth-bucket",
+    "sessionPrefix": "sessions/",
+    "sessionTimeoutMin": 30,
+    "region": "ap-northeast-1"
+}

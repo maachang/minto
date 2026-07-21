@@ -1,0 +1,39 @@
+<%#
+// ************************************************************
+// public/mypage.mt.html
+// マイページ(ログイン後)
+// ************************************************************
+%>
+<%
+    const session = $loadLib("sessionStore.js");
+    const sid = $request().cookie("minto_sid");
+    const user = await session.get(sid);
+    if (user == null) {
+        $response().redirect("/index");
+        return _$outString;
+    }
+%>
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>minto - マイページ</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f5; }
+        .card { background: #fff; padding: 2rem 3rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .btn { display: inline-block; margin-top: 1rem; padding: 0.6rem 1.4rem; background: #4285f4; color: #fff; border-radius: 4px; text-decoration: none; }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>マイページ</h1>
+        <p>ようこそ、<strong><%= user.data.mail %></strong> さん!</p>
+        <p>GoogleWorkspaceログイン中のメールアドレスで認証済みです。</p>
+        <a class="btn" href="/logout">ログアウト</a>
+    </div>
+</body>
+
+</html>
