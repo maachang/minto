@@ -9,7 +9,6 @@ exports.handler = async function () {
 
     // 認証不要パス(GAS oAuthの往復・ログアウト).
     if (path === "/index" ||
-        path === "/requestOAuth" ||
         path === "/resultOAuth" ||
         path === "/logout") {
         return true;
@@ -20,9 +19,12 @@ exports.handler = async function () {
     const sid = req.cookie("minto_sid");
     const user = await session.get(sid);
 
-    // セッションが存在しない場合.
+    // セッションが存在しない場合、現在アクセスしようとしていたパスを
+    // srcURLとして自動的に使い、GASへのoAuthURLへ1回の呼び出しで
+    // リダイレクトする(/requestOAuthを経由する必要がない).
     if (user == null) {
-        $response().redirect("/index");
+        const gasAuth = $loadLib("gasAuth.js");
+        gasAuth.redirectToOAuth(req, $response(), "/resultOAuth");
         return;
     }
 

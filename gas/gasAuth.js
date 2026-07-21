@@ -12,13 +12,27 @@
  *  - ALLOW_MAIL_DOMAINS
  *    許可するメールアドレスのドメイン名群.
  *    GASのスクリプトプロパティに "xxx, yyy, zzz" のように設定します.
+ *  - GLOG_FOLDER_ID
+ *    GLOG出力先のフォルダIDが設定されている場合はgasLogで永続化ログを出力します.
  */
+
+// ログオブジェクト.
+let Logger = null;
 
 // --------------
 // getMethod処理.
 // --------------
 function doGet(e) {
-    return executeGAS(e);
+    Logger = createGuLog();
+    try {
+        return executeGAS(e);
+    } finally {
+        try {
+            Logger.flush();
+        } catch(ee) {
+            Logger.error("Logger出力エラー: ", ee);
+        }
+    }
 }
 
 // [START]=============================.
@@ -87,11 +101,6 @@ const executeGAS = function(e) {
         return ("" + v).trim();
     }
 
-    // Print stack trace.
-    const printStackTrace = function(e) {
-        console.error('# trace: ' + e.message + '\n' + e.stack);
-    }
-
     // HTMLでのtop.locationリダイレクトを返却.
     // GASのHtmlServiceレスポンスはサンドボックスiframe内に描画されるため、
     // 単なるwindow.location.hrefではなくtop.location.hrefで
@@ -146,7 +155,7 @@ const executeGAS = function(e) {
         // tokenKeyCodeから生成時間を取得.
         const p = tokenKeyCode.lastIndexOf("_");
         if(p == -1) {
-            console.error("expire取得失敗: " + tokenKeyCode)
+            Logger.error("expire取得失敗: " + tokenKeyCode)
             // 取得できない場合タイムアウト扱い.
             return true;
         }
@@ -154,12 +163,12 @@ const executeGAS = function(e) {
         const expireTokenKeyCode = parseInt(
             tokenKeyCode.substring(p + 1), 16);
         if(isNaN(expireTokenKeyCode)) {
-            console.error("errorTimeoutValue: " +
+            Logger.error("errorTimeoutValue: " +
                 tokenKeyCode.substring(p + 1))
             // 取得できない場合タイムアウト扱い.
             return true;
         }
-        console.log("timeout: " + (Date.now() > expireTokenKeyCode))
+        Logger.log("timeout: " + (Date.now() > expireTokenKeyCode))
         // 渡されたTokenKeyCodeがexpire値を超えてる場合.
         return Date.now() > expireTokenKeyCode;
     }
@@ -185,7 +194,7 @@ const executeGAS = function(e) {
         // targetを取得して定義されているかチェック.
         let target = params[PARAMS_EXECUTE_TARGET];
         if(typeof(target) != "string" || target == "") {
-            console.warn(PARAMS_EXECUTE_TARGET + " does not exist.");
+            Logger.warn(PARAMS_EXECUTE_TARGET + " does not exist.");
             return false;
         }
         target = target.trim();
@@ -193,14 +202,14 @@ const executeGAS = function(e) {
         // PARAMS_REQUEST_TOKEN_KEYが存在するかチェック.
         const tokenKeyCode = params[PARAMS_REQUEST_TOKEN_KEY];
         if(typeof(tokenKeyCode) != "string" || tokenKeyCode == "") {
-            console.warn(PARAMS_REQUEST_TOKEN_KEY + " does not exist.");
+            Logger.warn(PARAMS_REQUEST_TOKEN_KEY + " does not exist.");
             return false;
         }
     
         // PARAMS_REQUEST_TOKEN_KEYタイムアウトチェック.
         if(isTokenKeyCodeToTimeout(tokenKeyCode)) {
             // タイムアウト.
-            console.warn(PARAMS_REQUEST_TOKEN_KEY +
+            Logger.warn(PARAMS_REQUEST_TOKEN_KEY +
               " is timed out.");
             return false;
         }
@@ -210,7 +219,7 @@ const executeGAS = function(e) {
         const requestSuccessToken =
             params[PARAMS_REQUEST_SUCCESS_TOKEN];
         if(typeof(requestSuccessToken) != "string") {
-            console.warn(PARAMS_REQUEST_SUCCESS_TOKEN + " does not exist.");
+            Logger.warn(PARAMS_REQUEST_SUCCESS_TOKEN + " does not exist.");
             return false;
         }
     
@@ -255,13 +264,13 @@ const executeGAS = function(e) {
             return true;
         }
         // 内容確認.
-        console.log("# calcEqToken        : " + calcEqToken)
-        console.log("# requestSuccessToken: " + requestSuccessToken)
+        Logger.log("# calcEqToken        : " + calcEqToken)
+        Logger.log("# requestSuccessToken: " + requestSuccessToken)
     
         // 一致しない場合はsignature内容を出力.
-        console.log("# notToken signature: " + signature);
-        console.log("# target: " + target);
-        console.log("# signature: " + signature);
+        Logger.log("# notToken signature: " + signature);
+        Logger.log("# target: " + target);
+        Logger.log("# signature: " + signature);
     
         return false;
     }
@@ -270,6 +279,7 @@ const executeGAS = function(e) {
     const isAllowMail = function(mail) {
         // メールアドレスではない.
         if(mail.indexOf("@") == -1) {
+            Logger.warn("isAllowMail: 不正なメールアドレス形式のため却下: " + mail);
             return false;
         }
         const allowMailDomains = ENV_ALLOW_MAIL_DOMAINS();
@@ -286,6 +296,8 @@ const executeGAS = function(e) {
             }
         }
         // 全てが不一致の場合.
+        Logger.warn("isAllowMail: 許可ドメイン(" + allowMailDomains.join(", ") +
+            ")に一致しないため却下: " + mail);
         return false;
     }
     
@@ -295,19 +307,18 @@ const executeGAS = function(e) {
         try {
             // メールアドレスを取得.
             const mail = getMailAddress();
-            console.log("# mail: " + mail);
+            Logger.log("# mail: " + mail);
             const isMail = isAllowMail(mail);
-            console.log("# isAllowMail: " + isMail);
+            Logger.log("# isAllowMail: " + isMail);
             const isAuth = isAuthRequestAccessToken();
-            console.log("# isAuthRequestAccessToken: " + isAuth);
+            Logger.log("# isAuthRequestAccessToken: " + isAuth);
             // 許可されたメールアドレスのドメイン名であり
             // tokenが正しい事場合、メールアドレスを返却.
             if(isMail && isAuth) {
                 return mail;
             }
         } catch(e) {
-            console.error("[ERROR]getMailAndAuthMailAndAuthToken: ");
-            printStackTrace(e);
+            Logger.error("[ERROR]getMailAndAuthMailAndAuthToken: ", e);
         }
         // 失敗の場合は空を返却.
         return ""
@@ -399,7 +410,7 @@ const executeGAS = function(e) {
                 throw new Error("gas login failed.");
             }
             const srcURL = convString(params[PARAMS_SOURCE_ACCESS_URL]);
-            console.log("# srcURL: " + srcURL);
+            Logger.log("# srcURL: " + srcURL);
 
             // 認証結果をcallbackURL(minto側の検証エンドポイント)へ
             // 付与してブラウザをトップレベルでリダイレクトさせる.
@@ -409,19 +420,24 @@ const executeGAS = function(e) {
             redirectURL = appendParam(redirectURL, "tokenKey", params[PARAMS_REQUEST_TOKEN_KEY]);
             redirectURL = appendParam(redirectURL, "redirectToken", createRedirectToken(PARAMS_TYPE_OAUTH, mail));
             redirectURL = appendParam(redirectURL, "srcURL", srcURL);
+            // 認証成功の監査ログ(誰が・どこへ). tokenやredirectToken等の
+            // 秘匿情報は出力しない.
+            Logger.log("[SUCCESS]executeOAuth: mail=" + mail +
+                " callbackURL=" + callbackURL + " srcURL=" + srcURL);
             return resultRedirect(redirectURL);
         } catch(e) {
             // 例外もoAuth失敗扱い.
-            console.error("[ERROR]executeOAuth: ");
-            printStackTrace(e);
+            Logger.error("[ERROR]executeOAuth: ", e);
         }
         // oAuth失敗. callbackURLが判明していれば、そこへerror付きで
         // リダイレクトしてminto側でエラーハンドリングできるようにする
         // (callbackURL自体が不明な場合のみ、その場でエラー表示する).
         if(callbackURL != "") {
+            Logger.warn("[FAILED]executeOAuth: callbackURL=" + callbackURL);
             return resultRedirect(
                 appendParam(callbackURL, "error", "oAuth authentication process failed"));
         }
+        Logger.error("[FAILED]executeOAuth: callbackURL is not set.");
         return HtmlService.createHtmlOutput(
             "oAuth authentication process failed: callbackURL is not set.");
     }
@@ -446,15 +462,20 @@ const executeGAS = function(e) {
                 // アカウントデータの利用許可用.
                 case PARAMS_TYPE_ALLOW_ACCOUNT_DATA:
                     // アクセスがあったらsuccess返却するだけ.
+                    Logger.log("allowAccountData accessed: mail=" + getMailAddress());
                     const res = ContentService.createTextOutput();
                     res.setMimeType(ContentService.MimeType.TEXT);
                     res.setContent("success");
-                    return res;            
+                    return res;
                 // oauth実行.
                 case PARAMS_TYPE_OAUTH:
                     return executeOAuth();
             }
-        }    
+            // 未知のtargetが指定された場合(不正アクセスの兆候調査用).
+            Logger.warn("Unknown target: " + target);
+        } else {
+            Logger.warn("target parameter is not set.");
+        }
         // 条件内容が存在しない場合の返却.
         return zeroResult();
     })();

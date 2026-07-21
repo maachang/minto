@@ -32,7 +32,10 @@
     <div class="card">
         <h1>minto GAS oAuth Login</h1>
         <p>GoogleWorkspaceのログイン中アカウントでログインします。</p>
-        <a class="btn" href="/requestOAuth?srcURL=/mypage">GASでログイン</a>
+        <%# /mypage はfilter.mt.jsで保護されているため、未ログインの場合は
+            filter側がgasAuth.redirectToOAuth()で自動的にGASログインへ
+            リダイレクトする(このリンク自体はGASへの直接リンクではない). %>
+        <a class="btn" href="/mypage">GASでログイン</a>
     </div>
 </body>
 

@@ -318,6 +318,36 @@ const allowAccountDataURL = function() {
         + encodeURIComponent(PARAMS_TYPE_ALLOW_ACCOUNT_DATA);
 }
 
+// pathを絶対URL化する(host+protocolを付与).
+// request 対象のrequest情報を設定します.
+// path 対象のパス(相対 or 絶対)を設定します.
+// 戻り値: 絶対URLが返却されます.
+const _toAbsoluteUrl = function(request, path) {
+    const host = request.header("host");
+    const protocol = getHttpProtocol(host);
+    return protocol + host + (path.startsWith("/") ? path : "/" + path);
+}
+
+// gasのOAuth用URL生成に必要なparams({callbackURL, [srcURL]})を組み立てる.
+// request 対象のrequest情報を設定します.
+// callbackPath GASからのoAuth結果を受け取るアプリ側のパスを設定します(必須).
+// srcUrl oAuth成功後に最終的に着地させたいパス(相対 or 絶対)を設定します
+//        (省略時はsrcURLパラメータを付与しない).
+// 戻り値: getGasAccessURLEncodeGetParams に渡すparamsオブジェクト.
+const _buildOAuthParams = function(request, callbackPath, srcUrl) {
+    if(!useString(callbackPath)) {
+        throw new Error("callbackPath is not set.");
+    }
+    const params = {};
+    // GASからの認証結果を受け取るアプリ側のURL(絶対URL)をセット.
+    params[PARAMS_CALLBACK_URL] = _toAbsoluteUrl(request, callbackPath);
+    // ログイン後の元のURLを取得.
+    if(useString(srcUrl)) {
+        params[PARAMS_SRC_URL] = _toAbsoluteUrl(request, srcUrl);
+    }
+    return params;
+}
+
 // gasのOAuth用URLを生成.
 // この処理で返却したURLをリダイレクトする事でgasに対してoAuthされます.
 // request 対象のrequest情報を設定します.
@@ -325,26 +355,9 @@ const allowAccountDataURL = function() {
 //              (例: "/resultOAuth")を設定します(必須).
 // 戻り値: GASに問い合わせるURLが返却されます.
 const createOAuthURL = function(request, callbackPath) {
-    if(!useString(callbackPath)) {
-        throw new Error("callbackPath is not set.");
-    }
-    const params = {};
-    const host = request.header("host");
-    const protocol = getHttpProtocol(host);
-
-    // GASからの認証結果を受け取るアプリ側のURL(絶対URL)をセット.
-    params[PARAMS_CALLBACK_URL] = protocol + host +
-        (callbackPath.startsWith("/") ? callbackPath : "/" + callbackPath);
-
-    // ログイン後の元のURLを取得.
-    // 現在アクセス中のURL＋パラメータをセット.
-    const srcUrl = request.params()[PARAMS_SRC_URL];
-    if(useString(srcUrl)) {
-        const sourceAccessUrl = protocol + host +
-            (srcUrl.startsWith("/") ?
-                srcUrl : "/" + srcUrl);
-        params[PARAMS_SRC_URL] = sourceAccessUrl;
-    }
+    // 現在アクセス中のURL(request.params().srcURL)＋パラメータをセット.
+    const params = _buildOAuthParams(
+        request, callbackPath, request.params()[PARAMS_SRC_URL]);
 
     // Gasアクセス用のURL + URLEncodeのGetパラメータを生成.
     const urlAndParams = getGasAccessURLEncodeGetParams(
@@ -355,7 +368,8 @@ const createOAuthURL = function(request, callbackPath) {
 }
 
 // GasのOAuthURLを作成します.
-// request 対象のrequest情報を設定します.
+// request 対象のrequest情報を設定します
+//         (request.params().srcURLがあればoAuth成功後の着地先として使う).
 // callbackPath GASからのoAuth結果を受け取るアプリ側のパス
 //              (例: "/resultOAuth")を設定します(必須)。
 //              このパスに対して、mail/redirectToken/type/tokenKey/srcURL
@@ -368,6 +382,29 @@ const executeOAuthURL= function(request, callbackPath) {
 
     // gasのURLを生成.
     return createOAuthURL(request, callbackPath);
+}
+
+// フィルター(認証ガード)向けの単発ヘルパー.
+// 未ログイン判定した箇所からこれを1回呼ぶだけで、現在アクセスしようと
+// していたパス(request.path())を自動的にsrcURLとして使い、GASへの
+// oAuth用URLを生成してレスポンスをリダイレクトさせる(URL生成と
+// リダイレクトをまとめて行う。executeOAuthURLと異なり呼び出し元で
+// ?srcURL=... を明示的に付与する必要が無い).
+// request 対象のrequest情報を設定します.
+// response 対象のresponse情報を設定します($response()).
+// callbackPath GASからのoAuth結果を受け取るアプリ側のパス
+//              (例: "/resultOAuth")を設定します(必須).
+const redirectToOAuth = function(request, response, callbackPath) {
+    // 必須パラメータチェック.
+    checEnvOAuth();
+
+    // 現在アクセスしようとしていたパスをsrcURLとして自動セットする.
+    const params = _buildOAuthParams(request, callbackPath, request.path());
+
+    // Gasアクセス用のURL + URLEncodeのGetパラメータを生成してリダイレクト.
+    const urlAndParams = getGasAccessURLEncodeGetParams(
+        PARAMS_TYPE_OAUTH, params);
+    response.redirect(urlAndParams.url + "?" + urlAndParams.params);
 }
 
 // redierctTokenごまかし的難読化テーブル.
@@ -492,6 +529,7 @@ const getOAuthMail = function(request) {
 ////////////////////////////////////////////////////////////////
 exports.allowAccountDataURL = allowAccountDataURL;
 exports.executeOAuthURL = executeOAuthURL;
+exports.redirectToOAuth = redirectToOAuth;
 exports.getOAuthMail = getOAuthMail;
 // srcURL(元々アクセスしたかったURL)へリダイレクトしたい場合に使う
 // ユーティリティ(request.params().srcURLをそのまま渡してよい).
