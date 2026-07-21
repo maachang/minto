@@ -7,13 +7,11 @@ exports.handler = async function () {
     const req = $request();
     const path = req.path();
 
-    // 認証不要パス(GAS oAuthの往復・ログアウト・静的アセット).
+    // 認証不要パス(GAS oAuthの往復・ログアウト).
     if (path === "/index" ||
         path === "/requestOAuth" ||
-        path === "/requestOAuth.html" ||
         path === "/resultOAuth" ||
-        path === "/logout" ||
-        path.startsWith("/assets/")) {
+        path === "/logout") {
         return true;
     }
 

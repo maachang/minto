@@ -77,9 +77,11 @@ const executeGAS = function(e) {
     // request側で作成した正解データ的なToken.
     const PARAMS_REQUEST_SUCCESS_TOKEN = "request-token";
     
-    // [返却パラメータ]jsonpCallメソッドKey.
-    const PARAMS_JSONP_CALL = "jsonpCall";
-    
+    // [認証パラメータ]callbackURL.
+    // 認証結果(mail/redirectToken等)の受け取り先(minto側)のURLが
+    // 格納されます. ブラウザをここへtop.locationでリダイレクトさせる.
+    const PARAMS_CALLBACK_URL = "callbackURL";
+
     // 文字列変換.
     const convString = function(v) {
         if(v == undefined || v == null) {
@@ -87,41 +89,25 @@ const executeGAS = function(e) {
         }
         return ("" + v).trim();
     }
-    
+
     // Print stack trace.
     const printStackTrace = function(e) {
         console.error('# trace: ' + e.message + '\n' + e.stack);
     }
-    
-    // JSON返却.
-    const resultJSON = function(json) {
-        const res = ContentService.createTextOutput();
-        res.setMimeType(ContentService.MimeType.JSON);
-        res.setContent(JSON.stringify(json));
-        return res;
+
+    // HTMLでのtop.locationリダイレクトを返却.
+    // GASのHtmlServiceレスポンスはサンドボックスiframe内に描画されるため、
+    // 単なるwindow.location.hrefではなくtop.location.hrefで
+    // トップレベルウィンドウ自体をリダイレクトさせる必要がある.
+    // url リダイレクト先URLを設定します.
+    const resultRedirect = function(url) {
+        const html = "<!DOCTYPE html><html><head><base target=\"_top\">" +
+            "<meta charset=\"UTF-8\"></head><body>" +
+            "<script>top.location.href = " + JSON.stringify(url) + ";</script>" +
+            "</body></html>";
+        return HtmlService.createHtmlOutput(html);
     }
-    
-    // jsonp返却.
-    const resultJSONP = function(json, callbackName) {
-        const res = ContentService.createTextOutput();
-        res.setMimeType(ContentService.MimeType.JAVASCRIPT);
-        res.setContent(callbackName + "(" + JSON.stringify(json) + ");");
-        return res;
-    }
-    
-    // jsonを送信.
-    const sendJSON = function(json) {
-        const params = getParams();
-        // jsonp返却の場合.
-        if(params[PARAMS_JSONP_CALL] != undefined) {
-            // jsonp返却.
-            return resultJSONP(json, params[PARAMS_JSONP_CALL]);
-        } else {
-            // json返却.
-            return resultJSON(json);
-        }
-    }
-    
+
     // Googleログイン中のGoogleメールアドレスを取得.
     const getMailAddress = function() {
         return convString(Session.getActiveUser()
@@ -232,31 +218,34 @@ const executeGAS = function(e) {
         }
     
         // シグニチャを作成.
+        // AIメモ: 以前はtarget別に個別のパラメータだけをsignatureに反映する
+        // 実装だったが(oAuth用のsrcURLのみ、未実装のbusinessDay分岐は
+        // 未定義変数参照のバグ持ちだった)、minto側(modules/auth/gasAuth.js の
+        // createSendToken)は「認証管理用パラメータ以外の全パラメータを
+        // key昇順でsignatureに連結する」汎用実装になっており、両者が
+        // ズレていた(callbackURL等の新規パラメータ追加のたびに本ファイルの
+        // 対応漏れが起きる構造だった)。minto側と全く同じ規則に合わせることで、
+        // 今後addParamsに新しいキーを追加してもこちらの改修が不要になる.
         let signature = allowAuthKeyCode +
             TOKEN_DELIMIRATER + target +
             TOKEN_DELIMIRATER + tokenKeyCode;
-        // targetが"oauth"の場合.
-        if(target == PARAMS_TYPE_OAUTH) {
-            // 認証後にリダイレクトされるURL.
-            if(convString(params[PARAMS_SOURCE_ACCESS_URL]) != "") {
-                // 存在する場合のみ.
-                signature +=
-                    TOKEN_DELIMIRATER +
-                    PARAMS_SOURCE_ACCESS_URL +
-                    TOKEN_DELIMIRATER +
-                    convString(params[PARAMS_SOURCE_ACCESS_URL]);
+        // 認証管理用・jsonp用パラメータ以外のキーを昇順で連結する.
+        const excludeKeys = {};
+        excludeKeys[PARAMS_EXECUTE_TARGET] = true;
+        excludeKeys[PARAMS_REQUEST_TOKEN_KEY] = true;
+        excludeKeys[PARAMS_REQUEST_SUCCESS_TOKEN] = true;
+        const addKeys = [];
+        for(const k in params) {
+            if(!excludeKeys[k]) {
+                addKeys.push(k);
             }
-        // targetが"bisunessdate"の場合.
-        } else if(target == PARAMS_TYPE_BUSINESS_DAY) {
-            // 対象のパラメータをセット.
-            signature += TOKEN_DELIMIRATER +
-                // 営業日をセット.
-                convString(params[PARAMS_BUSINESS_DAY]) +
-                TOKEN_DELIMIRATER +
-                // 開始日付.
-                convString(params[PARAMS_START_DATE]);
         }
-    
+        addKeys.sort();
+        for(let i = 0; i < addKeys.length; i ++) {
+            signature += TOKEN_DELIMIRATER + addKeys[i] +
+                TOKEN_DELIMIRATER + convString(params[addKeys[i]]);
+        }
+
         // signatureとrequestのtokenKeyCodeから
         // calcEqTokenを作成する.
         const calcEqToken = hmacSHA256(
@@ -344,17 +333,22 @@ const executeGAS = function(e) {
     };
     
     // リダイレクト用Tokenを生成.
-    const createRedirectToken = function(type) {
+    // type 実行パラメータを設定します.
+    // mail 認証済みメールアドレスを設定します(signatureに含めることで、
+    //      redirectToken発行後にmailだけ差し替えるなりすましを防ぐ).
+    const createRedirectToken = function(type, mail) {
         const requestTokenKey = getParams()[
             PARAMS_REQUEST_TOKEN_KEY];
-        // 指定requestTokenKeyとtypeを融合する.
+        // 指定requestTokenKeyとtypeとmailを融合する.
         let len = requestTokenKey.length;
         const signature =
             "~=$_" +
             requestTokenKey.substring(len >> 1) +
             TOKEN_DELIMIRATER +
             type + "=_~!~" +
-            requestTokenKey.substring(0, len >> 1);
+            requestTokenKey.substring(0, len >> 1) +
+            TOKEN_DELIMIRATER +
+            mail;
         // tokenを生成.
         const token = hmacSHA256(
             ENV_ALLOW_AUTH_KEY_CODE, signature, "hex");
@@ -387,9 +381,19 @@ const executeGAS = function(e) {
      * あと、元のrequestTokenとredirectTokenを元にredirectが正しく行われた事を
      * 保証する条件を返却して、oauthの認可が正しいものかを設定します.
      */
+    // callbackURLにクエリパラメータを追加する.
+    const appendParam = function(url, key, value) {
+        return url + (url.indexOf("?") != -1 ? "&" : "?") +
+            encodeURIComponent(key) + "=" + encodeURIComponent(value);
+    }
+
     const executeOAuth = function() {
         const params = getParams();
+        const callbackURL = convString(params[PARAMS_CALLBACK_URL]);
         try {
+            if(callbackURL == "") {
+                throw new Error("callbackURL is not set.");
+            }
             // 許可されたメールアドレスのドメインで
             // tokenも正しい場合はメールアドレスが付与されるか確認.
             const mail = getMailAndAuthMailAndAuthToken();
@@ -399,43 +403,30 @@ const executeGAS = function(e) {
             }
             const srcURL = convString(params[PARAMS_SOURCE_ACCESS_URL]);
             console.log("# srcURL: " + srcURL);
-    
-            // メールアドレスが取得できている.
-            // redirect先URLが存在する.
-            if(mail != "") {
-                return sendJSON({
-                    status: 200,
-                    // タイプ,
-                    type: PARAMS_TYPE_OAUTH,
-                    // アクセス元のURL.
-                    srcURL: srcURL,
-                    // requestTokenKey.
-                    tokenKey: params[PARAMS_REQUEST_TOKEN_KEY],
-                    // redirectToken.
-                    redirectToken: createRedirectToken(PARAMS_TYPE_OAUTH),
-                    // googleWorkspaceにログインしているメールアドレス.
-                    mail: mail,
-                    // メッセージ.
-                    message: "success"
-                });
-            }
+
+            // 認証結果をcallbackURL(minto側の検証エンドポイント)へ
+            // 付与してブラウザをトップレベルでリダイレクトさせる.
+            let redirectURL = callbackURL;
+            redirectURL = appendParam(redirectURL, "mail", mail);
+            redirectURL = appendParam(redirectURL, "type", PARAMS_TYPE_OAUTH);
+            redirectURL = appendParam(redirectURL, "tokenKey", params[PARAMS_REQUEST_TOKEN_KEY]);
+            redirectURL = appendParam(redirectURL, "redirectToken", createRedirectToken(PARAMS_TYPE_OAUTH, mail));
+            redirectURL = appendParam(redirectURL, "srcURL", srcURL);
+            return resultRedirect(redirectURL);
         } catch(e) {
             // 例外もoAuth失敗扱い.
             console.error("[ERROR]executeOAuth: ");
             printStackTrace(e);
         }
-        // oauth失敗.
-        return sendJSON({
-            status: 500,
-            // タイプ,
-            type: PARAMS_TYPE_OAUTH,
-            // アクセス元のURL.
-            srcURL: convString(params[PARAMS_SOURCE_ACCESS_URL]),
-            // googleWorkspaceにログインしているメールアドレス.
-            mail: "",
-            // message.
-            message: "oAuth authentication process failed"
-        });
+        // oAuth失敗. callbackURLが判明していれば、そこへerror付きで
+        // リダイレクトしてminto側でエラーハンドリングできるようにする
+        // (callbackURL自体が不明な場合のみ、その場でエラー表示する).
+        if(callbackURL != "") {
+            return resultRedirect(
+                appendParam(callbackURL, "error", "oAuth authentication process failed"));
+        }
+        return HtmlService.createHtmlOutput(
+            "oAuth authentication process failed: callbackURL is not set.");
     }
     
     // ゼロ返却のresult返却.

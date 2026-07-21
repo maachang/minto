@@ -5,14 +5,19 @@
 //////////////////////////////////////////////
 
 //
-// ※gasのdoGetに対して、gasのアカウントデータアクセス許可が必要な場合、
-// これに対して `XMLHttpRequest` でのアクセスはすべて「エラー」になる.
-// https://qiita.com/faunsu/items/722ab6d7f6178508851c
-// 結局 lambda -> gas(doGet or doPost) のアクセスが可能なのは
-// `jsonp` だけとなるので注意(非常に不便).
-// 
-// あとlambda -> gas のアクセスは「ブラウザに紐づいてる」ので、lambdaから
-// httpClient等でアクセスしても「gasにアクセス」できないので注意.
+// ※gasのdoGetに対して`fetch`/`XMLHttpRequest`でアクセスすると、GASは
+// CORSのpreflight(OPTIONS)に対応していないためブラウザ側でレスポンスの
+// 読み取りがブロックされる(https://qiita.com/faunsu/items/722ab6d7f6178508851c )。
+// またlambda(サーバー側)からgasへ直接httpClient等でアクセスしても、
+// GASのログイン判定は「ブラウザに紐づくGoogleセッション」を見るため意味が無い。
+//
+// そのため本モジュールのoAuthフローは、ブラウザによる**通常のページ遷移
+// (フルナビゲーション)**でgasのURLへ直接アクセスする方式を採る
+// (fetch/XHR/JSONPは使わない。ページ遷移ならCORSは関係無く、GASの初回
+// 利用許可画面も通常のWebアプリアクセスとして自然に表示・完了する)。
+// gas側(gas/gasAuth.js)は認証結果をHtmlService経由のtop.locationリダイレクトで
+// callbackURL(本モジュールのexecuteOAuthURLで指定したアプリ側のURL)へ
+// 返却する。詳細はsample/gas-oauth-login/README.md参照。
 //
 
 (function() {
@@ -56,6 +61,10 @@ const PARAMS_SEND_TOKEN = "request-token";
 
 // [パラメータ]ログインされていない時のURL指定
 const PARAMS_SRC_URL = "srcURL";
+
+// [パラメータ]認証結果(mail/redirectToken等)の受け取り先(minto側)のURL.
+// GASはoAuth成功後、ブラウザをこのURLへ直接リダイレクトさせる.
+const PARAMS_CALLBACK_URL = "callbackURL";
 
 // nullチェック.
 const isNull = function(value) {
@@ -312,39 +321,53 @@ const allowAccountDataURL = function() {
 // gasのOAuth用URLを生成.
 // この処理で返却したURLをリダイレクトする事でgasに対してoAuthされます.
 // request 対象のrequest情報を設定します.
+// callbackPath GASからのoAuth結果を受け取るアプリ側のパス
+//              (例: "/resultOAuth")を設定します(必須).
 // 戻り値: GASに問い合わせるURLが返却されます.
-const createOAuthURL = function(request) {
+const createOAuthURL = function(request, callbackPath) {
+    if(!useString(callbackPath)) {
+        throw new Error("callbackPath is not set.");
+    }
     const params = {};
     const host = request.header("host");
+    const protocol = getHttpProtocol(host);
+
+    // GASからの認証結果を受け取るアプリ側のURL(絶対URL)をセット.
+    params[PARAMS_CALLBACK_URL] = protocol + host +
+        (callbackPath.startsWith("/") ? callbackPath : "/" + callbackPath);
 
     // ログイン後の元のURLを取得.
     // 現在アクセス中のURL＋パラメータをセット.
     const srcUrl = request.params()[PARAMS_SRC_URL];
     if(useString(srcUrl)) {
-        const protocol = getHttpProtocol(host);
         const sourceAccessUrl = protocol + host +
             (srcUrl.startsWith("/") ?
                 srcUrl : "/" + srcUrl);
-        params[PARAMS_SRC_URL] = sourceAccessUrl;        
+        params[PARAMS_SRC_URL] = sourceAccessUrl;
     }
-    
+
     // Gasアクセス用のURL + URLEncodeのGetパラメータを生成.
     const urlAndParams = getGasAccessURLEncodeGetParams(
         PARAMS_TYPE_OAUTH, params);
-    
+
     // OAuth用のURLを返却.
     return urlAndParams.url + "?" + urlAndParams.params;
 }
 
 // GasのOAuthURLを作成します.
 // request 対象のrequest情報を設定します.
+// callbackPath GASからのoAuth結果を受け取るアプリ側のパス
+//              (例: "/resultOAuth")を設定します(必須)。
+//              このパスに対して、mail/redirectToken/type/tokenKey/srcURL
+//              (失敗時はerror)がクエリパラメータ付きでGASから直接
+//              リダイレクトされてくる(getOAuthMail()で検証すること).
 // 戻り値: GasのOAuthURLが返却されます.
-const executeOAuthURL= function(request) {
+const executeOAuthURL= function(request, callbackPath) {
     // 必須パラメータチェック.
     checEnvOAuth();
 
     // gasのURLを生成.
-    return createOAuthURL(request);
+    return createOAuthURL(request, callbackPath);
 }
 
 // redierctTokenごまかし的難読化テーブル.
@@ -357,16 +380,21 @@ const REDIRECT_TOKEN_DF = {
 // redirectToken redirectされた時に渡されたパラメータ"redirectToken"を設定します.
 // type 実行パラメータを設定します.
 // requestTokenKey redirectされた時に渡されたパラメータ"tokenKey"を設定します.
+// mail redirectされた時に渡されたパラメータ"mail"を設定します
+//      (signatureに含めることで、redirectToken発行後にmailだけ
+//      差し替えるなりすましを防ぐ).
 // 戻り値 trueの場合正しいです.
-const isRedirectToken = function(redirectToken, type, requestTokenKey) {
-    // 指定requestTokenKeyとtypeを融合する.
+const isRedirectToken = function(redirectToken, type, requestTokenKey, mail) {
+    // 指定requestTokenKeyとtypeとmailを融合する.
     let len = requestTokenKey.length;
     requestTokenKey =
         "~=$_" +
         requestTokenKey.substring(len >> 1) +
         TOKEN_DELIMIRATER +
         type + "=_~!~" +
-        requestTokenKey.substring(0, len >> 1);
+        requestTokenKey.substring(0, len >> 1) +
+        TOKEN_DELIMIRATER +
+        mail;
     // tokenを生成.
     const token = hmacSHA256(
         process.env[ENV_GAS_ALLOW_AUTH_KEY_CODE], requestTokenKey);
@@ -428,6 +456,13 @@ const encodeRedirectUrlParams = function(url) {
 // 戻り値: 認証済みのメールアドレス(文字列)が返却されます.
 const getOAuthMail = function(request) {
     const params = request.params();
+    // GAS側でoAuth自体が失敗した場合、mailの代わりにerrorが付与される.
+    if(useString(params["error"])) {
+        throw new HttpError({
+            status: 401,
+            message: "gas oauth authentication failed: " + params["error"]
+        });
+    }
     // [oauth]gas認証のメールアドレスを取得.
     const mail = params["mail"];
     if(!useString(mail)) {
@@ -441,7 +476,8 @@ const getOAuthMail = function(request) {
     if(!isRedirectToken(
         params["redirectToken"],
         params["type"],
-        params["tokenKey"])) {
+        params["tokenKey"],
+        mail)) {
         // redirectTokenチェック失敗.
         throw new HttpError({
             status: 403,
