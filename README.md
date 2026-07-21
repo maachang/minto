@@ -19,6 +19,7 @@ Node.jsの代替ランタイムである[llrt（Low Latency Runtime）](https://
 - **S3をKVSとして利用**: RDBMSではなくS3を対象とした「KVS的」なデータ永続化を想定
 - **128MBメモリでの安価な運用**: llrt採用によりAWS Lambdaの最小メモリ環境でも高速に動作
 - **ローカル検証環境あり**: AWS Lambdaに毎回デプロイせずに、ローカルでURL Functionと同様の環境を検証可能（[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md)参照）
+- **GoogleWorkspace企業の社内Webアプリに最適**: カスタムドメインや面倒なOAuthクライアント登録が無くても、GAS(GoogleAppsScript)を使った擬似SSOログインをフィルターへの1行追加だけで組み込める（[gasAuth.md](https://github.com/maachang/minto/blob/main/docs/gasAuth.md)参照）
 
 ## 性能実測（llrt + 128MB）
 
@@ -68,6 +69,17 @@ mintoは「機能としては最低限」のWebアプリ機能しか実装して
 
 RDBMSが必要な本格的なWebアプリや、大規模なデータ操作が必要な用途には向いていません。
 
+特に**GoogleWorkspaceを契約している企業の社内Webアプリ開発**とは相性が良いです。
+社内ツールには「社員だけがログインできる」機能がほぼ必須ですが、Lambda関数URLには
+カスタムドメインが無いことが多く、通常のGoogle OAuthをフルセットで用意するのは
+オーバースペックになりがちです。mintoはGoogleWorkspaceで標準的に使える
+GAS(GoogleAppsScript)を認可機関として使うことで、Google Cloud側の追加設定
+（OAuthクライアント登録・同意画面・ドメイン確認）を一切行わずに、フィルターへの
+1行追加だけで「社員限定ログイン」を実現できます（詳細は
+[gasAuth.md](https://github.com/maachang/minto/blob/main/docs/gasAuth.md)、
+すぐ試せるサンプルは
+[sample/gas-oauth-login](https://github.com/maachang/minto/blob/main/sample/gas-oauth-login/README.md)参照）。
+
 ## llrtの機能制限について
 
 llrtはNode.jsライクに利用できますが、以下のような制限があります。
@@ -92,6 +104,9 @@ llrtはNode.jsライクに利用できますが、以下のような制限があ
 - モジュール（S3データベース。書き込み頻度に応じて使い分ける）
   - [s3MasterTable.js（書き込み頻度が少なく読み込み頻度が多い用途向け）](https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md)
   - [s3IndexTable.js（書き込み頻度が多い用途向け）設計ドキュメント](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)
+- 認証（GoogleWorkspace企業の社内Webアプリ向け）
+  - [GASを使った擬似SSOログイン](https://github.com/maachang/minto/blob/main/docs/gasAuth.md)
+  - [動作するサンプル一式（sample/gas-oauth-login）](https://github.com/maachang/minto/blob/main/sample/gas-oauth-login/README.md)
 
 以上、ありがとうございました。
 </content>

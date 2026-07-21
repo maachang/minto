@@ -15,6 +15,10 @@
   - s3MasterTable.js（書き込み頻度が少なく読み込み頻度が多い用途向け）: https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md
   - s3IndexTable.js（書き込み頻度が多い用途向け）設計ドキュメント: https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md
 
+- 認証（GoogleWorkspace企業の社内Webアプリ向け）
+  - GASを使った擬似SSOログイン: https://github.com/maachang/minto/blob/main/docs/gasAuth.md
+  - 動作するサンプル一式: https://github.com/maachang/minto/blob/main/sample/gas-oauth-login/README.md
+
 - テーブル管理コマンド
   - createTable/dropTable/alterTable/alterIndex（`bin/tableTool`）: https://github.com/maachang/minto/blob/main/bin/README.md
 
