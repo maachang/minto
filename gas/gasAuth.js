@@ -62,9 +62,6 @@ const executeGAS = function(e) {
         return ret;
     };
     
-    // [default]デフォルトの営業日.
-    const DEF_BUSINESS_DAY = 5;
-    
     // [実行パラメータ]処理タイプ.
     const PARAMS_EXECUTE_TARGET = "target";
     
