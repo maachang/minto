@@ -413,6 +413,36 @@ const REDIRECT_TOKEN_DF = {
     "8": "n", "9": "E", "a": "~K", "b": "i", "c": "W6", "d": "d", "e": "=d", "f": "3E"   
 };
 
+// tokenKeyに埋め込まれた生成時のexpire値(ミリ秒)を取得する.
+// tokenKeyCode createTokenKey()が生成したtokenKeyを設定します.
+// 戻り値: expire値(ミリ秒)。取得できない場合はNaN.
+const getTokenKeyExpire = function(tokenKeyCode) {
+    const decoded = Buffer.from(tokenKeyCode, "base64").toString();
+    const p = decoded.lastIndexOf("_");
+    if(p == -1) {
+        return NaN;
+    }
+    return parseInt(decoded.substring(p + 1), 16);
+}
+
+// tokenKeyが期限切れかチェックする.
+// AIメモ: tokenKeyの有効期限はGAS側(gas/gasAuth.jsのisTokenKeyCodeToTimeout)
+// でも「minto→GASへの初回リクエスト時」にチェックされているが、GASから
+// minto側へのコールバック(redirectToken/tokenKey/mail)自体はHMAC整合性の
+// みで検証されており期限切れが再チェックされていなかった。コールバックの
+// クエリパラメータ一式が漏洩した場合に無期限でなりすましログインへ再利用
+// されてしまうため、コールバック検証側(isRedirectToken)でも同じtokenKeyの
+// expire値を再デコードしてチェックする.
+// tokenKeyCode 対象のtokenKeyを設定します.
+// 戻り値: trueの場合期限切れです.
+const isTokenKeyExpired = function(tokenKeyCode) {
+    const expire = getTokenKeyExpire(tokenKeyCode);
+    if(isNaN(expire)) {
+        return true;
+    }
+    return Date.now() > expire;
+}
+
 // リダイレクト用Tokenが正しいかチェックする.
 // redirectToken redirectされた時に渡されたパラメータ"redirectToken"を設定します.
 // type 実行パラメータを設定します.
@@ -422,6 +452,10 @@ const REDIRECT_TOKEN_DF = {
 //      差し替えるなりすましを防ぐ).
 // 戻り値 trueの場合正しいです.
 const isRedirectToken = function(redirectToken, type, requestTokenKey, mail) {
+    // tokenKey自体の有効期限チェック(上記AIメモ参照).
+    if(isTokenKeyExpired(requestTokenKey)) {
+        return false;
+    }
     // 指定requestTokenKeyとtypeとmailを融合する.
     let len = requestTokenKey.length;
     requestTokenKey =

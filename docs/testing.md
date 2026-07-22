@@ -56,6 +56,10 @@ test/
 │   ├── csv.test.js
 │   ├── auth-password.test.js
 │   ├── auth-jwt.test.js
+│   ├── auth-gasAuthSig.test.js
+│   ├── auth-gasAuth.test.js
+│   ├── auth-session.test.js
+│   ├── auth-corsFilter.test.js
 │   ├── http-response.test.js
 │   ├── validate.test.js
 │   ├── seqId.test.js
@@ -187,9 +191,9 @@ test/
 
 一方で `modules/s3table/s3sdk.js`・`s3IndexTable.js`・`s3MasterTable.js`・`s3Lock.js` は、[tools/localS3.js](https://github.com/maachang/minto/blob/main/docs/localS3.md)(ファイル/ディレクトリベースのローカルS3エミュレータ)を子プロセスとして起動することで、実AWSへの通信無しに実際の`@aws-sdk/client-s3`経由のテストが可能になっています(`s3IndexTable-crud.test.js`・`s3MasterTable-crud.test.js`を参照)。
 
-以下はまだこの方式でのテストが未整備です。
+以下はまだこの方式(`localS3`経由の実`@aws-sdk/client-s3`テスト)が未整備です。
 
-- `modules/auth/session.js`(内部で`modules/s3table/s3sdk.js`を経由してS3にアクセスするため、同様の方式でテスト可能)
+- `modules/auth/session.js`(内部で`modules/s3table/s3sdk.js`を経由してS3にアクセスするため、同様の方式でテスト可能。現状`auth-session.test.js`では`s3sdk.js`自体をインメモリのフェイク実装に差し替えて検証している)
 
 必要になった場合は、`fetch`をモックに差し替える仕組みや、上記の`localS3`を使ったテストの追加を検討してください。
 
