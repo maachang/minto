@@ -138,7 +138,13 @@ exports.handler = async function () {
 - GAS→アプリ側への戻り(`redirectToken`)は、認証済みメールアドレス自体も
   署名対象に含めているため、正規のトークンを使い回して別人のメール
   アドレスに差し替える、といったなりすましもできない
-- リクエストトークンには有効期限があり、古いリクエストの使い回しを防ぐ
+- リクエストトークンには有効期限があり、古いリクエストの使い回しを防ぐ。
+  この有効期限はGAS側(`isAuthRequestAccessToken`、minto→GASへの初回
+  リクエスト時)だけでなく、minto側の`getOAuthMail`(GAS→mintoへの
+  コールバック検証時、`modules/auth/gasAuth.js`の`isRedirectToken`)でも
+  同じ`tokenKey`から期限を再デコードして検証している。これにより、
+  コールバックの`mail`/`redirectToken`/`tokenKey`一式がブラウザ履歴や
+  アクセスログ等から漏洩したケースでも、期限切れ後は再利用できない
 
 ## 認証ログの永続化
 

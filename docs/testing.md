@@ -98,7 +98,7 @@ test/
 - **auth-jwt.test.js**: `modules/auth/jwt.js`のHS256署名/検証(sign/verify)を検証します。secret不一致・期限切れ(exp)・フォーマット不正時の検証失敗、`options.noError == false`時の例外throwも確認しています
 - **auth-gasAuthSig.test.js**: `modules/auth/gasAuthSig.js`のhash/getPassCode/createSessionId/encodeToken・decodeTokenを検証します。トークンの往復(encode→decode)で内容が復元できること、異なるkeyCodeでは検証失敗することを確認しています
 - **auth-gasAuth.test.js**: `modules/auth/gasAuth.js`のGAS oAuthコールバック検証(`getOAuthMail`/`isRedirectToken`)を検証します。正しいredirectTokenでのメールアドレス取得、mail差し替え検知、**tokenKeyの期限切れ検知**、GAS側errorパラメータ・mail欠損時のエラー応答を確認しています
-- **auth-session.test.js**: `modules/auth/session.js`をs3sdkをインメモリのフェイク実装に差し替え、`$loadConf("session.json")`もスタブして検証します。conf未設定/bucket未設定時に例外になること、start/get/destroy/count、タイムアウトによる自動削除、setCookie/getCookie/destroyCookieのCookie連携、1リクエスト内キャッシュを確認しています
+- **auth-session.test.js**: `modules/auth/session.js`をs3sdkをインメモリのフェイク実装に差し替え、`$loadConf("session.json")`もスタブして検証します。conf未設定/bucket未設定時に例外になること、start/get/destroy/count、タイムアウトによる自動削除、setCookie/getCookie/destroyCookieのCookie連携、1リクエスト内キャッシュ、CookieのSameSite属性(conf未設定時"lax"、設定値の反映、destroyCookie時の反映)を確認しています
 - **auth-corsFilter.test.js**: `modules/auth/corsFilter.js`のCORSヘッダー付与(`apply`)を検証します。Originヘッダー無し・許可オリジン(`*`/リスト)・不許可オリジン・credentials/methods/headersのカスタマイズを確認しています
 - **auth-admin.test.js**: `modules/auth/admin.js`の管理者情報管理(`isAdmin`/`addAdmin`/`removeAdmin`/`listAdmins`)を、s3sdkと`modules/auth/session.js`をインメモリのフェイク実装に差し替えて検証します。環境変数で定義した初期管理者の扱い、追加/削除/重複防止、S3へ保存される内容がAES-256-GCM(WebCrypto)で暗号化され平文のメールアドレスを含まないこと、異なる暗号化キーでは復号できないこと、`isAdmin()`でmailを省略した場合は`session.getCookie()`のログイン中ユーザIDが使われることを確認しています
 - **http-response.test.js**: `modules/http/response.js`のJSON/エラーレスポンス組み立て(`json`/`error`)を検証します。グローバルの`$response()`を呼び出し内容を記録するスタブに差し替えて検証しています
