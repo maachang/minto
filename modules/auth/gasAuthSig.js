@@ -10,6 +10,30 @@ const convb = $loadLib("convb.js");
 // 乱数キー数.
 const _RAND_LENGTH = 16;
 
+// ランダムバイナリをout(Array)に格納.
+const getRandArray = function (out, len) {
+    let n, i, cnt = 0;
+    const len4 = len >> 2;
+    const lenEtc = len & 0x03;
+    for (i = 0; i < len4; i++) {
+        n = rand.next();
+        out[cnt++] = n & 0x0ff;
+        out[cnt++] = (n & 0x0ff00) >> 8;
+        out[cnt++] = (n & 0x0ff0000) >> 16;
+        out[cnt++] = ((n & 0xff000000) >> 24) & 0x0ff;
+    }
+    for (i = 0; i < lenEtc; i++) {
+        out[cnt++] = rand.next() & 0x0ff;
+    }
+};
+
+// ランダムバイナリを指定数取得.
+const getRandBytes = function (len) {
+    const ret = Buffer.alloc(len);
+    getRandArray(ret, len);
+    return ret;
+};
+
 // フリップ.
 // 主にencode系で利用します.
 // code 1byte情報を設定.
@@ -272,7 +296,7 @@ const createSessionId = function(len) {
                 MAX_SESSION_ID_LENGTH + ").")
     }
     const ret = [];
-    rand.getArray(ret, len);
+    getRandArray(ret, len);
     ret[ret.length] = ret & 0x0ff;
     convb.encodeLong(ret, Date.now());
     return cutEndBase64Eq(
@@ -335,7 +359,7 @@ const encodeToken = function(
         convb.encodeLong(list, (expireMs|0) + Date.now());
     }
     // ランダムなバイナリを取得.
-    const randBin = rand.getBytes(_RAND_LENGTH);
+    const randBin = getRandBytes(_RAND_LENGTH);
     // パスワードとユーザ名と日付をランダム変換.
     encodeValue(list, 2, randBin);
     // 乱数情報をセット.

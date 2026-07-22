@@ -60,19 +60,19 @@
         };
 
         // Byteリストの乱数を生成.
-        const outByteList = function (out, cnt, len) {
+        const outByteList = function (out, offset, len) {
             let n, i;
             const len4 = len >> 2;
             const lenEtc = len & 0x03;
             for (i = 0; i < len4; i++) {
                 n = next();
-                out[cnt++] = n & 0x0ff;
-                out[cnt++] = (n & 0x0ff00) >> 8;
-                out[cnt++] = (n & 0x0ff0000) >> 16;
-                out[cnt++] = ((n & 0xff000000) >> 24) & 0x0ff;
+                out[offset++] = n & 0x0ff;
+                out[offset++] = (n & 0x0ff00) >> 8;
+                out[offset++] = (n & 0x0ff0000) >> 16;
+                out[offset++] = ((n & 0xff000000) >> 24) & 0x0ff;
             }
             for (i = 0; i < lenEtc; i++) {
-                out[cnt++] = next() & 0x0ff;
+                out[offset++] = next() & 0x0ff;
             }
         };
 
@@ -85,7 +85,7 @@
 
         // ランダムバイナリをout(Array)に格納.
         const getArray = function (out, len) {
-            outByteList(out, out.length, len);
+            outByteList(out, 0, len);
         };
 
         // ゼロサプレス.
