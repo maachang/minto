@@ -56,6 +56,9 @@
     // AESのIV長(GCM推奨: 12Byte).
     const _IV_LEN = 12;
 
+    // adminキャッシュ変数名.
+    const _ADMIN_CACHE = "modules.auth.admin";
+
     // 暗号化キー文字列からAES-256-GCM用のCryptoKeyを生成する.
     // encryptKey 対象の暗号化キー文字列を設定します.
     // 戻り値: WebCryptoのCryptoKeyが返却されます.
@@ -136,21 +139,40 @@
             return _aesKeyPromise;
         };
 
+        // キャッシュクリア.
+        const _clearCache = function() {
+            // キャッシュをクリア.
+            $cache()[_ADMIN_CACHE] = undefined;
+        }
+
         // S3から管理者一覧(メールアドレスの配列)を取得する.
         // 存在しない場合は空配列を返す.
         const _load = async function () {
+            // キャッシュが存在する場合はキャッシュから取得
+            // (nullという正当なキャッシュ結果と、未キャッシュ(undefined)を
+            // 区別するため厳密不等価で判定する).
+            const cs = $cache();
+            if (cs[_ADMIN_CACHE] !== undefined) {
+                return cs[_ADMIN_CACHE];
+            }
             const res = await s3sdk.get(_bucket, _prefix, _FILE_NAME, _s3opts);
             if (res == null) {
+                // 空のキャッシュをセット.
+                cs[_ADMIN_CACHE] = [];
                 return [];
             }
             const body = await _streamToString(res.Body);
             const aesKey = await _getAesKey();
             const decrypted = await _decrypt(aesKey, body);
-            return JSON.parse(decrypted);
+            const ret = JSON.parse(decrypted);
+            // 取得結果のキャッシュをセット.
+            cs[_ADMIN_CACHE] = ret;
+            return ret;
         };
 
         // 管理者一覧をS3へ暗号化して保存する.
         const _save = async function (list) {
+            _clearCache(); // キャッシュをクリア.
             const aesKey = await _getAesKey();
             const encrypted = await _encrypt(aesKey, JSON.stringify(list));
             await s3sdk.put(_bucket, _prefix, _FILE_NAME, encrypted, _s3opts);
@@ -191,6 +213,7 @@
                     // S3側の一覧には追加しない.
                     return;
                 }
+                _clearCache(); // キャッシュをクリア.
                 const list = await _load();
                 if (list.indexOf(mail) === -1) {
                     list.push(mail);
@@ -202,6 +225,7 @@
             // 削除できません(除外したい場合は環境変数側の設定を変更する).
             // mail 削除対象のメールアドレスを設定します.
             removeAdmin: async function (mail) {
+                _clearCache(); // キャッシュをクリア.
                 const list = await _load();
                 const p = list.indexOf(mail);
                 if (p !== -1) {
