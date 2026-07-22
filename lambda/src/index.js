@@ -39,6 +39,7 @@
     let _c_response = null;     // minto の responseオブジェクト.
     let _c_mime = null;         // minto の mimeオブジェクト(ウォームスタート対応).
     let _c_etag = null;         // minto の etag情報(ウォームスタート対応).
+    let _c_cache = null;        // minto の 汎用cache機能(exports.handler単位で削除).
 
     // lambda main(３番目の引数 callbackはサポートしない).
     exports.handler = async function (event, context) {
@@ -47,6 +48,7 @@
         _context = context;
         _c_request = null;
         _c_response = null;
+        _c_cache = null;
 
         let rawPath = event.rawPath;
         // rawPathが無く、event.targetが指定されている場合はテーブル管理
@@ -189,6 +191,7 @@
         _c_response = null;
         _c_mime = null;
         _c_etag = null;
+        _c_cache = null;
         // キャッシュ情報.
         _existsCache.clear();
         _jsCache.clear();
@@ -677,6 +680,15 @@
             _createResponse();
         }
         return _c_response;
+    }
+
+    // 汎用キャッシュオブジェクトを取得.
+    // 戻り値: キャッシュを格納するオブジェクトが返却されます.
+    _g.$cache = function() {
+        if(_c_cache == null) {
+            _c_cache = {};
+        }
+        return _c_cache;
     }
 
     // 指定拡張子からmimeTypeを取得.

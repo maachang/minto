@@ -10,6 +10,20 @@
     const s3sdk = $loadLib("s3sdk.js");
     const crypto = $require("crypto");
 
+    // セッションキャッシュ変数名.
+    const _SESSION_CACHE = "modules.auth.session";
+
+    // [環境変数]Cookieセッション名を取得.
+    const _COOKIE_SESSION_NAME = "MINTO_COOKIE_SESSION_NAME";
+    const _getCookieSessionName = function() {
+        const ret = process.env[_COOKIE_SESSION_NAME];
+        if(ret == undefined || ret == null) {
+            // デフォルトのセッション名を返却.
+            return "minto_sid";
+        }
+        return ret;
+    }
+
     // StreamをStringに変換.
     // llrtでは for-await-of 構文が利用できないため
     // transformToString() を利用する.
@@ -61,7 +75,8 @@
                 JSON.stringify(data), _s3opts);
         };
 
-        return {
+        // 返却オブジェクト.
+        const o = {
             // 新規セッションを開始し、セッションIDを返却します.
             // userId 対象のユーザーIDを設定します.
             // userData セッションに紐づける任意のデータを設定します.
@@ -113,7 +128,66 @@
             count: async function () {
                 const res = await s3sdk.list(_bucket, _prefix, _s3opts);
                 return (res.Contents || []).length;
+            },
+            // 新規セッションを開始し、CookieにSIDを設定します
+            // (既存セッションの有無に関わらず、必ず新規セッションを作成します).
+            // 戻り値: 発行したセッションID(文字列).
+            setCookie: async function(userId, userData) {
+                const res = $response();
+                
+                // ユーザIDを登録.
+                const sid = await o.start(userId, userData);
+                if(sid == null) {
+                    throw new Error("Session registration failed.");
+                }
+
+                // Cookie設定.
+                res.cookie(_getCookieSessionName(), {
+                    value: sid,
+                    path: "/",
+                    httponly: true,
+                    samesite: "lax",
+                    "max-age": "" + (_timeout / 1000)
+                });
+
+                // キャッシュをクリア.
+                $cache()[_SESSION_CACHE] = undefined;
+                
+                return sid;
+            },
+            // Cookieからセッションをクリア.
+            clearCookie: async function() {
+                const res = $response();
+                // Cookieクリア.
+                res.cookie(_getCookieSessionName(), {
+                    value: "",
+                    path: "/",
+                    httponly: true,
+                    samesite: "lax",
+                    "max-age": "0"
+                });
+                // キャッシュをクリア.
+                $cache()[_SESSION_CACHE] = undefined;
+                // S3は削除しない(ライフサイクルで削除)
+            },
+            // requestのCookieからセッションIDを取得し、セッション情報を返却します.
+            // 戻り値: {userId, data}(getと同じ形式)。存在しない場合はnull.
+            getCookie: async function() {
+                const cs = $cache();
+                // キャッシュが存在する場合はキャッシュから取得
+                // (nullという正当なキャッシュ結果と、未キャッシュ(undefined)を
+                // 区別するため厳密不等価で判定する).
+                if(cs[_SESSION_CACHE] !== undefined) {
+                    return cs[_SESSION_CACHE];
+                }
+                const req = $request();
+                const sid = req.cookie(_getCookieSessionName());
+                const ret = await o.get(sid);
+                // キャッシュにセット.
+                cs[_SESSION_CACHE] = ret;
+                return ret;
             }
         };
+        return o;
     };
 })();
