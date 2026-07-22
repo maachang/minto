@@ -12,7 +12,7 @@
 //  2.5. 2.4の入力が終わったら、確認ボタンを押下する.
 //  3. 2.5. が成功した場合はログイン完了.
 //
-// また、LFUの二段階認証ではパスワード初回ログイン時において、
+// また、mintoの二段階認証ではパスワード初回ログイン時において、
 // スマホに二段階認証のための登録を行う必要があり、これについて
 // 以下より流れを説明する.
 //  1. user / passwordでログインを行う.
@@ -27,15 +27,12 @@
 'use strict'
 
 /**
-mfa 先のURLは、以下の `@public/js/raw.githubusercontent.js` を使ってQRコードを利用すれば
-jsでスマホでの二段階認証ができる.
-(理由としてgithubからの raw.githubusercontent.com アクセスだと mimetype が text/plainが
-レスポンス返却されるので、これを回避するためのjs.)
+mfa 先のURLは、以下のようにQRコードを利用すればjsでスマホでの二段階認証ができる.
 <html>
 <head>
 ...
 <script type="text/javascript"
-  src="@public/js/raw.githubusercontent.js?src=davidshimjs/qrcodejs/master/qrcode.min.js">
+  src="./js/qrcode.js">
 </script>
 </head>
 <body>
