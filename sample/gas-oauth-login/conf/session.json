@@ -1,0 +1,6 @@
+{
+    "bucket": "test-minto-gas-oauth-bucket",
+    "prefix": "sessions/",
+    "timeoutMin": 30,
+    "region": "ap-northeast-1"
+}

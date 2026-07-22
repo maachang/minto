@@ -92,19 +92,27 @@ const user = await session.getCookie();
 module.exports = require("(minto直下からの相対パス)/modules/auth/session.js");
 ```
 
-あとは各ページ・フィルターから、`conf/app.json`等のバケット設定を渡して
-`create()`するだけです(バケット名はプロジェクトごとに異なるため、
-`session.create()`にはその都度設定を渡す必要があります)。
+バケット名等の接続設定は、プロジェクトの`conf/session.json`に置きます
+(バケット名はプロジェクトごとに異なりますが、`session.js`自身が初回利用時に
+一度だけ`$loadConf("session.json")`で自動的に読み込みキャッシュするため、
+呼び出し側で毎回設定を渡す必要はありません)。
+
+```json
+// conf/session.json
+{
+    "bucket": "your-bucket-name",
+    "prefix": "sessions/",    // 省略時 "sessions/"
+    "timeoutMin": 30,          // 省略時30分
+    "region": "ap-northeast-1"
+}
+```
+
+あとは各ページ・フィルターから、設定不要で`$loadLib("session.js")`した
+結果をそのまま使うだけです。
 
 ```js
 // 例: public/filter.mt.js など.
-const conf = $loadConf("app.json");
-const session = $loadLib("session.js").create({
-    bucket: conf.s3Bucket,
-    prefix: conf.sessionPrefix,        // 省略時 "sessions/"
-    timeoutMin: conf.sessionTimeoutMin, // 省略時30分
-    region: conf.region
-});
+const session = $loadLib("session.js");
 ```
 
 ```js
@@ -125,6 +133,9 @@ if (user == null) {
 // ログアウト.
 await session.destroyCookie();
 ```
+
+なお`start`/`get`/`destroy`/`count`(セッションIDを明示的に扱う低レベルAPI)も
+同様に設定不要でそのまま呼び出せます。
 
 GASを使った擬似SSOログインと組み合わせた実装例は
 [gasAuth.md](https://github.com/maachang/minto/blob/main/docs/gasAuth.md)、

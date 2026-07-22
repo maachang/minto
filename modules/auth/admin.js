@@ -27,11 +27,19 @@
 // - 初期管理者(環境変数MINTO_ADMIN_INITIAL_MAILで定義)はS3側の管理者
 //   一覧には含めない(env側の値と常に比較するだけ)。そのためremoveAdminで
 //   初期管理者を除外することはできない(env設定を変更しない限り常に管理者)。
+// - isAdmin()でmailを省略した場合、modules/auth/session.jsのgetCookie()で
+//   ログイン中ユーザを取得しそのuserIdでチェックする。session.jsはconf/
+//   session.json(bucket等)を自身で自動読み込みするため、admin.js側で
+//   session用の設定を意識する必要は無い(詳細はdocs/session.md参照)。
 ///////////////////////////////////////////////
 (function () {
     'use strict';
 
+    // S3アクセス用.
     const s3sdk = $loadLib("s3sdk.js");
+
+    // セッション情報用.
+    const session = $loadLib("session.js");
 
     // [ENV]管理者情報の暗号化キー.
     const _ENCRYPT_KEY_ENV = "ADMIN_ENCRYPT_KEY";
@@ -151,10 +159,18 @@
         return {
             // 指定メールアドレスが管理者かどうかを判定します.
             // mail 判定対象のメールアドレスを設定します.
+            //      設定しない場合は「ログイン中のユーザIDでチェック」します.
             // 戻り値: 管理者の場合true.
             isAdmin: async function (mail) {
                 if (mail == undefined || mail == null || mail === "") {
-                    return false;
+                    // メールアドレスが指定されていない場合は、現在のログイン中ユーザから
+                    // 情報を取得する.
+                    const res = await session.getCookie();
+                    if(res == null) {
+                        return false;
+                    }
+                    // ログイン中のユーザIDを取得.
+                    mail = res.userId;
                 }
                 // 環境変数で定義された初期管理者は常に管理者として扱う.
                 if (_initialAdmin != null && mail === _initialAdmin) {

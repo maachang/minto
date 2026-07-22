@@ -43,7 +43,8 @@
 //   │   └── userStore.js             (S3ユーザー管理 ※パスワードは
 //   │                                  modules/auth/password.js に委譲)
 //   └── conf/
-//       └── app.json                 (アプリ設定)
+//       ├── app.json                 (アプリ設定)
+//       └── session.json             (session.jsが自動読み込みするS3バケット等の設定)
 //
 // ※ セッション管理(modules/auth/session.js)とパスワードハッシュ化
 //   (modules/auth/password.js)は、mintoの共通モジュールとして
@@ -172,13 +173,13 @@ s3://my-minto-app-bucket/
 | **新規登録機能** | `register.mt.html` + `api/register.mt.js` を追加 |
 | **パスワード変更** | `userStore.js` に `changePassword()` を実装済み |
 | **S3共通モジュール** | `lib/s3client.js` にget/put/delete/listを集約 |
-| **共通モジュール化** | セッション管理・パスワードハッシュ化は `modules/auth/session.js` / `modules/auth/password.js` に切り出し、`lib/sessionStore.js` がアプリ設定でラップして利用 |
+| **共通モジュール化** | セッション管理・パスワードハッシュ化は `modules/auth/session.js` / `modules/auth/password.js` に切り出し、`lib/sessionStore.js` は再エクスポートのみ(接続設定は`conf/session.json`から`session.js`自身が自動読み込み) |
 
 ---
 
 **デプロイ手順**
 
-1. `conf/app.json` のバケット名・リージョンを自環境に合わせる
+1. `conf/app.json`・`conf/session.json` のバケット名・リージョンを自環境に合わせる
 2. S3バケットを作成
 3. Lambda実行ロールにS3アクセスのIAMポリシーを付与（ソース冒頭にサンプル記載）
 4. `scripts/init-users.js` を一度実行して初期ユーザーを作成（または登録画面から作成）

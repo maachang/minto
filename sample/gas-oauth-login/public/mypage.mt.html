@@ -7,13 +7,7 @@
 <%
     // modules/auth/session.js. filter.mt.jsで既にgetCookie()済みのため
     // (1実行毎キャッシュ)、ここでのS3への問い合わせは発生しない.
-    const conf = $loadConf("app.json");
-    const session = $loadLib("session.js").create({
-        bucket: conf.s3Bucket,
-        prefix: conf.sessionPrefix,
-        timeoutMin: conf.sessionTimeoutMin,
-        region: conf.region
-    });
+    const session = $loadLib("session.js");
     const user = await session.getCookie();
     if (user == null) {
         $response().redirect("/index");

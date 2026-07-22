@@ -76,9 +76,10 @@ mintoは、GoogleWorkspaceを契約している企業であれば標準で使え
 実際に使う最小構成は、以下の3ファイルだけで完結する(詳細な各ファイルの
 全文は[`sample/gas-oauth-login/`](https://github.com/maachang/minto/tree/main/sample/gas-oauth-login)参照)。
 
-`session.create()`にはS3バケット名等の設定が必要なため(プロジェクトごとに
-異なる値なので`modules/auth/session.js`側に埋め込むことはできない)、
-`conf/app.json`から読み込んで渡す。詳細は[session.md](https://github.com/maachang/minto/blob/main/docs/session.md)参照。
+`session.js`はS3バケット名等の設定を`conf/session.json`から自動的に
+読み込むため(プロジェクトごとに異なる値だが、呼び出し側で毎回渡す必要は
+無い)、`$loadLib("session.js")`した結果をそのまま使うだけでよい。詳細は
+[session.md](https://github.com/maachang/minto/blob/main/docs/session.md)参照。
 
 ```js
 // public/filter.mt.js: 保護ページへの未ログインアクセスをGASログインへ誘導する.
@@ -88,11 +89,7 @@ exports.handler = async function () {
     if (path === "/index" || path === "/resultOAuth" || path === "/logout") {
         return true;
     }
-    const conf = $loadConf("app.json");
-    const session = $loadLib("session.js").create({
-        bucket: conf.s3Bucket, prefix: conf.sessionPrefix,
-        timeoutMin: conf.sessionTimeoutMin, region: conf.region
-    });
+    const session = $loadLib("session.js");
     const user = await session.getCookie(); // 1実行毎キャッシュ付きのセッション確認
     if (user == null) {
         const gasAuth = $loadLib("gasAuth.js");
@@ -111,11 +108,7 @@ exports.handler = async function () {
     const gasAuth = $loadLib("gasAuth.js");
     const mail = gasAuth.getOAuthMail(req); // 検証失敗時はHttpErrorがthrowされる
 
-    const conf = $loadConf("app.json");
-    const session = $loadLib("session.js").create({
-        bucket: conf.s3Bucket, prefix: conf.sessionPrefix,
-        timeoutMin: conf.sessionTimeoutMin, region: conf.region
-    });
+    const session = $loadLib("session.js");
     await session.setCookie(mail, { mail: mail }); // S3セッション作成＋Cookie設定
 
     const srcURL = req.params()["srcURL"];
@@ -126,11 +119,7 @@ exports.handler = async function () {
 ```js
 // public/logout.mt.js: ログアウト.
 exports.handler = async function () {
-    const conf = $loadConf("app.json");
-    const session = $loadLib("session.js").create({
-        bucket: conf.s3Bucket, prefix: conf.sessionPrefix,
-        timeoutMin: conf.sessionTimeoutMin, region: conf.region
-    });
+    const session = $loadLib("session.js");
     await session.destroyCookie(); // S3セッション破棄＋Cookieクリア
     $response().redirect("/index");
 };

@@ -5,14 +5,9 @@
 // ************************************************************
 %>
 <%
-    // ログイン済みならマイページへリダイレクト(modules/auth/session.js).
-    const conf = $loadConf("app.json");
-    const session = $loadLib("session.js").create({
-        bucket: conf.s3Bucket,
-        prefix: conf.sessionPrefix,
-        timeoutMin: conf.sessionTimeoutMin,
-        region: conf.region
-    });
+    // ログイン済みならマイページへリダイレクト(modules/auth/session.js。
+    // 接続設定はconf/session.jsonから自動的に読み込まれる).
+    const session = $loadLib("session.js");
     const user = await session.getCookie();
     if (user != null) {
         $response().redirect("/mypage");

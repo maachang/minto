@@ -26,9 +26,21 @@ const fakeS3sdk = {
     }
 };
 
+// ログイン中ユーザー(session.getCookie()の戻り値)を差し替え可能にする
+// フェイクsession(admin.isAdmin()がmail省略時に参照する).
+let _loginUser;
+const fakeSession = {
+    getCookie: async function () {
+        return _loginUser;
+    }
+};
+
 global.$loadLib = function (name) {
     if (name === "s3sdk.js") {
         return fakeS3sdk;
+    }
+    if (name === "session.js") {
+        return fakeSession;
     }
     throw new Error("unexpected $loadLib: " + name);
 };
@@ -37,6 +49,7 @@ const admin = require("../../modules/auth/admin.js");
 
 beforeEach(() => {
     _store = new Map();
+    _loginUser = null;
     delete process.env["ADMIN_ENCRYPT_KEY"];
     delete process.env["MINTO_ADMIN_INITIAL_MAIL"];
 });
@@ -129,4 +142,22 @@ test("admin: options.initialAdminは環境変数より優先される", async ()
     const store = admin.create({ bucket: "test-bucket", initialAdmin: "opt-root@example.com" });
     assert.equal(await store.isAdmin("opt-root@example.com"), true);
     assert.equal(await store.isAdmin("env-root@example.com"), false);
+});
+
+test("admin: mail省略時はsession.getCookie()のログイン中ユーザIDでチェックする", async () => {
+    const store = admin.create({ bucket: "test-bucket" });
+    await store.addAdmin("user1@example.com");
+
+    _loginUser = { userId: "user1@example.com", data: {} };
+    assert.equal(await store.isAdmin(), true);
+
+    _loginUser = { userId: "other@example.com", data: {} };
+    assert.equal(await store.isAdmin(), false);
+});
+
+test("admin: mail省略時に未ログイン(getCookieがnull)の場合はfalseを返す", async () => {
+    const store = admin.create({ bucket: "test-bucket" });
+    _loginUser = null;
+    assert.equal(await store.isAdmin(), false);
+    assert.equal(await store.isAdmin(""), false);
 });

@@ -1,6 +1,7 @@
 // modules/auth/session.js のテスト.
-// $loadLib("s3sdk.js")/$require("crypto")/$request/$response/$cache 依存のため、
-// テスト用にs3sdkをインメモリのフェイク実装に差し替えてスタブする。
+// $loadLib("s3sdk.js")/$loadConf("session.json")/$request/$response/$cache
+// 依存のため、テスト用にs3sdkをインメモリのフェイク実装に差し替え、
+// $loadConfもスタブしてから読み込む。
 const { test, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
 
@@ -41,6 +42,14 @@ global.$require = function (name) {
     return require(name);
 };
 
+let _sessionConf;
+global.$loadConf = function (name) {
+    if (name === "session.json") {
+        return _sessionConf;
+    }
+    throw new Error("unexpected $loadConf: " + name);
+};
+
 let _cookies;
 let _cache;
 global.$request = function () {
@@ -61,91 +70,104 @@ global.$cache = function () {
     return _cache;
 };
 
-const session = require("../../modules/auth/session.js");
-
 beforeEach(() => {
     _store = new Map();
     _cookies = {};
     _cache = {};
+    _sessionConf = { bucket: "test-bucket" };
+    // conf/session.jsonはモジュール初回利用時に一度だけ読み込みキャッシュ
+    // されるため、beforeEachごとにモジュールキャッシュもクリアする.
+    delete require.cache[require.resolve("../../modules/auth/session.js")];
+});
+
+test("session: conf/session.jsonにbucketが無い場合は例外を投げる", async () => {
+    _sessionConf = {};
+    const session = require("../../modules/auth/session.js");
+    await assert.rejects(async () => {
+        await session.start("user1", {});
+    });
+});
+
+test("session: conf/session.jsonが存在しない場合は例外を投げる", async () => {
+    _sessionConf = null;
+    const session = require("../../modules/auth/session.js");
+    await assert.rejects(async () => {
+        await session.start("user1", {});
+    });
 });
 
 test("session: start/getで登録したuserId/userDataが取得できる", async () => {
-    const store = session.create({ bucket: "test-bucket" });
-    const sid = await store.start("user1", { role: "admin" });
+    const session = require("../../modules/auth/session.js");
+    const sid = await session.start("user1", { role: "admin" });
     assert.equal(typeof sid, "string");
-    const ses = await store.get(sid);
+    const ses = await session.get(sid);
     assert.equal(ses.userId, "user1");
     assert.deepEqual(ses.data, { role: "admin" });
 });
 
 test("session: 存在しないセッションIDはnullが返る", async () => {
-    const store = session.create({ bucket: "test-bucket" });
-    assert.equal(await store.get("not-exists"), null);
-    assert.equal(await store.get(null), null);
-    assert.equal(await store.get(""), null);
+    const session = require("../../modules/auth/session.js");
+    assert.equal(await session.get("not-exists"), null);
+    assert.equal(await session.get(null), null);
+    assert.equal(await session.get(""), null);
 });
 
 test("session: timeoutMinを超えたセッションはgetでnullになり自動削除される", async () => {
-    const store = session.create({ bucket: "test-bucket", timeoutMin: 30 });
-    const sid = await store.start("user1", {});
+    _sessionConf = { bucket: "test-bucket", timeoutMin: 30 };
+    const session = require("../../modules/auth/session.js");
+    const sid = await session.start("user1", {});
     // lastAccessを timeout超過分だけ過去に書き換えてタイムアウトを再現する.
     const key = "sessions/" + sid + ".json";
     const raw = JSON.parse(_store.get(key));
     raw.lastAccess = Date.now() - (31 * 60 * 1000);
     _store.set(key, JSON.stringify(raw));
 
-    assert.equal(await store.get(sid), null);
+    assert.equal(await session.get(sid), null);
     assert.equal(_store.has(key), false);
 });
 
 test("session: destroyでセッションが削除される", async () => {
-    const store = session.create({ bucket: "test-bucket" });
-    const sid = await store.start("user1", {});
-    await store.destroy(sid);
-    assert.equal(await store.get(sid), null);
+    const session = require("../../modules/auth/session.js");
+    const sid = await session.start("user1", {});
+    await session.destroy(sid);
+    assert.equal(await session.get(sid), null);
 });
 
 test("session: destroyはsidが無い場合何もしない", async () => {
-    const store = session.create({ bucket: "test-bucket" });
-    await store.destroy(null);
-    await store.destroy("");
+    const session = require("../../modules/auth/session.js");
+    await session.destroy(null);
+    await session.destroy("");
 });
 
 test("session: countは現在保存されているセッション数を返す", async () => {
-    const store = session.create({ bucket: "test-bucket" });
-    await store.start("user1", {});
-    await store.start("user2", {});
-    assert.equal(await store.count(), 2);
+    const session = require("../../modules/auth/session.js");
+    await session.start("user1", {});
+    await session.start("user2", {});
+    assert.equal(await session.count(), 2);
 });
 
 test("session: setCookieはCookieにセッションIDを設定しgetCookieで取得できる", async () => {
-    const store = session.create({ bucket: "test-bucket" });
-    const sid = await store.setCookie("user1", { role: "admin" });
+    const session = require("../../modules/auth/session.js");
+    const sid = await session.setCookie("user1", { role: "admin" });
     assert.equal(_cookies["minto_sid"], sid);
-    const ses = await store.getCookie();
+    const ses = await session.getCookie();
     assert.equal(ses.userId, "user1");
 });
 
 test("session: getCookieは同一リクエスト内でキャッシュされる", async () => {
-    const store = session.create({ bucket: "test-bucket" });
-    await store.setCookie("user1", {});
-    const first = await store.getCookie();
+    const session = require("../../modules/auth/session.js");
+    await session.setCookie("user1", {});
+    const first = await session.getCookie();
     // ストアから直接削除してもキャッシュにより同じ結果が返ることを確認する.
-    await store.destroy(_cookies["minto_sid"]);
-    const second = await store.getCookie();
+    await session.destroy(_cookies["minto_sid"]);
+    const second = await session.getCookie();
     assert.deepEqual(second, first);
 });
 
 test("session: destroyCookieはS3のセッションとCookieを両方クリアする", async () => {
-    const store = session.create({ bucket: "test-bucket" });
-    const sid = await store.setCookie("user1", {});
-    await store.destroyCookie();
+    const session = require("../../modules/auth/session.js");
+    const sid = await session.setCookie("user1", {});
+    await session.destroyCookie();
     assert.equal(_cookies["minto_sid"], "");
-    assert.equal(await store.get(sid), null);
-});
-
-test("session: options.bucket未指定の場合は例外を投げる", () => {
-    assert.throws(() => {
-        session.create({});
-    });
+    assert.equal(await session.get(sid), null);
 });

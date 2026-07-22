@@ -15,14 +15,9 @@ exports.handler = async function () {
     }
 
     // セッションチェック(modules/auth/session.js。1実行毎にキャッシュされる
-    // ため、同一リクエスト内で複数回呼んでもS3への問い合わせは1回だけで済む).
-    const conf = $loadConf("app.json");
-    const session = $loadLib("session.js").create({
-        bucket: conf.s3Bucket,
-        prefix: conf.sessionPrefix,
-        timeoutMin: conf.sessionTimeoutMin,
-        region: conf.region
-    });
+    // ため、同一リクエスト内で複数回呼んでもS3への問い合わせは1回だけで済む。
+    // 接続設定はconf/session.jsonから自動的に読み込まれる).
+    const session = $loadLib("session.js");
     const user = await session.getCookie();
 
     // セッションが存在しない場合、現在アクセスしようとしていたパスを
