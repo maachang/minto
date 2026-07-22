@@ -80,6 +80,23 @@ const user = await session.getCookie();
 デフォルトのCookie名は`minto_sid`です。変更したい場合は環境変数
 `MINTO_COOKIE_SESSION_NAME`（`conf/env.json`等）を設定してください。
 
+## CookieのSameSite属性
+
+セッションCookieの`SameSite`属性は`conf/session.json`の`samesite`で
+設定できます。未設定の場合は`"lax"`が使われます。
+
+GAS疑似SSOのように「他ドメイン(GAS)からのリダイレクトでCookieが送られて
+初めて完結する」フローも、`lax`であれば通常のページ遷移(トップレベル
+ナビゲーション)によるリダイレクトではCookieが送信されるため問題ありません。
+外部フォームからのPOST等、より緩い挙動が必要な場合は`"none"`(この場合は
+`Secure`属性の付与が前提になるため、HTTPS配信であることを確認してください)、
+逆に他ドメインからの遷移を一切許可しない場合は`"strict"`を設定してください。
+
+なお`session.js`自体にはCSRF対策(トークン検証等)は含まれていません。
+`SameSite`はCSRF対策の一助にはなりますが、それだけで十分とは限らないため、
+状態を変更するAPI(POST等)を外部公開するアプリでは、必要に応じて別途
+CSRFトークンチェックの実装を検討してください。
+
 ## 使い方（最小構成）
 
 `$loadLib`はプロジェクトの`lib/`配下のみを検索する仕様のため(`modules/`配下へは
@@ -103,6 +120,7 @@ module.exports = require("(minto直下からの相対パス)/modules/auth/sessio
     "bucket": "your-bucket-name",
     "prefix": "sessions/",    // 省略時 "sessions/"
     "timeoutMin": 30,          // 省略時30分
+    "samesite": "lax",         // 省略時 "lax"(下記「CookieのSameSite」参照)
     "region": "ap-northeast-1"
 }
 ```

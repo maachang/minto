@@ -1,10 +1,10 @@
 ///////////////////////////////////////////////
 // S3ベース セッション管理(共通モジュール).
 //
-// conf/session.json ({bucket, prefix, timeoutMin, region}) を読み込んで
-// 自動的に初期化される(呼び出し側でbucket等を指定してcreate()する必要は
-// 無く、$loadLib("session.js")した結果をそのままモジュールとして使う)。
-// modules/s3table/s3sdk.js に依存する(AWS-SDK-V3利用).
+// conf/session.json ({bucket, prefix, timeoutMin, samesite, region}) を
+// 読み込んで自動的に初期化される(呼び出し側でbucket等を指定してcreate()
+// する必要は無く、$loadLib("session.js")した結果をそのままモジュールとして
+// 使う)。modules/s3table/s3sdk.js に依存する(AWS-SDK-V3利用).
 //
 // AIメモ:
 // - 以前はexports.create(options)で呼び出し毎にbucket等を明示指定する
@@ -14,6 +14,9 @@
 //   から自動的に設定を読み込む方式に変更した(create()は廃止)。
 // - 設定(bucket等)はモジュール初回利用時に一度だけ$loadConf()し、以降は
 //   キャッシュする(1つのLambda実行環境内でconfが変わることは無いため).
+// - CookieのSameSite属性はconf/session.jsonの"samesite"で設定可能
+//   (未設定時は"lax")。外部公開フォームからのPOSTを受けたい等でSameSite
+//   をゆるめる/厳しくする必要がある場合はここで調整する.
 ///////////////////////////////////////////////
 (function () {
     'use strict';
@@ -38,9 +41,10 @@
     // [conf]セッション設定ファイル名(conf/session.json).
     const _CONF_NAME = "session.json";
 
-    // セッション設定(bucket/prefix/timeout/s3opts)をconf/session.jsonから
-    // 読み込んでキャッシュする.
-    // 戻り値: {bucket, prefix, timeout(ミリ秒), s3opts: {region, credentials}}
+    // セッション設定(bucket/prefix/timeout/samesite/s3opts)を
+    // conf/session.jsonから読み込んでキャッシュする.
+    // 戻り値: {bucket, prefix, timeout(ミリ秒), samesite,
+    //         s3opts: {region, credentials}}
     let _conf = null;
     const _getConf = function () {
         if (_conf == null) {
@@ -53,6 +57,8 @@
                 bucket: c.bucket,
                 prefix: c.prefix || "sessions/",
                 timeout: (c.timeoutMin || 30) * 60 * 1000,
+                // Cookieの SameSite属性. 未設定の場合は "lax"(既定).
+                samesite: c.samesite || "lax",
                 s3opts: { region: c.region, credentials: c.credentials }
             };
         }
@@ -161,12 +167,13 @@
         }
 
         // Cookie設定.
+        const conf = _getConf();
         res.cookie(_getCookieSessionName(), {
             value: sid,
             path: "/",
             httponly: true,
-            samesite: "lax",
-            "max-age": "" + (_getConf().timeout / 1000)
+            samesite: conf.samesite,
+            "max-age": "" + (conf.timeout / 1000)
         });
 
         // キャッシュをクリア.
@@ -189,7 +196,7 @@
             value: "",
             path: "/",
             httponly: true,
-            samesite: "lax",
+            samesite: _getConf().samesite,
             "max-age": "0"
         });
         // キャッシュをクリア.
