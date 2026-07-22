@@ -96,7 +96,7 @@ test/
 - **auth-password.test.js**: `modules/auth/password.js`のPBKDF2-HMAC-SHA256によるパスワードハッシュ化・検証を検証します。`derive()`の出力がNode標準の`crypto.pbkdf2Sync`と完全に一致することも確認しています
 - **auth-jwt.test.js**: `modules/auth/jwt.js`のHS256署名/検証(sign/verify)を検証します。secret不一致・期限切れ(exp)・フォーマット不正時の検証失敗、`options.noError == false`時の例外throwも確認しています
 - **http-response.test.js**: `modules/http/response.js`のJSON/エラーレスポンス組み立て(`json`/`error`)を検証します。グローバルの`$response()`を呼び出し内容を記録するスタブに差し替えて検証しています
-- **validate.test.js**: `modules/validate/validate.js`のスキーマベース検証(`check`)を検証します。required/type/minLen・maxLen/min・max/pattern/enum/customの各ルール、default値補完、元データを変更しないことなどを確認しています
+- **validate.test.js**: `modules/validate/validate.js`のスキーマベース検証(`check`)を検証します。required/type/minLen・maxLen/min・max/pattern/enum/customの各ルール、default値補完、元データを変更しないことに加え、GETパラメータ(文字列)由来のint/float値が数字文字列のままでも型・範囲チェックできること、boolean/dateは文字列を許容しないこと、`custom(value, data)`にオブジェクト全体が渡りフィールド間の相関チェックができることを確認しています
 - **seqId.test.js**: `modules/s3table/seqId.js`(Snowflake ID方式のユニークID発行、旧`autoIncrement`の代替)を検証します。固定長16桁の小文字hex文字列を返すこと、大量生成しても重複しないこと(同一ミリ秒内のシーケンス処理含む)、生成順に文字列比較で単調増加すること、`$requestId()`が使えない環境でもエラーにならないことを確認しています
 - **s3MasterTable.test.js**: `modules/s3table/s3MasterTable.js`のCRUD/検索エンジン本体を、実際のS3通信を行わずインメモリのフェイクな`s3sdk`/`s3Lock`を`$loadLib`経由で注入して検証します(`s3MasterTable.js`はlistを使用しないため、s3IndexTable.jsと異なりフェイクだけでCRUD全体を実際に動かして検証できます)。createTable/insert/select/update/delete/CSV往復に加え、`flush`/`transaction`(ロック取得→fn実行→flush→ロック解放、例外時のロールバック、ロック競合時のエラー)も検証しています。
 - **s3IndexTable-encode.test.js**: `modules/s3table/s3IndexTable.js`のうち、S3通信を伴わない値エンコードロジック(`encodeInt`/`encodeFloat`/`encodeString`/`encodeBoolean`/`encodeDate`)が数値順・辞書順と一致すること、`generateRowId`の一意性などを検証します

@@ -7,6 +7,14 @@
 // s3IndexTable.js と共通の string/int/float/boolean/date の
 // 5種類のみをサポートする(json/array/ネストオブジェクトは対象外).
 //
+// GETリクエストの$request().params()(=queryStringParameters)は値が
+// 全て文字列で渡ってくるため、int/floatは数値型に加えて「数字として
+// 妥当な文字列」(例: "20", "-1.5")も型チェックOKとする(値そのものは
+// 文字列のまま保持し、数値へは変換しない。min/maxの範囲比較のみ内部で
+// 数値化して行う)。boolean/dateは文字列を許容しない(true/falseや日付
+// 文字列の解釈は曖昧さがあるため、呼び出し側で事前にBoolean/Dateへ
+// 変換すること)。
+//
 // スキーマ定義例:
 //   validate.check(data, {
 //     name: { type: "string", required: true, minLen: 1, maxLen: 50,
@@ -53,7 +61,21 @@
         }
     };
 
+    // 文字列が整数表記(符号+数字のみ)かチェック.
+    const _isIntString = function (s) {
+        return /^-?[0-9]+$/.test(s);
+    };
+
+    // 文字列が数値表記(整数/小数)かチェック.
+    const _isFloatString = function (s) {
+        return s.trim() !== "" && isFinite(Number(s));
+    };
+
     // 値の型チェック.
+    // $request().params()のGETパラメータ(queryStringParameters)はJSの
+    // 型を持たず全て文字列で渡ってくるため、int/floatは数値型に加えて
+    // 「数字として妥当な文字列」も許容する(値そのものは文字列のまま扱い、
+    // 数値へは変換しない。変換無しで済むよう_numeric側で比較時のみ数値化する).
     // type スキーマで指定された型名を設定します.
     // value 検証対象の値を設定します.
     // 戻り値: 型が一致する場合true.
@@ -62,9 +84,11 @@
             case "string":
                 return typeof value === "string";
             case "int":
-                return typeof value === "number" && Number.isInteger(value);
+                return (typeof value === "number" && Number.isInteger(value)) ||
+                    (typeof value === "string" && _isIntString(value));
             case "float":
-                return typeof value === "number" && isFinite(value);
+                return (typeof value === "number" && isFinite(value)) ||
+                    (typeof value === "string" && _isFloatString(value));
             case "boolean":
                 return typeof value === "boolean";
             case "date":
@@ -74,10 +98,14 @@
         }
     };
 
-    // min/max比較用に値を数値化(date型はgetTime()、それ以外はそのまま).
+    // min/max比較用に値を数値化(date型はgetTime()、数字文字列はNumber化、
+    // それ以外はそのまま).
     const _numeric = function (value) {
         if (value instanceof Date) {
             return value.getTime();
+        }
+        if (typeof value === "string" && _isFloatString(value)) {
+            return Number(value);
         }
         return value;
     };
@@ -88,8 +116,10 @@
     //      min, max, pattern, enum, custom, messages})を設定します.
     // value 検証対象の値(dataからの取得値)を設定します.
     // hasValue dataにこのフィールドのキー自体が存在するかを設定します.
+    // data 検証対象のオブジェクト全体を設定します(rule.customへ
+    //      フィールド間の相関チェック用に渡すため).
     // 戻り値: { error: {field, rule, message} または null, value: 補完後の値 }
-    const _checkField = function (field, rule, value, hasValue) {
+    const _checkField = function (field, rule, value, hasValue, data) {
         const messages = rule.messages || {};
 
         const makeError = function (ruleName, params) {
@@ -155,7 +185,7 @@
         // rule.custom(value, data) が false を返した場合エラー、
         // 文字列を返した場合はそれをそのままメッセージとして採用する.
         if (typeof rule.custom === "function") {
-            const customRet = rule.custom(value);
+            const customRet = rule.custom(value, data);
             if (customRet === false) {
                 return { error: makeError("custom"), value: value };
             }
@@ -180,7 +210,7 @@
         const errors = [];
         for (let field in schema) {
             const hasValue = Object.prototype.hasOwnProperty.call(data, field);
-            const ret = _checkField(field, schema[field], data[field], hasValue);
+            const ret = _checkField(field, schema[field], data[field], hasValue, data);
             if (ret.error != null) {
                 errors.push(ret.error);
             } else {

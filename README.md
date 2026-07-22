@@ -108,6 +108,8 @@ llrtはNode.jsライクに利用できますが、以下のような制限があ
   - [GASを使った擬似SSOログイン](https://github.com/maachang/minto/blob/main/docs/gasAuth.md)
   - [session.js（S3ベースセッション管理、Cookie連携・1実行毎キャッシュ）](https://github.com/maachang/minto/blob/main/docs/session.md)
   - [動作するサンプル一式（sample/gas-oauth-login）](https://github.com/maachang/minto/blob/main/sample/gas-oauth-login/README.md)
+- モジュール（入力検証）
+  - [validate.js（汎用オブジェクトバリデーター）](https://github.com/maachang/minto/blob/main/docs/validate.md)
 
 以上、ありがとうございました。
 </content>

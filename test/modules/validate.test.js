@@ -137,6 +137,56 @@ test("validate: スキーマに定義の無いプロパティはそのままdata
     assert.equal(result.data.extra, "x");
 });
 
+test("validate: int/floatは数字として妥当な文字列も許容する(値はそのまま文字列で保持)", () => {
+    const result = validate.check(
+        { age: "20", price: "12.5" },
+        {
+            age: { type: "int", min: 0, max: 150 },
+            price: { type: "float", min: 0 }
+        }
+    );
+    assert.equal(result.valid, true);
+    assert.equal(result.data.age, "20");
+    assert.equal(result.data.price, "12.5");
+});
+
+test("validate: int型は小数を含む文字列や数字でない文字列はエラーになる", () => {
+    const result = validate.check({ age: "20.5" }, { age: { type: "int" } });
+    assert.equal(result.errors[0].rule, "type");
+
+    const result2 = validate.check({ age: "twenty" }, { age: { type: "int" } });
+    assert.equal(result2.errors[0].rule, "type");
+});
+
+test("validate: 数字文字列でもmin/maxの範囲比較が数値として行われる", () => {
+    const tooSmall = validate.check({ age: "-1" }, { age: { type: "int", min: 0 } });
+    assert.equal(tooSmall.errors[0].rule, "min");
+
+    const ok = validate.check({ age: "9" }, { age: { type: "int", min: 0, max: 10 } });
+    assert.equal(ok.valid, true);
+});
+
+test("validate: boolean/dateは文字列を許容しない", () => {
+    const boolResult = validate.check({ active: "true" }, { active: { type: "boolean" } });
+    assert.equal(boolResult.errors[0].rule, "type");
+
+    const dateResult = validate.check({ birthday: "2030-01-01" }, { birthday: { type: "date" } });
+    assert.equal(dateResult.errors[0].rule, "type");
+});
+
+test("validate: customにはvalueに加えてdataオブジェクト全体が渡される(フィールド間チェック用)", () => {
+    const result = validate.check(
+        { password: "abcdefgh", confirmPassword: "different" },
+        {
+            confirmPassword: {
+                type: "string",
+                custom: (v, data) => v === data.password ? true : "パスワードが一致しません"
+            }
+        }
+    );
+    assert.equal(result.errors[0].message, "パスワードが一致しません");
+});
+
 test("validate: 元のdataオブジェクトは変更されない", () => {
     const data = {};
     validate.check(data, { role: { type: "string", default: "user" } });

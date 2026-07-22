@@ -11,29 +11,50 @@ exports.handler = async function () {
     }
 
     const p = req.params();
-    const userId = (p.userId || "").trim();
-    const password = p.password || "";
-    const passwordConfirm = p.passwordConfirm || "";
-    const name = (p.name || "").trim();
+    // userId/nameは前後空白を許容しない項目のため、検証前にtrimしておく
+    // (旧実装のtrimしてから検証する挙動を踏襲する).
+    const trimmed = Object.assign({}, p, {
+        userId: (p.userId || "").trim(),
+        name: (p.name || "").trim()
+    });
 
-    if (userId === "") {
-        return { success: false, message: "ユーザーIDを入力してください" };
+    // modules/validate/validate.js を使ったスキーマ検証
+    // (以前は各項目を手書きのif文で個別にチェックしていたが、
+    // validate.check()にまとめることでルールの見通しを良くしている).
+    const validate = $loadLib("validate.js");
+    const result = validate.check(trimmed, {
+        userId: {
+            type: "string", required: true, minLen: 3, maxLen: 32,
+            pattern: /^[a-zA-Z0-9_]+$/,
+            messages: {
+                required: "ユーザーIDを入力してください",
+                minLen: "ユーザーIDは3〜32文字で入力してください",
+                maxLen: "ユーザーIDは3〜32文字で入力してください",
+                pattern: "ユーザーIDは英数字とアンダースコアのみ使用できます"
+            }
+        },
+        password: {
+            type: "string", required: true, minLen: 4,
+            messages: {
+                required: "パスワードは4文字以上で入力してください",
+                minLen: "パスワードは4文字以上で入力してください"
+            }
+        },
+        passwordConfirm: {
+            type: "string", required: true,
+            messages: { required: "パスワードが一致しません" },
+            // custom(value, data)で他フィールド(password)との一致を確認する.
+            custom: (v, data) => v === data.password ? true : "パスワードが一致しません"
+        },
+        name: { type: "string" }
+    });
+    if (!result.valid) {
+        return { success: false, message: result.errors[0].message };
     }
-    if (userId.length < 3 || userId.length > 32) {
-        return { success: false, message: "ユーザーIDは3〜32文字で入力してください" };
-    }
-    if (!/^[a-zA-Z0-9_]+$/.test(userId)) {
-        return {
-            success: false,
-            message: "ユーザーIDは英数字とアンダースコアのみ使用できます"
-        };
-    }
-    if (password.length < 4) {
-        return { success: false, message: "パスワードは4文字以上で入力してください" };
-    }
-    if (password !== passwordConfirm) {
-        return { success: false, message: "パスワードが一致しません" };
-    }
+
+    const userId = result.data.userId;
+    const password = result.data.password;
+    const name = result.data.name;
 
     const userStore = $loadLib("userStore.js");
     return await userStore.register(userId, password, name || userId, "user");
