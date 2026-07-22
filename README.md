@@ -106,6 +106,7 @@ llrtはNode.jsライクに利用できますが、以下のような制限があ
   - [s3IndexTable.js（書き込み頻度が多い用途向け）設計ドキュメント](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)
 - 認証（GoogleWorkspace企業の社内Webアプリ向け）
   - [GASを使った擬似SSOログイン](https://github.com/maachang/minto/blob/main/docs/gasAuth.md)
+  - [session.js（S3ベースセッション管理、Cookie連携・1実行毎キャッシュ）](https://github.com/maachang/minto/blob/main/docs/session.md)
   - [動作するサンプル一式（sample/gas-oauth-login）](https://github.com/maachang/minto/blob/main/sample/gas-oauth-login/README.md)
 
 以上、ありがとうございました。

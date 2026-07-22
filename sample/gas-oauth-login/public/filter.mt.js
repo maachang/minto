@@ -14,10 +14,16 @@ exports.handler = async function () {
         return true;
     }
 
-    // セッションチェック.
-    const session = $loadLib("sessionStore.js");
-    const sid = req.cookie("minto_sid");
-    const user = await session.get(sid);
+    // セッションチェック(modules/auth/session.js。1実行毎にキャッシュされる
+    // ため、同一リクエスト内で複数回呼んでもS3への問い合わせは1回だけで済む).
+    const conf = $loadConf("app.json");
+    const session = $loadLib("session.js").create({
+        bucket: conf.s3Bucket,
+        prefix: conf.sessionPrefix,
+        timeoutMin: conf.sessionTimeoutMin,
+        region: conf.region
+    });
+    const user = await session.getCookie();
 
     // セッションが存在しない場合、現在アクセスしようとしていたパスを
     // srcURLとして自動的に使い、GASへのoAuthURLへ1回の呼び出しで

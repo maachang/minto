@@ -4,23 +4,17 @@
 // ************************************************************
 
 exports.handler = async function () {
-    const req = $request();
     const res = $response();
 
-    const session = $loadLib("sessionStore.js");
-    const sid = req.cookie("minto_sid");
-    if (sid != null) {
-        await session.destroy(sid);
-    }
-
-    // クッキークリア.
-    res.cookie("minto_sid", {
-        value: "",
-        path: "/",
-        httponly: true,
-        samesite: "lax",
-        "max-age": "0"
+    // S3セッションの破棄＋Cookieクリアを1回で行う(modules/auth/session.js).
+    const conf = $loadConf("app.json");
+    const session = $loadLib("session.js").create({
+        bucket: conf.s3Bucket,
+        prefix: conf.sessionPrefix,
+        timeoutMin: conf.sessionTimeoutMin,
+        region: conf.region
     });
+    await session.destroyCookie();
 
     res.redirect("/index");
 };

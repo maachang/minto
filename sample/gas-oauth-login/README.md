@@ -17,7 +17,9 @@ sample/gas-oauth-login/
 │   ├── app.json     (S3バケット等のアプリ設定)
 │   └── env.json     (GAS連携用の環境変数。ローカル実行時に読み込まれる)
 ├── lib/
-│   └── sessionStore.js (modules/auth/session.js のラッパー)
+│   └── session.js (modules/auth/session.js の再エクスポートスタブ。$loadLibは
+│                    lib/配下のみ検索する仕様のため、modules/配下のファイルを
+│                    使うにはこの1行のスタブが必要)
 └── public/
     ├── index.mt.html         (ログイン前ランディングページ)
     ├── resultOAuth.mt.js     (GASからのコールバックの検証・ログイン)
@@ -139,6 +141,15 @@ gitにコミットしないよう注意すること(`docs/setup.md`の`conf/env.
   ハッシュ/エンコードの部品(`modules/auth/gasAuth.js`が内部で利用)
 - `modules/auth/convb.js`: 汎用バイナリエンコード/デコードライブラリ
   (`gasAuthSig.js`が内部で利用)
+- `modules/auth/session.js`(詳細は[docs/session.md](https://github.com/maachang/minto/blob/main/docs/session.md)参照)
+  - `setCookie(userId, userData)`: セッション作成＋Cookie設定を1回で行う。
+    `resultOAuth.mt.js`がログイン確定時に使用。
+  - `getCookie()`: リクエストのCookieからセッション情報`{userId, data}`を
+    取得する(未ログインなら`null`)。1回のLambda実行(1リクエスト)単位で
+    結果をキャッシュするため、`filter.mt.js`と`mypage.mt.html`の両方から
+    呼んでもS3への問い合わせは1回で済む。
+  - `destroyCookie()`: S3セッション破棄＋Cookieクリアを1回で行う。
+    `logout.mt.js`が使用。
 
 ## シグニチャー検証の仕組み(GAS側・minto側で対応関係にある実装)
 

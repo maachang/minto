@@ -155,9 +155,15 @@
                 
                 return sid;
             },
-            // Cookieからセッションをクリア.
-            clearCookie: async function() {
+            // ログアウト用. Cookieからセッションを取得してS3側も破棄した上で、
+            // Cookieもクリアします.
+            destroyCookie: async function() {
+                const req = $request();
                 const res = $response();
+                const sid = req.cookie(_getCookieSessionName());
+                if(sid != null) {
+                    await o.destroy(sid);
+                }
                 // Cookieクリア.
                 res.cookie(_getCookieSessionName(), {
                     value: "",
@@ -168,7 +174,6 @@
                 });
                 // キャッシュをクリア.
                 $cache()[_SESSION_CACHE] = undefined;
-                // S3は削除しない(ライフサイクルで削除)
             },
             // requestのCookieからセッションIDを取得し、セッション情報を返却します.
             // 戻り値: {userId, data}(getと同じ形式)。存在しない場合はnull.

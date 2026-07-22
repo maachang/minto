@@ -20,18 +20,20 @@ mintoは、GoogleWorkspaceを契約している企業であれば標準で使え
   だけで、GoogleWorkspaceにログイン中の社員のメールアドレスが取得できる
 - **カスタムドメイン不要**: Lambda関数URLのデフォルトURL(`*.lambda-url.*.on.aws`)
   のままで動く。社内ツールにわざわざ独自ドメインを取る必要が無い
-- **アプリ側の実装はフィルターへの1行追加だけ**:
+- **アプリ側の実装はフィルターへの数行追加だけ**:
   ```js
   // public/filter.mt.js
+  const user = await session.getCookie(); // 1実行毎にキャッシュされるS3セッション確認
   if (user == null) {
       gasAuth.redirectToOAuth(req, $response(), "/resultOAuth");
       return;
   }
   ```
-  未ログイン判定した箇所からこれを1回呼ぶだけで、GASへのログイン導線
-  (URL生成＋リダイレクト)が完結する。あとはGAS側から戻ってきた
-  コールバックを`gasAuth.getOAuthMail(req)`で検証してメールアドレスを
-  受け取るだけで良い
+  未ログイン判定した箇所から`gasAuth.redirectToOAuth()`を1回呼ぶだけで、
+  GASへのログイン導線(URL生成＋リダイレクト)が完結する。あとはGAS側から
+  戻ってきたコールバックを`gasAuth.getOAuthMail(req)`で検証してメール
+  アドレスを受け取り、`session.setCookie(mail, {...})`でログインセッションを
+  作るだけで良い(`modules/auth/session.js`。詳細は[session.md](https://github.com/maachang/minto/blob/main/docs/session.md)参照)
 - **ドメイン許可制がそのまま「社内限定アクセス」になる**: GAS側の
   `ALLOW_MAIL_DOMAINS`スクリプトプロパティに自社ドメインを設定するだけで、
   「契約組織内の社員のみアクセス可能」という制約をそのまま利用できる
@@ -61,12 +63,83 @@ mintoは、GoogleWorkspaceを契約している企業であれば標準で使え
 3. GASがログイン中のメールアドレスを取得・自社ドメインチェックし、
    結果を署名付きでアプリ側のコールバックURLへ直接リダイレクトする
 4. アプリ側が`gasAuth.getOAuthMail(req)`でシグニチャーを検証し、認証済み
-   メールアドレスを取得。ログインセッションを作成して元のページへ戻る
+   メールアドレスを取得。`session.setCookie(mail, {...})`(`modules/auth/session.js`)
+   でログインセッションを作成して元のページへ戻る
 
 詳細な仕組み・セットアップ手順(GAS側のスクリプトプロパティ設定・デプロイ
 手順・環境変数設定)は、実際に動くサンプルと合わせて
 [`sample/gas-oauth-login/README.md`](https://github.com/maachang/minto/blob/main/sample/gas-oauth-login/README.md)
 にまとめてある。
+
+## 実装例(gasAuth + session の組み合わせ、これで全体が完結する)
+
+実際に使う最小構成は、以下の3ファイルだけで完結する(詳細な各ファイルの
+全文は[`sample/gas-oauth-login/`](https://github.com/maachang/minto/tree/main/sample/gas-oauth-login)参照)。
+
+`session.create()`にはS3バケット名等の設定が必要なため(プロジェクトごとに
+異なる値なので`modules/auth/session.js`側に埋め込むことはできない)、
+`conf/app.json`から読み込んで渡す。詳細は[session.md](https://github.com/maachang/minto/blob/main/docs/session.md)参照。
+
+```js
+// public/filter.mt.js: 保護ページへの未ログインアクセスをGASログインへ誘導する.
+exports.handler = async function () {
+    const req = $request();
+    const path = req.path();
+    if (path === "/index" || path === "/resultOAuth" || path === "/logout") {
+        return true;
+    }
+    const conf = $loadConf("app.json");
+    const session = $loadLib("session.js").create({
+        bucket: conf.s3Bucket, prefix: conf.sessionPrefix,
+        timeoutMin: conf.sessionTimeoutMin, region: conf.region
+    });
+    const user = await session.getCookie(); // 1実行毎キャッシュ付きのセッション確認
+    if (user == null) {
+        const gasAuth = $loadLib("gasAuth.js");
+        gasAuth.redirectToOAuth(req, $response(), "/resultOAuth");
+        return;
+    }
+    return true;
+};
+```
+
+```js
+// public/resultOAuth.mt.js: GASからのコールバックを検証し、ログインセッションを作成する.
+exports.handler = async function () {
+    const req = $request();
+    const res = $response();
+    const gasAuth = $loadLib("gasAuth.js");
+    const mail = gasAuth.getOAuthMail(req); // 検証失敗時はHttpErrorがthrowされる
+
+    const conf = $loadConf("app.json");
+    const session = $loadLib("session.js").create({
+        bucket: conf.s3Bucket, prefix: conf.sessionPrefix,
+        timeoutMin: conf.sessionTimeoutMin, region: conf.region
+    });
+    await session.setCookie(mail, { mail: mail }); // S3セッション作成＋Cookie設定
+
+    const srcURL = req.params()["srcURL"];
+    res.redirect(srcURL ? gasAuth.encodeRedirectUrlParams(srcURL) : "/mypage");
+};
+```
+
+```js
+// public/logout.mt.js: ログアウト.
+exports.handler = async function () {
+    const conf = $loadConf("app.json");
+    const session = $loadLib("session.js").create({
+        bucket: conf.s3Bucket, prefix: conf.sessionPrefix,
+        timeoutMin: conf.sessionTimeoutMin, region: conf.region
+    });
+    await session.destroyCookie(); // S3セッション破棄＋Cookieクリア
+    $response().redirect("/index");
+};
+```
+
+`filter.mt.js`・`mypage.mt.html`など複数箇所から`session.getCookie()`を
+呼んでも、`modules/auth/session.js`が1回のLambda実行(1リクエスト)単位で
+結果をキャッシュするため、S3への問い合わせは1回で済む(詳細は
+[session.md](https://github.com/maachang/minto/blob/main/docs/session.md)参照)。
 
 ## セキュリティ設計の要点
 
@@ -97,4 +170,5 @@ GAS実行環境は標準では実行ログが長期間残らないため、`gas/
 | `modules/auth/gasAuth.js` | minto側の実装(URL生成・コールバック検証) |
 | `modules/auth/gasAuthSig.js` | トークン生成用の軽量ハッシュ/エンコード部品 |
 | `modules/auth/convb.js` | 汎用バイナリエンコード/デコードライブラリ |
+| `modules/auth/session.js` | S3ベースのセッション管理(Cookie連携・1実行毎キャッシュ込み。[session.md](https://github.com/maachang/minto/blob/main/docs/session.md)参照) |
 | `sample/gas-oauth-login/` | 実際に動くサンプルWebアプリ一式・詳細セットアップ手順 |

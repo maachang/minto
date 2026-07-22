@@ -14,18 +14,16 @@ exports.handler = async function () {
     // (検証失敗時はHttpErrorがthrowされる).
     const mail = gasAuth.getOAuthMail(req);
 
-    // S3セッション作成(ユーザーIDとしてメールアドレスをそのまま使う).
-    const session = $loadLib("sessionStore.js");
-    const sid = await session.start(mail, { mail: mail });
-
-    // Cookie設定.
-    res.cookie("minto_sid", {
-        value: sid,
-        path: "/",
-        httponly: true,
-        samesite: "lax",
-        "max-age": "1800"
+    // S3セッション作成＋Cookie設定を1回で行う(modules/auth/session.js。
+    // ユーザーIDとしてメールアドレスをそのまま使う).
+    const conf = $loadConf("app.json");
+    const session = $loadLib("session.js").create({
+        bucket: conf.s3Bucket,
+        prefix: conf.sessionPrefix,
+        timeoutMin: conf.sessionTimeoutMin,
+        region: conf.region
     });
+    await session.setCookie(mail, { mail: mail });
 
     // 元々アクセスしたかったURLへリダイレクト(無ければマイページへ).
     const srcURL = req.params()["srcURL"];
