@@ -21,6 +21,10 @@
   - ${MINTO_HOME}/lambda/src/index.js: 実際に aws lambda で関数URLとして実行されるハンドラ本体(デプロイ時は`mtpk`により`index.cjs`にリネームされる)。
   - ${MINTO_HOME}/modules: mintoを支援するモジュール群が格納されており、これらは $loadLib("モジュール.js") でフラットに呼び出しができる。
     - **注意**: これは`minto`コマンドによる**ローカル実行時のみ**の挙動(`${MINTO_HOME}/modules`配下を自動フォールバック検索する)。`mtpk`でAWS Lambda用にデプロイパッケージ化する場合、`modules/`配下は`-t {カテゴリ名}`(例: `-t s3table`)や`-t all`で明示的に指定したものしかzipに含まれない。ローカルでは動くのにLambda上で`$loadLib`が失敗する場合、このデプロイオプション指定漏れを疑うこと。
+    - **禁止**: `modules/`配下のファイルを本プロジェクトの`lib/`配下にコピーして使うこと。`$loadLib`が自動フォールバック検索するため、コピーは不要かつ二重管理・追随漏れの原因になる。
+  - ${MINTO_HOME}/public: mintoが提供する認証画面等の既製ページ・共通JS(例: `public/auth/mfa/`のMFA登録・ログイン画面一式、`public/auth/js/qrcode.js`)が格納されている。本プロジェクトの`public/`配下に該当パスのファイルが無い場合、ローカル実行時(`minto`コマンド)・デプロイ後(Lambda)のいずれも自動的に`${MINTO_HOME}/public`側の同パスへフォールバックされ、そのまま動作する。
+    - **禁止**: `${MINTO_HOME}/public`配下のファイル(例: `public/auth/mfa/*.mt.html`)を本プロジェクトの`public/`配下にコピーしたり、ラッパーページを自作したりすること。フォールバックの仕組みにより、リンク先URL(例: `/auth/mfa/viewMfa`)やフォームのaction先をそのまま指定するだけで、コピー・ラッパー無しに利用できる。
+    - **注意**: `mtpk`でデプロイパッケージ化する場合、`public/js`や`public/css`のように`modules/`側に同名ディレクトリが無いものは常にzipへ含まれるが、`public/auth`のように`modules/auth`など同名ディレクトリが`modules/`側にも存在するものは、対応する`-t {カテゴリ名}`(例: `-t auth`)や`-t all`を指定しないとzipに含まれない。
   - ${MINTO_HOME}/bin: mintoのコマンドが格納されており、これらはPATHが通ってるので、フラットに実行が可能。
   - ${MINTO_HOME}/docs: mintoフレームワーク自体の機能ドキュメントが格納されている。実装で迷ったらまずここを参照すること。`howto.md`(mt.js/jhtml記法・$loadLib等の説明)、`setup.md`(セットアップ手順)、`s3MasterTable.md`/`s3-row-store-design.md`(s3table関連)、`localS3.md`(ローカルS3エミュレータ)、`lambda.md`(AWS Lambdaデプロイ手順)、`testing.md`(テスト方針)など。
 - これらを前提として、本プロジェクトの実装を行う。
