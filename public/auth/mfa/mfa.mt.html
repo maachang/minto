@@ -1,0 +1,93 @@
+<%
+// ************************************************************
+// public/auth/mfa/mfa.mt.html
+// 「よくあるmfaスマホアプリ」的な、単独で開いて現在の2段階認証コードを
+// 表示するだけのページ。viewMfa.mt.htmlが生成したURL(user/key1/key2付き)を
+// スマホのブックマークとして開くことで、このページ単体で動作する
+// (ネイティブアプリのインストールは不要。docs/authStrategy.md参照)。
+//
+// conf/mfa.jsonのkeyCode/mfaLen/updateTimeとURLパラメータのuser/key1/key2を
+// 元にmodules/auth/mfa.jsでコードを算出し、「現在のコード」を表示する。
+// updateTime秒ごとにカウントダウンし、0になったタイミングで自動的に
+// ページを再表示(再計算)する。
+//
+// このページ自体はログイン必須にしないこと(filter.mt.js側で
+// /auth/mfa/ 以下を認証除外に設定する必要がある).
+// ************************************************************
+const req = $request();
+const params = req.params();
+const user = params.user;
+const key1 = params.key1;
+const key2 = params.key2;
+
+let errorMessage = null;
+let code = null;
+let remainMs = 0;
+let totalMs = 0;
+
+if (user == undefined || user === "" ||
+    key1 == undefined || key1 === "" ||
+    key2 == undefined || key2 === "") {
+    errorMessage = "パラメータが不足しています。QRコードを読み取り直してください。";
+} else {
+    const mfaConf = $loadConf("mfa.json");
+    if (mfaConf == null || mfaConf.keyCode == undefined || mfaConf.keyCode === "") {
+        errorMessage = "conf/mfa.jsonの設定(keyCode)が必要です。";
+    } else {
+        const mfaLen = mfaConf.mfaLen || 6;
+        const updateTime = mfaConf.updateTime || 30;
+        const mfa = $loadLib("mfa.js");
+        const outNextTime = [];
+        const codes = mfa.create(
+            outNextTime, mfaConf.keyCode, user, key1, key2, mfaLen, updateTime);
+        // [0]前のコード [1]現在のコード [2]次のコード. 表示するのは[1].
+        code = codes[1];
+        remainMs = outNextTime[0];
+        totalMs = outNextTime[1];
+    }
+}
+%>
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>minto - 2段階認証コード</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+        .card { background: #fff; padding: 2rem 3rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; }
+        .code { font-size: 2.5rem; letter-spacing: 0.2em; font-weight: bold; margin: 1rem 0; }
+        .timer { color: #666; }
+        .error { color: #c00; }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>2段階認証コード</h1>
+        <% if (errorMessage != null) { %>
+        <p class="error"><%= errorMessage %></p>
+        <% } else { %>
+        <div class="code"><%= code %></div>
+        <p class="timer"><span id="countdown"><%= Math.ceil(remainMs / 1000) %></span>秒後に更新</p>
+        <script>
+            (function () {
+                let remain = <%= remainMs %>;
+                const el = document.getElementById("countdown");
+                const timer = setInterval(function () {
+                    remain -= 1000;
+                    if (remain <= 0) {
+                        clearInterval(timer);
+                        location.reload();
+                        return;
+                    }
+                    el.textContent = Math.ceil(remain / 1000);
+                }, 1000);
+            })();
+        </script>
+        <% } %>
+    </div>
+</body>
+
+</html>

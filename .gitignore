@@ -9,3 +9,6 @@ coverage
 mtpack.zip
 
 .claudeWork
+
+# mfa.jsの暗号化キー(keyCode)を含むため、conf/env.jsonと同様にコミット対象外にする.
+conf/mfa.json

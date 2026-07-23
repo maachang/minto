@@ -1,0 +1,93 @@
+<%
+// ************************************************************
+// public/auth/mfa/authMfa.mt.html
+// ログイン時の2段階認証コード入力画面.
+// user/password/redirectをPOST(json)で受け取り、コード入力フォームを表示する
+// (ログインページがユーザ名/パスワード検証OK後にここへPOSTする想定)。
+//
+// 入力されたコードの検証は public/auth/mfa/authMfaVerify.mt.js が行う。
+// このページと同じ拡張子無しパス("authMfa")に .mt.js を置くと、mintoの
+// ルーティング規則上 .mt.js が常に優先されこのページ自体に到達できなく
+// なるため、検証処理は別名(authMfaVerify)のファイルに分けている。
+// 検証はブラウザからfetch()でJSON POSTし、失敗時もページ遷移せず
+// このページ内でエラーメッセージを表示する(user/passwordをGETパラメータや
+// URLに載せずに済むようにするため)。
+//
+// このページ自体はログイン必須にしないこと(filter.mt.js側で
+// /auth/mfa/ 以下を認証除外に設定する必要がある).
+// ************************************************************
+const req = $request();
+if (req.method() !== "POST") {
+    throw new HttpError({ status: 405, message: "Method Not Allowed" });
+}
+const params = req.params();
+const user = params.user;
+const password = params.password;
+const redirect = params.redirect;
+if (user == undefined || user === "" ||
+    password == undefined || password === "" ||
+    redirect == undefined || redirect === "") {
+    throw new HttpError({ status: 400, message: "user/password/redirect is required." });
+}
+%>
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>minto - 2段階認証</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+        .card { background: #fff; padding: 2rem 3rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; }
+        input[type="text"] { font-size: 1.4rem; letter-spacing: 0.2em; text-align: center; padding: 0.4rem; width: 8em; }
+        .error { color: #c00; min-height: 1.2em; }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>2段階認証</h1>
+        <p>スマホでブックマークした2段階認証ページに表示されている<br>コードを入力してください。</p>
+        <p class="error" id="error"></p>
+        <form id="mfaForm">
+            <input type="text" id="code" name="code" inputmode="numeric"
+                autocomplete="one-time-code" required autofocus>
+            <br><br>
+            <button type="submit">確認</button>
+        </form>
+    </div>
+    <script>
+        (function () {
+            const user = <%= JSON.stringify(user) %>;
+            const password = <%= JSON.stringify(password) %>;
+            const redirect = <%= JSON.stringify(redirect) %>;
+            const form = document.getElementById("mfaForm");
+            const errorEl = document.getElementById("error");
+            form.addEventListener("submit", async function (e) {
+                e.preventDefault();
+                errorEl.textContent = "";
+                const code = document.getElementById("code").value;
+                let data;
+                try {
+                    const res = await fetch("/auth/mfa/authMfaVerify", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ user: user, password: password, code: code, redirect: redirect })
+                    });
+                    data = await res.json();
+                } catch (err) {
+                    errorEl.textContent = "通信に失敗しました。もう一度お試しください。";
+                    return;
+                }
+                if (data.success) {
+                    location.href = data.redirectUrl;
+                } else {
+                    errorEl.textContent = data.message || "認証コードが正しくありません。";
+                }
+            });
+        })();
+    </script>
+</body>
+
+</html>

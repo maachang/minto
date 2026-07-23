@@ -1,0 +1,70 @@
+<%
+// ************************************************************
+// public/auth/mfa/viewMfa.mt.html
+// MFA登録画面(パスワード変更直後に表示する).
+// user/passwordをPOST(json)で受け取り、mfa.mt.htmlへのリンク(user/key1/key2
+// 付き)を生成し、QRコード(public/auth/js/qrcode.js)と通常リンクの両方で
+// 表示する。ユーザーはこのQRコードをスマホのカメラで読み取り、開いた
+// mfa.mt.htmlのURLをブラウザのブックマークに登録することで、以降スマホから
+// 2段階認証コードを確認できるようになる(docs/authStrategy.md参照)。
+//
+// このページ自体はログイン必須にしないこと(filter.mt.js側で
+// /auth/mfa/ 以下を認証除外に設定する必要がある).
+// ************************************************************
+const req = $request();
+if (req.method() !== "POST") {
+    throw new HttpError({ status: 405, message: "Method Not Allowed" });
+}
+const params = req.params();
+const user = params.user;
+const password = params.password;
+if (user == undefined || user === "" || password == undefined || password === "") {
+    throw new HttpError({ status: 400, message: "user/password is required." });
+}
+
+const mfaKey = $loadLib("mfaKey.js");
+const host = req.header("host");
+const keys = mfaKey.compute(user, password, host);
+const protocol = mfaKey.getHttpProtocol(host);
+const mfaUrl = protocol + host + "/auth/mfa/mfa" +
+    "?user=" + encodeURIComponent(user) +
+    "&key1=" + encodeURIComponent(keys.key1) +
+    "&key2=" + encodeURIComponent(keys.key2);
+%>
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>minto - 2段階認証の登録</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+        .card { background: #fff; padding: 2rem 3rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; max-width: 90vw; }
+        #qrcode { display: inline-block; margin: 1rem 0; }
+        .link { word-break: break-all; font-size: 0.85rem; }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>2段階認証の登録</h1>
+        <p>以下のQRコードをスマホのカメラで読み取り、開いたページを<br>ブラウザの「ブックマーク」に登録してください。</p>
+        <div id="qrcode"></div>
+        <p class="link"><a id="mfaLink" href="<%= mfaUrl %>"><%= mfaUrl %></a></p>
+        <p>次回以降のログインでは、このブックマークを開いて表示される<br>認証コードを入力してください。</p>
+    </div>
+    <script src="/auth/js/qrcode.js"></script>
+    <script>
+        new QRCode(document.getElementById("qrcode"), {
+            text: document.getElementById("mfaLink").href,
+            width: 200,
+            height: 200,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H
+        });
+    </script>
+</body>
+
+</html>
