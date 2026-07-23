@@ -1335,6 +1335,11 @@
         for (let k in cookieList) {
             em = cookieList[k];
             // 最初の条件は key=value条件.
+            // (cookieの名前・値はURIエンコードするが、path/domain/
+            //  samesite等の属性値はcookie仕様上のトークン・日付等であり
+            //  URIエンコードしてはいけない(例: path="/" が "%2F" に化けて
+            //  ブラウザに無効なpath指定と解釈され、default-pathにフォール
+            //  バックしてしまう不具合があった)).
             value = encodeURIComponent(k) +
                 "=" + encodeURIComponent(em.value);
             for (let n in em) {
@@ -1343,13 +1348,13 @@
                     continue;
                 } else if (n === "samesite") {
                     sameSite = true;
+                    value += "; samesite=" + em[n];
                     // 単一設定[Secureなど].
                 } else if (em[n] == true) {
-                    value += "; " + encodeURIComponent(n);
+                    value += "; " + n;
                     // key=value.
                 } else {
-                    value += "; " + encodeURIComponent(n) +
-                        "=" + encodeURIComponent(em[n]);
+                    value += "; " + n + "=" + em[n];
                 }
             }
             // samesiteが設定されていない場合.

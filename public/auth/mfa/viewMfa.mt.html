@@ -51,7 +51,7 @@ const mfaUrl = protocol + host + "/auth/mfa/mfa" +
         <h1>2段階認証の登録</h1>
         <p>以下のQRコードをスマホのカメラで読み取り、開いたページを<br>ブラウザの「ブックマーク」に登録してください。</p>
         <div id="qrcode"></div>
-        <p class="link"><a id="mfaLink" href="<%= mfaUrl %>"><%= mfaUrl %></a></p>
+        <p class="link"><a id="mfaLink" href="<%= mfaUrl %>">ブラウザの場合はこちらをクリック</a></p>
         <p>次回以降のログインでは、このブックマークを開いて表示される<br>認証コードを入力してください。</p>
     </div>
     <script src="/auth/js/qrcode.js"></script>
@@ -62,7 +62,10 @@ const mfaUrl = protocol + host + "/auth/mfa/mfa" +
             height: 200,
             colorDark: "#000000",
             colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.H
+            // key1/key2(各64桁のhex)込みのURLは200文字前後になり、
+            // correctLevel Hだとqrcode.js側のタイプ番号自動判定が
+            // 容量不足を起こす(内部バグ)ため、Lにして回避する.
+            correctLevel: QRCode.CorrectLevel.L
         });
     </script>
 </body>
