@@ -48,11 +48,23 @@ PC側のログイン画面に入力する、という流れを想定している
 秘密情報」になり、漏洩した場合は端末を問わず不正利用され得る点は、既存の
 議論の通り理解した上で採用する必要がある。
 
-現状`modules/auth/mfa.js`はコード生成のロジック(`create`/`generateRandomCode`)
-のみが実装・テスト済みで、QRコード表示ページやログイン画面との統合(実際の
-Webアプリとしての組み込み)はまだ行っていない。QRコード描画には
-`public/js/qrcode.js`([davidshimjs/qrcodejs](https://github.com/davidshimjs/qrcodejs)、
-MITライセンス)を使う想定。
+`modules/auth/mfa.js`(コード生成ロジック: `create`/`generateRandomCode`)に加え、
+QRコード表示・ログイン画面との統合も`public/auth/mfa/`以下に実装済み。
+
+- `viewMfa.mt.html`: MFA登録画面(パスワード変更直後に表示)。QRコード描画には
+  `public/auth/js/qrcode.js`([davidshimjs/qrcodejs](https://github.com/davidshimjs/qrcodejs)、
+  MITライセンス)を使用
+- `mfa.mt.html`: スマホのブックマークから開く、現在の認証コード表示ページ
+- `authMfa.mt.html` / `authMfaVerify.mt.js`: ログイン時の認証コード入力・検証、
+  成功時にセッションCookie発行
+
+これらのMFA関連ページ群はいずれも無状態(ステートレス)な部品として提供される
+にとどまり、「ユーザーがMFA登録済みかどうか」を判定・記録する状態管理は
+minto側では持たない。`viewMfa.mt.html`は呼び出し元プロジェクトからPOST
+パラメータ`redirect`で登録完了後の遷移先URLを受け取り、「登録を完了する」
+ボタン押下でそこへ遷移するだけであり、登録済みフラグの永続化や、次回
+ログイン時にこの画面を表示するかどうかの判定は、呼び出し元プロジェクト側の
+実装責務とする。
 
 ## まとめ
 

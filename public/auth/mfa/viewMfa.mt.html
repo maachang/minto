@@ -10,6 +10,13 @@
 //
 // このページ自体はログイン必須にしないこと(filter.mt.js側で
 // /auth/mfa/ 以下を認証除外に設定する必要がある).
+//
+// 「MFA登録済みかどうか」の状態管理(次回ログイン以降このページを
+// 表示させないための判定)はminto側では持たない。呼び出し元の
+// プロジェクトがPOSTパラメータ"redirect"で登録完了後の遷移先URLを
+// 指定し、「登録を完了する」ボタン押下でそこへ遷移するだけとする。
+// 登録済みフラグの保存や、次回ログイン時にこのページを表示するか
+// どうかの判定は、呼び出し元プロジェクト側の実装責務とする.
 // ************************************************************
 const req = $request();
 if (req.method() !== "POST") {
@@ -18,8 +25,12 @@ if (req.method() !== "POST") {
 const params = req.params();
 const user = params.user;
 const password = params.password;
+const redirect = params.redirect;
 if (user == undefined || user === "" || password == undefined || password === "") {
     throw new HttpError({ status: 400, message: "user/password is required." });
+}
+if (redirect == undefined || redirect === "") {
+    throw new HttpError({ status: 400, message: "redirect is required." });
 }
 
 const mfaKey = $loadLib("mfaKey.js");
@@ -43,16 +54,23 @@ const mfaUrl = protocol + host + "/auth/mfa/mfa" +
         .card { background: #fff; padding: 2rem 3rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; max-width: 90vw; }
         #qrcode { display: inline-block; margin: 1rem 0; }
         .link { word-break: break-all; font-size: 0.85rem; }
+        .button { display: inline-block; padding: 0.6rem 1.5rem; background: #1a73e8; color: #fff; text-decoration: none; border-radius: 4px; font-size: 1rem; }
     </style>
 </head>
 
 <body>
     <div class="card">
+
         <h1>2段階認証の登録</h1>
         <p>以下のQRコードをスマホのカメラで読み取り、開いたページを<br>ブラウザの「ブックマーク」に登録してください。</p>
         <div id="qrcode"></div>
-        <p class="link"><a id="mfaLink" href="<%= mfaUrl %>">ブラウザの場合はこちらをクリック</a></p>
-        <p>次回以降のログインでは、このブックマークを開いて表示される<br>認証コードを入力してください。</p>
+        <p class="link">PCなど、スマホのカメラで読み取れない場合は<br>
+            <a id="mfaLink" href="<%= mfaUrl %>">ブラウザの場合はこちらをクリック</a>
+        </p>
+        <p>ブックマーク登録が終わったら、下のボタンを押して登録を完了してください。</p>
+        <p class="error" id="error"></p>
+        <a id="completeBtn" class="button" href="<%= redirect %>">登録を完了する</a>
+
     </div>
     <script src="/auth/js/qrcode.js"></script>
     <script>
