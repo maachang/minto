@@ -61,6 +61,11 @@
     // ここに利用可能なライブラリが入ってる.
     const _MODULES_DICT = mintoUtil.listDir(_MODULES_PATH, true);
 
+    // minto本体同梱のpublicディレクトリ($MINTO_HOME/public/).
+    // tools/webapps.js側の404フォールバック機能(公開ページ・QRコード等)
+    // に対応する共通静的コンテンツ・共通ページ置き場.
+    const _FRAMEWORK_PUBLIC_PATH = path.resolve(__DIR_NAME + "../public") + "/";
+
     // lambda.index path.
     const _LAMBDA_INDEX_PATH = path.resolve(__DIR_NAME + "../lambda/src") + "/";
 
@@ -388,69 +393,151 @@
 
 
     // lib関連のpack処理.
+    // public関連1ファイルのコピー処理(mt.js/mt.html変換・etag・gzip対応).
+    // packPublic(プロジェクト自身のpublic)・packFrameworkPublic(minto本体
+    // 同梱のpublic)の両方から共通で使う.
+    const _publicCopyCallback = function (
+        srcBaseDir, destBaseDir, dirName, destDirName, fileName, callOpt) {
+        p(" > copy: " + dirName + fileName);
+        // コピー先のディレクトリ名を生成.
+        createDir(destDirName);
+        // ファイルコピー.
+        cpFile(dirName + fileName, destDirName + fileName);
+
+        // 動的実行ファイル(minto実行系)チェック.
+        if (fileName.endsWith(_RUN_JS)) {
+            ///////////////////////
+            // mt.js の場合 min実行.
+            _convMinJs(destDirName + fileName, callOpt);
+            return;
+        } else if (fileName.endsWith(JHTML_NAME)) {
+            ///////////////////////
+            // jhtml を js変換.
+            p("  => conv jhtml: " + destDirName + fileName);
+            const outJs = jhtml.convert(
+                fs.readFileSync(destDirName + fileName).toString());
+            // 元のファイル(jhtml)を削除.
+            rmvFile(destDirName + fileName);
+            // ファイル名をjhtmlからjs名に変換.
+            fileName = jhtml.changeExtensionByJhtmlToJs(fileName);
+            // 変換結果をファイル出力.
+            fs.writeFileSync(destDirName + fileName, outJs);
+            // jhtml.js の場合 min実行.
+            _convMinJs(destDirName + fileName, callOpt);
+            return;
+        }
+
+        // jsファイルの場合.
+        if (fileName.endsWith(".js")) {
+            ///////////////////////
+            // js-min.
+            _convMinJs(destDirName + fileName, callOpt);
+        }
+
+        // publicHashが有効な場合.
+        if (callOpt["etag"] == true) {
+            ///////////////////////
+            // etag生成.
+            publicFileHash(destDirName, fileName)
+        }
+
+        // gzip変換が有効な場合.
+        if (callOpt["gz"] == true) {
+            ///////////////////////
+            // gzip変換.
+            const mime = $mime(_extends(fileName), true);
+            if (mime != null && mime["gz"] == true) {
+                // gzが有効な場合、対象ファイルをgz変換.
+                p("  => conv gz: " + destDirName + fileName);
+                convGz(destDirName + fileName, destDirName + fileName + ".gz");
+                // 元のファイルを削除.
+                rmvFile(destDirName + fileName)
+            }
+        }
+    }
+
+    // lib関連のpack処理.
     const packPublic = function (opt, srcPath) {
         p("# public: " + srcPath);
         // lambda lib 処理.
         createDir(_WORK_DIR + "public")
         targetDirLoop(srcPath, _WORK_DIR + "public", srcPath, opt,
-            function (srcBaseDir, destBaseDir, dirName, destDirName, fileName, callOpt) {
-                p(" > copy: " + dirName + fileName);
-                // コピー先のディレクトリ名を生成.
-                createDir(destDirName);
-                // ファイルコピー.
-                cpFile(dirName + fileName, destDirName + fileName);
+            _publicCopyCallback);
+    }
 
-                // 動的実行ファイル(minto実行系)チェック.
-                if (fileName.endsWith(_RUN_JS)) {
-                    ///////////////////////
-                    // mt.js の場合 min実行.
-                    _convMinJs(destDirName + fileName, callOpt);
-                    return;
-                } else if (fileName.endsWith(JHTML_NAME)) {
-                    ///////////////////////
-                    // jhtml を js変換.
-                    p("  => conv jhtml: " + destDirName + fileName);
-                    const outJs = jhtml.convert(
-                        fs.readFileSync(destDirName + fileName).toString());
-                    // 元のファイル(jhtml)を削除.
-                    rmvFile(destDirName + fileName);
-                    // ファイル名をjhtmlからjs名に変換.
-                    fileName = jhtml.changeExtensionByJhtmlToJs(fileName);
-                    // 変換結果をファイル出力.
-                    fs.writeFileSync(destDirName + fileName, outJs);
-                    // jhtml.js の場合 min実行.
-                    _convMinJs(destDirName + fileName, callOpt);
-                    return;
-                }
+    // "-t"/"--target" で指定された値を全て取得する.
+    // 戻り値: 指定順の文字列配列(指定無しの場合は空配列).
+    const _getTargetNames = function () {
+        const ret = [];
+        for (let i = 0; ; i++) {
+            const t = args.next(i, "-t", "--target");
+            if (t == null) {
+                break;
+            }
+            ret.push(t);
+        }
+        return ret;
+    }
 
-                // jsファイルの場合.
-                if (fileName.endsWith(".js")) {
-                    ///////////////////////
-                    // js-min.
-                    _convMinJs(destDirName + fileName, callOpt);
-                }
+    // minto本体同梱のpublic($MINTO_HOME/public/)のpack処理.
+    //
+    // - public/js・public/css等、modules/***に同名ディレクトリが存在しない
+    //   ものは、--targetの指定に関わらず常にコピーする.
+    // - public/auth等、modules/***(例: modules/auth)に同名ディレクトリが
+    //   存在するものは、"-t auth"(または"-t all")で指定された場合のみ
+    //   コピーする(modules側のpack処理と対になる選択条件)。
+    //   modules側と違い、public以下のパス構造(例: public/auth/mfa/...)は
+    //   そのまま維持してコピーする(モジュール名の階層を潰さない).
+    // - modules/***に対応する同名ディレクトリが無いpublic/***は、
+    //   (--target all であっても)対象外(コピー不要)となる。
+    const packFrameworkPublic = function (opt) {
+        p("# public(framework): " + _FRAMEWORK_PUBLIC_PATH);
+        createDir(_WORK_DIR + "public");
 
-                // publicHashが有効な場合.
-                if (callOpt["etag"] == true) {
-                    ///////////////////////
-                    // etag生成.
-                    publicFileHash(destDirName, fileName)
-                }
+        // 対象モジュール名一覧(--target all の場合はmodules全件、
+        // それ以外は指定された "-t"/"--target" の値一覧).
+        const targetNames = isAllModules() ?
+            Object.keys(_MODULES_DICT) : _getTargetNames();
+        const targetSet = new Set(targetNames);
 
-                // gzip変換が有効な場合.
-                if (callOpt["gz"] == true) {
-                    ///////////////////////
-                    // gzip変換.
-                    const mime = $mime(_extends(fileName), true);
-                    if (mime != null && mime["gz"] == true) {
-                        // gzが有効な場合、対象ファイルをgz変換.
-                        p("  => conv gz: " + destDirName + fileName);
-                        convGz(destDirName + fileName, destDirName + fileName + ".gz");
-                        // 元のファイルを削除.
-                        rmvFile(destDirName + fileName)
-                    }
+        let entries;
+        try {
+            entries = fs.readdirSync(
+                _FRAMEWORK_PUBLIC_PATH, { withFileTypes: true });
+        } catch (e) {
+            // public/が存在しない場合は何もしない.
+            return;
+        }
+        const len = entries.length;
+        for (let i = 0; i < len; i++) {
+            const ent = entries[i];
+            if (ent.isDirectory()) {
+                const name = ent.name;
+                // modules/***に同名ディレクトリが存在するかどうか.
+                const isModuleLinked = _MODULES_DICT[name] != undefined;
+                if (isModuleLinked && !targetSet.has(name)) {
+                    // --targetで指定されていないモジュール対応ディレクトリ
+                    // なので対象外.
+                    p("  # skip public(" + name + "): not targeted");
+                    continue;
                 }
-            });
+                p("  # public(" + name + "): " +
+                    (isModuleLinked ? "targeted" : "common"));
+                // public以下のパス構造を維持するため、srcBaseDirを
+                // public直下(_FRAMEWORK_PUBLIC_PATH)にする.
+                targetDirLoop(
+                    _FRAMEWORK_PUBLIC_PATH, _WORK_DIR + "public",
+                    _FRAMEWORK_PUBLIC_PATH + name + "/", opt,
+                    _publicCopyCallback);
+            } else if (ent.isFile()) {
+                // public直下の単独ファイル(public/*)は常にコピーする.
+                p("  > copy: " + _FRAMEWORK_PUBLIC_PATH + ent.name);
+                createDir(_WORK_DIR + "public");
+                cpFile(
+                    _FRAMEWORK_PUBLIC_PATH + ent.name,
+                    _WORK_DIR + "public/" + ent.name);
+            }
+        }
     }
 
     // lambdaソース元の index.js ファイル名.
@@ -541,6 +628,10 @@
 
         // current conf 処理.
         packConf(opt, _CURRENT_CONF_PATH);
+
+        // minto本体同梱のpublic処理(プロジェクト側のpublicより先に処理し、
+        // 同名パスがある場合はプロジェクト側の内容で上書きされるようにする).
+        packFrameworkPublic(opt);
 
         // currentPublic 処理.
         packPublic(opt, _CURRENT_PUBLIC_PATH);

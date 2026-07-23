@@ -50,6 +50,7 @@ test/
 │   ├── mintoUtil.test.js
 │   ├── localLog.test.js
 │   ├── llrtCheck.test.js
+│   ├── mtPack.test.js
 │   └── .fixtures/          テスト用の補助スクリプト(子プロセス実行用)
 │
 ├── modules/                modules/ 配下の単体テスト
@@ -90,6 +91,7 @@ test/
 - **mintoUtil.test.js**: `existsFileSync`/`existsDirSync`/`loadJson`/`listDir`/`listFile`(再帰指定含む)を、一時ディレクトリを使って検証します
 - **localLog.test.js**: `tools/localLog.js`はrequire時にグローバルの`console`を差し替える作りのため、`.fixtures/localLogRunner.js`を子プロセスとして起動して検証します。ログレベル設定によるファイル出力の抑制/許可、`console.count`のカウントアップ動作を確認します
 - **llrtCheck.test.js**: `tools/llrtCheck.js`のllrt互換性チェック(未サポートAPI検出、`for await`検出、問題なしの場合の空配列返却など)を検証します
+- **mtPack.test.js**: `tools/mtPack.js`(`mtpk`コマンド)を一時プロジェクトディレクトリに対して実際に子プロセス実行し、生成された`mtpack.zip`の中身を検証します。`$MINTO_HOME/public/`のpack対応について、`modules/***`に対応するディレクトリが無い`public/js`等は`--target`指定に関わらず常にpackされること、`modules/auth`に対応する`public/auth`は`-t auth`(または`-t all`)指定時のみpackされ、`modules/***`側と違いpublic以下のパス構造を維持したまま(`mt.html`はjhtml変換)packされること、対象外の`--target`指定時は`public/auth`がpackされないことを確認しています
 
 ### modules/
 
