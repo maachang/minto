@@ -60,3 +60,13 @@ minto（llrtを使ったAWS Lambda軽量化） は、軽量化モジュール ll
 # あえてやってないこと
 
 # 未対応・残課題(随時更新)
+
+- 以下は方針合意済みだが未実装（詳細は `.claudeWork/progress.md` 参照）
+  - CSRF対策
+  - multipartパーサー
+  - セキュリティヘッダーの共通化（CSP等）
+  - XSS対策（jhtml出力時のエスケープ処理などの整備）
+  - Bearer token / APIキー認証
+  - Webhook署名検証
+- `modules/sdk/*`（dynamoDb, kms, parameterStore, secretsManager, ses, sns, sqs）、`modules/notification/*`（sendSlack, sendGithub）はテスト未対応（外部AWS/API依存でモック困難なため意図的に対象外。詳細は `docs/testing.md` 参照）
+- `bin/initMinto`, `bin/mkmt` はCLIラッパー自体の直接テストなし
