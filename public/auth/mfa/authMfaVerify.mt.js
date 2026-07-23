@@ -6,9 +6,15 @@
 //
 // user/passwordから(登録時と同じ式で)key1/key2を再計算し、
 // modules/auth/mfa.jsのcreate()で生成される「前のコード・現在のコード」の
-// いずれかとcodeが一致すれば認証OKとし、redirect先にuser(GETパラメータ)を
-// 付与したURLを返す(呼び出し元でこのURLへ遷移させ、遷移先で実際の
-// ログイン完了処理(セッション発行等)を行わせる)。
+// いずれかとcodeが一致すれば認証OKとする。
+//
+// 検証に成功したこの場でmodules/auth/session.jsによりセッションCookieを
+// 発行し、redirectはただの遷移先として返す(以前の実装は、検証成功時に
+// redirectUrl?user=...を返すだけで、遷移先ページ側がそのuser(GET
+// パラメータ)だけを信用してセッションを発行する設計だった。これだと
+// 「認証コード検証を経由しないGETアクセスでもセッションが発行できて
+// しまう」実質的な抜け道になり得るため、検証とセッション発行をこの
+// エンドポイント内で完結させる形に修正した)。
 // 一致しない場合は失敗メッセージを返す(画面遷移は行わずauthMfa.mt.html側で
 // エラー表示する)。
 //
@@ -60,12 +66,13 @@ exports.handler = async function () {
     // codes: [0]前のコード [1]現在のコード [2]次のコード.
     // 時計のずれを許容するため前/現在のいずれかに一致すればOKとする
     // (未来の"次のコード"は許容しない).
-    if (code === codes[0] || code === codes[1]) {
-        const sep = redirect.indexOf("?") !== -1 ? "&" : "?";
-        return {
-            success: true,
-            redirectUrl: redirect + sep + "user=" + encodeURIComponent(user)
-        };
+    if (code !== codes[0] && code !== codes[1]) {
+        return { success: false, message: "認証コードが正しくありません。" };
     }
-    return { success: false, message: "認証コードが正しくありません。" };
+
+    // 検証成功: この場でセッションCookieを発行する.
+    const session = $loadLib("session.js");
+    await session.setCookie(user, {});
+
+    return { success: true, redirectUrl: redirect };
 };
