@@ -95,3 +95,32 @@ test("e2e: filter.mt.jsが存在してもtrueを返せば処理が継続する",
     const res = await fetch(baseUrl + "/hello");
     assert.equal(res.status, 200);
 });
+
+test("e2e: プロジェクト側に無いパスはminto本体同梱のpublic/へフォールバックする", async () => {
+    // fixture(sample-project)には public/auth/mfa/ が存在しないため、
+    // minto本体自身の public/auth/mfa/mfa.mt.html にフォールバックして
+    // 応答されることを確認する(tools/webapps.jsの404フォールバック機能).
+    const res = await fetch(
+        baseUrl + "/auth/mfa/mfa?user=user1&key1=aaa&key2=bbb");
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") || "", /text\/html/);
+    const text = await res.text();
+    assert.match(text, /2段階認証コード/);
+});
+
+test("e2e: フォールバックしても存在しないパスはそのまま404になる", async () => {
+    const res = await fetch(baseUrl + "/auth/mfa/no-such-file");
+    assert.equal(res.status, 404);
+});
+
+test("e2e: フォールバック後もプロジェクト側のパス解決に影響しない", async () => {
+    // フォールバック処理でbasePathを切り替えた後、後続リクエストで
+    // プロジェクト側のmainPathが正しく復元されていることを確認する.
+    const fallback = await fetch(
+        baseUrl + "/auth/mfa/mfa?user=user1&key1=aaa&key2=bbb");
+    assert.equal(fallback.status, 200);
+    const res = await fetch(baseUrl + "/hello");
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.hello, "world");
+});

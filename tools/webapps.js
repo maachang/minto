@@ -64,6 +64,13 @@
         //return mintoUtil.getRequireResolvePath(require.resolve("./")) + "/";
     })();
 
+    // mintoリポジトリ自体のルートパス(プロジェクトルートでは無く、この
+    // tools/webapps.jsが同梱されているminto本体のルート).
+    // プロジェクト側のpublic/に該当パスが無く404になった場合、この
+    // フレームワーク同梱のpublic/(例: public/auth/mfa/等)を
+    // フォールバックとして参照するために使う(_runLambdaIndex参照).
+    const _FRAMEWORK_BASE_PATH = _DIR_NAME + "../";
+
     // modulesパス.
     const _MODULES_PATH = _DIR_NAME + "../modules/";
 
@@ -418,8 +425,31 @@
         }
         try {
             // mintoMainLambda実行処理.
-            const result = await mintoLambdaIndex.handler(
-                _getEvent(req, body), {});
+            const event = _getEvent(req, body);
+            let result = await mintoLambdaIndex.handler(event, {});
+            // プロジェクト側(mainPath)に該当パスが無く404の場合、minto本体
+            // 同梱のpublic/(例: public/auth/mfa/等の共通機能)を
+            // フォールバックとして参照する.
+            if (result != null && result.statusCode === 404) {
+                // mintoLambdaIndex内部のbasePathだけでなく、webapps.js自身が
+                // 上書きしている$loadConf/$loadLib(mainPathをクロージャ参照)
+                // も合わせて切り替える必要があるため、mainPathも一時的に
+                // 差し替える.
+                const _projectMainPath = mainPath;
+                mainPath = _FRAMEWORK_BASE_PATH;
+                mintoLambdaIndex.setBasePath(_FRAMEWORK_BASE_PATH);
+                try {
+                    const fallbackResult = await mintoLambdaIndex.handler(event, {});
+                    if (fallbackResult != null && fallbackResult.statusCode !== 404) {
+                        result = fallbackResult;
+                    }
+                } finally {
+                    // 後続リクエストに影響しないよう、必ずプロジェクト側の
+                    // mainPath/basePathへ戻す.
+                    mainPath = _projectMainPath;
+                    mintoLambdaIndex.setBasePath(mainPath);
+                }
+            }
             // mintoMainLambdaから返却された内容をresponse.
             _resultMinto(res, result);
         } catch (err) {
