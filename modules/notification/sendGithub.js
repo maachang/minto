@@ -24,7 +24,7 @@
 
     // [(await)httpClient]POSTリクエスト実行.
     const _requetPost = async function (host, path, options) {
-        option.method = "POST";
+        options.method = "POST";
         options.headers["content-length"] = Buffer.byteLength(options.body);
         const response = await fetch(
             "https://" + host + "/" + path, options);
