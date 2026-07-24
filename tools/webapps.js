@@ -38,6 +38,11 @@
     // メインパス.
     let mainPath = null;
 
+    // プロジェクト本来のメインパス(フォールバック実行中もmainPathが
+    // framework側ルートへ一時的に差し替わるため、$loadConfがプロジェクトの
+    // conf/を見失わないよう別変数で常に保持しておく).
+    let _projectRootPath = null;
+
     // conf/minto.json.
     let mintoConf = null;
 
@@ -152,6 +157,16 @@
         confPath = mainPath + "conf/" + name;
         if (mintoUtil.existsFileSync(confPath)) {
             return require(confPath);
+        }
+        // フォールバックページ実行中(mainPathがframework側ルートに
+        // 差し替わっている場合)は、プロジェクト本来のconf/も検索する
+        // (session.js等、呼び出し元プロジェクトのconf設定を前提とした
+        // モジュールをframework同梱ページ経由で使うケースに対応するため).
+        if (_projectRootPath != null && _projectRootPath !== mainPath) {
+            confPath = _projectRootPath + "conf/" + name;
+            if (mintoUtil.existsFileSync(confPath)) {
+                return require(confPath);
+            }
         }
         // 取得失敗の場合は null.
         return null;
@@ -281,6 +296,7 @@
             path += "/"
         }
         mainPath = path;
+        _projectRootPath = path;
         if (conf == undefined) {
             conf = {};
         }

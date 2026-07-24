@@ -55,11 +55,26 @@ if (user == undefined || user === "" ||
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>minto - 2段階認証コード</title>
     <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
-        .card { background: #fff; padding: 2rem 3rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; }
-        .code { font-size: 2.5rem; letter-spacing: 0.2em; font-weight: bold; margin: 1rem 0; }
-        .timer { color: #666; }
-        .error { color: #c00; }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Hiragino Sans", "Segoe UI", Helvetica, Arial, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; margin: 0; padding: 1.5rem;
+            background: linear-gradient(160deg, #eef2fb 0%, #f7f8fc 100%);
+        }
+        .card {
+            background: #fff; padding: 2.5rem 2.75rem; border-radius: 16px;
+            box-shadow: 0 8px 28px rgba(30, 41, 82, 0.12);
+            text-align: center; max-width: 420px; width: 100%;
+        }
+        h1 { font-size: 1.35rem; margin: 0 0 1.25rem; color: #1a2340; }
+        .code {
+            font-size: 2.75rem; letter-spacing: 0.2em; font-weight: 700;
+            margin: 0 0 1rem; color: #1a73e8;
+            background: #e8f0fe; border-radius: 12px; padding: 0.75rem 0.5rem;
+        }
+        .timer { color: #6b7284; font-size: 0.9rem; }
+        .error { color: #d0342c; font-size: 0.9rem; }
     </style>
 </head>
 
