@@ -127,6 +127,7 @@ const fields = multipart.parse($request());
 
 - 依存モジュールは無し。
 - `$request().body()` は常にBufferで生バイナリを返す(GET以外)前提で実装しています。
+- **重要な制約**: AWS Lambda Function URLsは同期呼び出しのため、リクエスト/レスポンスペイロードは各6MB制限です(AWS公式ドキュメント「Invocation payload (synchronous)」参照。デプロイパッケージの50MB制限とは別物なので混同しないこと)。base64エンコード(`isBase64Encoded:true`)時はオーバーヘッド(約+33%)を差し引くため、本モジュールで実質扱えるファイルサイズは目安4.5MB程度が上限です。これを超える大きいファイルのアップロードには対応できないため、S3署名付きURL(presigned URL)でクライアントから直接S3へアップロードする方式への切替を検討してください。
 
 ---
 
