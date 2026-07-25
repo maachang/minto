@@ -62,8 +62,6 @@ minto（llrtを使ったAWS Lambda軽量化） は、軽量化モジュール ll
 # 未対応・残課題(随時更新)
 
 - 以下は方針合意済みだが未実装（詳細は `.claudeWork/progress.md` 参照）
-  - CSRF対策
-  - multipartパーサー
   - セキュリティヘッダーの共通化（CSP等）
   - XSS対策（jhtml出力時のエスケープ処理などの整備）
   - Bearer token / APIキー認証

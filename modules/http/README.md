@@ -79,4 +79,55 @@ response.error(404, "対象が見つかりません", { code: "NOT_FOUND" });
 - 依存モジュールは無し(`$response()` グローバル関数のみ利用)。
 - `json()`/`error()` はいずれも戻り値を返さず、`$response()` の状態を直接書き換える副作用のみを持ちます。
 
+---
+
+# ◆◆◆ multipart.js ◆◆◆
+
+multipart/form-data パーサーです。`public/*.mt.js` から呼び出して利用します。
+
+`$request().body()` で取得した生Buffer + `content-type` ヘッダーのboundaryを使ってパースし、テキストフィールドは文字列、ファイルフィールドは `{filename, contentType, data(Buffer)}` を持つオブジェクトにまとめて返却します。
+
+> AIメモ: 方針合意済みの割り切り仕様として、サイズ上限チェックは行わず(呼び出し側でContent-Length等を見て制御する前提)、同名フィールドが複数ファイルを持つケース(配列)にも対応しません(1フィールド1ファイル想定。同名パートが複数来た場合は最後のものが上書きで残ります)。
+
+---
+
+## エクスポート
+
+| 関数 | 説明 |
+|---|---|
+| `exports.parse(request)` | multipart/form-dataリクエストをパース |
+
+---
+
+## `parse(request)`
+
+### 引数
+
+| 引数 | 型 | 説明 |
+|---|---|---|
+| `request` | `object` | `$request()` に相当するリクエスト情報 |
+
+### 戻り値
+
+`{フィールド名: 文字列 または {filename, contentType, data}}` — `content-type` が `multipart/form-data` 以外、またはboundary未指定の場合は空オブジェクト `{}`。
+
+### 使用例
+
+```javascript
+const multipart = $loadLib("multipart.js");
+
+const fields = multipart.parse($request());
+// fields.username -> "taro"(テキストフィールド)
+// fields.avatar   -> { filename: "photo.jpg", contentType: "image/jpeg", data: Buffer }
+```
+
+---
+
+## 依存・注意事項
+
+- 依存モジュールは無し。
+- `$request().body()` は常にBufferで生バイナリを返す(GET以外)前提で実装しています。
+
+---
+
 # ◆◆◆ EOF ◆◆◆

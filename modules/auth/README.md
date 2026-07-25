@@ -638,4 +638,65 @@ const list = await admin.listAdmins();
 - llrtでは `for-await-of` 構文が利用できないため、S3レスポンスのStream変換は `transformToString()` を利用しています。
 - 管理者一覧はリクエスト内で `$cache()` にキャッシュされ、`addAdmin`/`removeAdmin` 実行時にクリアされます。
 
+---
+
+# ◆◆◆ csrf.js ◆◆◆
+
+CSRF対策共通ヘルパーです。`public/*.mt.js` から呼び出して利用します。
+
+`session.js` が発行するセッションID(Cookie)にHMAC-SHA256でトークンを紐づける、ステートレス方式(トークン自体をS3等に別途保存しない)です。ヘッダー方式(`X-CSRF-Token`)での検証を想定しています。
+
+> AIメモ: トークンは「セッションID」を秘密鍵(環境変数`CSRF_SECRET`)でHMAC-SHA256署名した値です。`session.js`側にトークン保存用の変更を加える必要が無く、`generateToken()`/`verify()`どちらも都度セッションIDから再計算するだけで完結します。セッションが存在しない(未ログイン)状態でのCSRF検証は意味が無いため、`generateToken()`はセッション無しの場合`null`、`verify()`はセッション無しの場合は必ず`false`を返します。`password.js`と同様の理由(pbkdf2/scrypt等がllrt未サポート)で`crypto.createHmac`のみを使用し、タイミング攻撃対策の定数時間比較も`crypto.timingSafeEqual`ではなく自前のXOR比較を用いています。
+
+---
+
+## エクスポート
+
+| 関数 | 説明 |
+|---|---|
+| `exports.generateToken()` | 現在のセッションに紐づくCSRFトークンを算出 |
+| `exports.verify()` | リクエストヘッダーのCSRFトークンを検証 |
+
+---
+
+## `generateToken()`
+
+### 戻り値
+
+`string`(hex) — セッションIDにHMAC-SHA256を適用したトークン。未ログイン(セッション無し)の場合は`null`。
+
+### 使用例
+
+```javascript
+const csrf = $loadLib("csrf.js");
+
+// フォーム表示時にトークンをhidden要素等へ埋め込む
+const token = csrf.generateToken();
+```
+
+## `verify()`
+
+### 戻り値
+
+`boolean` — リクエストヘッダー(デフォルト`X-CSRF-Token`)のトークンが、現在のセッションから算出した値と一致すればtrue。未ログイン・ヘッダー無し・不一致のいずれもfalse。
+
+### 使用例
+
+```javascript
+// POST等の更新系処理の先頭
+if (!csrf.verify()) {
+    $response().status(403);
+    return false;
+}
+```
+
+---
+
+## 依存・注意事項
+
+- 依存モジュールは無し(`crypto`のみ利用)。
+- 環境変数 `CSRF_SECRET`(省略時はデフォルトシークレット。本番運用では必ず設定すること) — トークン署名用の秘密鍵。
+- 環境変数 `CSRF_HEADER_NAME`(省略時 `"x-csrf-token"`) — 検証対象のリクエストヘッダー名。
+- セッションCookie名の解決は `session.js` と同じロジック(環境変数 `MINTO_COOKIE_SESSION_NAME`、省略時 `"minto_sid"`)です。
+
 # ◆◆◆ EOF ◆◆◆
