@@ -45,7 +45,7 @@ const waitForServer = async function (url, timeoutMs) {
             return;
         } catch (e) {
             if (Date.now() - start > timeoutMs) {
-                throw new Error("localS3 did not start in time: " + e.message);
+                throw new Error("localAws did not start in time: " + e.message);
             }
             await new Promise((r) => setTimeout(r, 100));
         }

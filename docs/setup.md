@@ -191,7 +191,7 @@ minto
 
 そしてこの `./minto` を `.gitignore` でコミット除外にする事で credential の事故を防げます。
 
-なお、S3を利用する検証において「実際のAWS環境のCredentialを用意したくない」場合は、実AWS S3の代わりにファイル/ディレクトリベースでローカル動作確認ができる `localS3` コマンドも利用できます。この場合はAWSクレデンシャルの設定自体が不要です。詳しくは [localS3.md](https://github.com/maachang/minto/blob/main/docs/localS3.md) を参照してください。
+なお、S3を利用する検証において「実際のAWS環境のCredentialを用意したくない」場合は、実AWS S3の代わりにファイル/ディレクトリベースでローカル動作確認ができる `localAws` コマンドも利用できます。この場合はAWSクレデンシャルの設定自体が不要です。詳しくは [localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md) を参照してください。
 
 このように定義して実際に検証環境立ち上げ時には
 ~~~cmd
@@ -204,7 +204,7 @@ minto
 - `conf/env.json`
 
 `mkmt`でプロジェクトを作成すると、以下の内容(`modules/s3table`のローカル検証環境
-(`localS3`)向けの環境変数)がデフォルトで生成されます。
+(`localAws`)向けの環境変数)がデフォルトで生成されます。
 
 ~~~json
 {
@@ -218,7 +218,7 @@ minto
 ください。s3table関連(`modules/s3table/s3sdk.js`・`s3Lock.js`・
 `s3MasterTable.js`・`s3IndexTable.js`)を利用しない場合は
 `MINTO_LOCAL_S3_ENDPOINT`自体を削除しても問題ありません。クレデンシャル解決の
-優先順位の詳細は[localS3.md](https://github.com/maachang/minto/blob/main/docs/localS3.md#クレデンシャル解決の優先順位)を
+優先順位の詳細は[localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md#クレデンシャル解決の優先順位)を
 参照してください。
 
 AWS Lambda では環境変数が利用できますが、これを ローカルminto環境では、わざわざ環境変数定義をせずとも、この定義ファイルで環境変数定義が行えます.

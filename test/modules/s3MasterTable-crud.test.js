@@ -45,7 +45,7 @@ const waitForServer = async function (url, timeoutMs) {
             return;
         } catch (e) {
             if (Date.now() - start > timeoutMs) {
-                throw new Error("localS3 did not start in time: " + e.message);
+                throw new Error("localAws did not start in time: " + e.message);
             }
             await new Promise((r) => setTimeout(r, 100));
         }
@@ -360,7 +360,7 @@ test("s3MasterTable: exportCsv/importCsvでテーブル内容を往復できる"
     assert.deepEqual(rows.map((r) => r.age), [20, 30]);
 });
 
-// S3(localS3)上の生の行データを直接取得する(flushされたかどうかの確認用).
+// S3(localAws)上の生の行データを直接取得する(flushされたかどうかの確認用).
 const rawStoredRows = async function (table) {
     const res = await s3sdk.get(BUCKET, "table/" + table, "data.json", { noError: true });
     if (res == null) {

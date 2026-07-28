@@ -111,7 +111,7 @@ do {
 ## 依存・設定・注意事項
 
 - 依存モジュールは無し(`@aws-sdk/client-s3`のみ利用)。
-- **環境変数`MINTO_LOCAL_S3_ENDPOINT`**: 設定されている場合、実AWS S3ではなく`tools/localS3.js`(ローカルS3エミュレータ)へ接続します(`forcePathStyle: true`)。ローカル接続時、環境変数にもクレデンシャルが無い場合はダミークレデンシャル(`local`/`local`)を使い、実AWSへの接続やAWS_PROFILE等の設定を要求しないようにしています。
+- **環境変数`MINTO_LOCAL_S3_ENDPOINT`**: 設定されている場合、実AWS S3ではなく`tools/localAws.js`(ローカルAWSエミュレータ)へ接続します(`forcePathStyle: true`)。ローカル接続時、環境変数にもクレデンシャルが無い場合はダミークレデンシャル(`local`/`local`)を使い、実AWSへの接続やAWS_PROFILE等の設定を要求しないようにしています。
 - **AWS Lambda環境でのデプロイ**: `@aws-sdk/client-s3`を利用するため、AWS Lambda環境では`llrt-lambda-{cpu名}-full-sdk.zip`のレイヤーが必要です。
 - リージョン・クレデンシャルごとに`S3Client`インスタンスをキャッシュしており、同一組み合わせであれば使い回されます。
 

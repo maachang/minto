@@ -5,12 +5,16 @@ mintoコマンドは、以下のコマンドが存在します.
   ローカル環境でmintoを実行・確認するためのコマンド
 - mtpk
   ローカルmintoをデプロイして aws lambda 用の zip ファイル化するためのコマンド
-- localS3
-  `modules/s3table/s3sdk.js`・`modules/s3table/s3Lock.js`が利用するS3を、実AWSに接続せず
-  ファイル/ディレクトリベースでローカル動作確認するためのS3エミュレータ起動コマンド
+- localAws
+  `modules/s3table/s3sdk.js`・`modules/s3table/s3Lock.js`が利用するS3、および
+  `modules/sdk/sqsSdk.js`が利用するSQSを、実AWSに接続せずファイル/ディレクトリ・
+  メモリベースでローカル動作確認するためのAWSエミュレータ起動コマンド
 - tableTool
   `modules/s3table/s3MasterTable.js`・`modules/s3table/s3IndexTable.js`が管理するテーブル
   定義に対して、createTable/dropTable/alterTable/alterIndexを実行するコマンド
+- localSqsPoller
+  `localAws`のSQSキューをポーリングして`public/runSqs.mt.js`を呼び出す、
+  「SQSトリガー→Lambda呼び出し」のローカル再現コマンド
 
 まずこれらコマンドを利用するための設定を行うための説明を行います.
 
@@ -113,38 +117,49 @@ mkmt で作成された mintoプロジェクトによるWebアプリ実装ディ
 
 ※ ちなみに llrt だと http or https モジュールが利用できないようなので、minto=nodeしか利用できません.
 
-## localS3 コマンド
+## localAws コマンド
 
-`modules/s3table/s3sdk.js`・`modules/s3table/s3Lock.js`を使うプロジェクトを、実際のAWS S3に
-接続せずローカルのファイル/ディレクトリだけで動作確認するためのS3エミュレータです。
+`modules/s3table/s3sdk.js`・`modules/s3table/s3Lock.js`・`modules/sdk/sqsSdk.js`を
+使うプロジェクトを、実際のAWS(S3・SQS)に接続せずローカルのファイル/ディレクトリ・
+メモリだけで動作確認するためのエミュレータです(同一サーバー・同一ポートでS3・SQS
+両方を受け付けます)。詳細は[docs/localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md)を参照してください。
 
 ~~~sh
-> localS3
+> localAws
 もしくは
-> localS3 -p {ポート番号} -d {ストレージ保存先ディレクトリ}
+> localAws -p {ポート番号} -d {ストレージ保存先ディレクトリ}
 ~~~
 
 - `-p` / `--port`: バインドポート(デフォルト `9911`)
-- `-d` / `--dir`: バケット内容を保存するローカルディレクトリ(デフォルト `./.localS3`)
+- `-d` / `--dir`: バケット内容を保存するローカルディレクトリ(デフォルト `./.localS3`。
+  S3のみが対象で、SQSのキューはメモリ上のみで永続化されません)
 
 起動後、`minto`コマンド実行時に読み込まれる `conf/env.json` などで以下の環境変数を
-設定することで、`s3sdk.js`/`s3Lock.js`が自動的にこのローカルサーバーへ接続します
-(実AWS環境で使う場合は、この環境変数を設定しなければ通常通りAWS S3に接続します)。
+設定することで、`s3sdk.js`/`s3Lock.js`・`sqsSdk.js`が自動的にこのローカルサーバーへ
+接続します(実AWS環境で使う場合は、この環境変数を設定しなければ通常通り実AWSに
+接続します)。
 
 ~~~json
 {
-  "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911"
+  "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911",
+  "MINTO_LOCAL_SQS_ENDPOINT": "http://localhost:9911"
 }
 ~~~
 
+(`MINTO_LOCAL_SQS_ENDPOINT`は`mkmt`で作成したプロジェクトの`conf/env.json`には
+デフォルトで含まれないため、`sqsSdk.js`を使う場合は手動で追加してください)
+
 AWSクレデンシャル(`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`)は設定不要です。
-`MINTO_LOCAL_S3_ENDPOINT`が設定されており、かつ他に明示的なクレデンシャル指定が
-無い場合、`s3sdk.js`/`s3Lock.js`側で自動的にダミークレデンシャルが使われます
-(`localS3`側では署名検証を行わないため実害はありません)。
+上記環境変数が設定されており、かつ他に明示的なクレデンシャル指定が無い場合、
+`s3sdk.js`/`s3Lock.js`/`sqsSdk.js`側で自動的にダミークレデンシャルが使われます
+(`localAws`側では署名検証を行わないため実害はありません)。
 
 サポートしているS3操作は PutObject(条件付き書き込み`If-None-Match`含む)・GetObject・
 DeleteObject・ListObjectsV2 の最低限のみです。それ以外の操作(バージョニング、
 マルチパートアップロードなど)には対応していません。
+
+サポートしているSQS操作は SendMessage・ReceiveMessage・DeleteMessage の最低限のみ
+です(FIFOキュー固有の機能やロングポーリングには対応していません)。
 
 ## tableTool コマンド
 
@@ -243,6 +258,34 @@ DeleteObject・ListObjectsV2 の最低限のみです。それ以外の操作(�
   取得するため、同時に複数のテーブル管理コマンドを実行することはできない
   (他の実行が進行中の場合はエラーで即座に終了する)。異常終了等でロックが
   残ってしまった場合は、S3上の`locks/table-migration.lock`を手動で削除する
+
+## localSqsPoller コマンド
+
+実際のAWSでは、SQS自身がLambdaへメッセージをpushするのではなく、Lambdaの
+イベントソースマッピングがキューをポーリングして`handler(event)`を呼び出す
+仕組みになっています。このコマンドはその挙動をローカルで再現し、
+`public/runSqs.mt.js`の動作確認に使います(`runSqs.mt.js`自体の説明は
+[docs/howto.md](https://github.com/maachang/minto/blob/main/docs/howto.md#5-runsqsmtjs)を参照)。
+
+`localAws`を起動した状態で、別ターミナルから実行します。
+
+~~~sh
+> localAws
+別ターミナルで
+> localSqsPoller -q {キュー名}
+~~~
+
+- `-e` / `--endpoint`: `localAws`のURL(デフォルト `http://127.0.0.1:9911`)
+- `-q` / `--queue`: ポーリング対象のキュー名(必須)
+- `-i` / `--interval`: メッセージが無かった場合の次回ポーリングまでの待機時間
+  (ms、デフォルト `2000`)
+- `-w` / `--wait`: `ReceiveMessage`の`WaitTimeSeconds`(デフォルト `0`。`localAws`は
+  即時応答するためロングポーリングの効果はありません)
+- `-b` / `--batchSize`: 1回のポーリングで受信する最大件数(デフォルト `10`、上限 `10`)
+
+`handler()`呼び出しが例外を投げずに正常終了した場合、実AWSのデフォルト動作
+(`ReportBatchItemFailures`未使用時、呼び出しが正常終了すればバッチ全体を削除)に
+合わせて、受信した全メッセージを削除します。`Ctrl+C`で停止します。
 
 ## mtpk コマンド
 

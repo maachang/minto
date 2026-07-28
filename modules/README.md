@@ -3,7 +3,7 @@
 ## このディレクトリ以下で定義されているモジュール
 
 - `s3table`: S3をデータストアとして使うための中核モジュール群(mintoの主要な永続化機構)。`@aws-sdk/client-s3`を利用するため、AWS Lambda環境では`llrt-lambda-{cpu名}-full-sdk.zip`のレイヤーが必要です.
-  - `s3sdk.js`: 最低限のS3 put/get/delete/list操作。環境変数`MINTO_LOCAL_S3_ENDPOINT`が設定されている場合、実AWS S3ではなく`tools/localS3.js`(ローカルS3エミュレータ)に接続する.
+  - `s3sdk.js`: 最低限のS3 put/get/delete/list操作。環境変数`MINTO_LOCAL_S3_ENDPOINT`が設定されている場合、実AWS S3ではなく`tools/localAws.js`(ローカルAWSエミュレータ)に接続する.
   - `s3MasterTable.js`: テーブル全体を1つのJSONとしてS3に保存するRDBMSライクなデータベース。**書き込み頻度が少なく、読み込み頻度が多い**用途向け。詳細は[docs/s3MasterTable.md](https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md)を参照.
   - `s3IndexTable.js`: 1行=1ファイルでS3に保存する行ファイル型データベース。**書き込み頻度が多い**用途向け(書き込み競合が起きにくい代わりに、検索は事前定義したインデックス経由のみ・複合インデックスは先頭カラムのみ範囲検索可、という制約がある。1テーブル1万件程度の小規模利用を想定)。詳細は[docs/s3-row-store-design.md](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)を参照.
   - `s3Lock.js`: S3の条件付き書き込み(IfNoneMatch)を利用した簡易排他ロック。acquire/releaseを提供。期限切れロック(stale)の自動失捉(reclaim)に対応。`s3sdk.js`と同様に`MINTO_LOCAL_S3_ENDPOINT`によるローカル接続に対応.

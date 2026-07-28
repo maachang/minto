@@ -437,6 +437,8 @@ const res = await snsSdk.publish("arn:aws:sns:ap-northeast-1:123456789012:my-top
 
 AWS-SQS接続(aws-sdk-v3)モジュールです。最低限のSQS送受信(送信/受信/削除)操作が利用できます。
 
+環境変数`MINTO_LOCAL_SQS_ENDPOINT`が設定されている場合、`s3sdk.js`と同様、実AWS SQSではなく`tools/localAws.js`(ローカルAWSエミュレータ)へ接続します(クレデンシャル解決の優先順位・ダミークレデンシャルの扱いも`s3sdk.js`と同様。詳細は[docs/localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md#sqs機能)を参照)。
+
 ---
 
 ## エクスポート
@@ -541,6 +543,8 @@ for (const m of messages) {
 
 ## テスト対象外について
 
-`docs/testing.md`に記載の通り、本ディレクトリ配下(`dynamoDbSdk.js`・`sqsSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`)は実際のAWSサービス(S3以外)への通信が発生するため現状テスト対象外です。`tools/localS3.js`はS3のみに対応したローカルエミュレータであり、これらのサービスには未対応のためです。
+`docs/testing.md`に記載の通り、本ディレクトリ配下(`dynamoDbSdk.js`・`sqsSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`)は実際のAWSサービスへの通信が発生するため現状テスト対象外です(`@aws-sdk/client-sqs`等が`devDependencies`に含まれていないため、`sqsSdk.js`自体を経由したテストは未実施)。
+
+ただし`tools/localAws.js`はS3に加えてSQS(AWS JSON 1.0 protocol)のSendMessage/ReceiveMessage/DeleteMessageにも対応しており、この部分自体は`test/tools/localAws-sqs.test.js`で検証されています。また`tools/localSqsPoller.js`(SQSトリガーのローカル再現。詳細は[docs/localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md#sqsトリガーrunsqsmtjsをローカルで再現するlocalsqspoller)を参照)経由の`public/runSqs.mt.js`への配送・削除も`test/e2e/localSqsPoller.test.js`で検証されています。
 
 # ◆◆◆ EOF ◆◆◆

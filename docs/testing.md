@@ -38,7 +38,7 @@ bun test
 
 - 新規の依存パッケージは追加せず、Node.js標準の `node:test` / `node:assert/strict` のみを使用しています(`node --test` と `bun test` の両方で同一のテストファイルがそのまま動作することを確認済みです)
 - ルートの `package.json` は `npm test` 実行のためだけに追加した最小構成で、依存パッケージ(`dependencies`)は定義していません
-- 例外として、`modules/sdk/*`・`modules/s3table/*`が実行時に前提とする`@aws-sdk/client-s3`のみ`devDependencies`として追加しています(後述の`s3IndexTable-crud.test.js`が実際にこのSDKを使って`tools/localS3.js`と通信するため)。`npm install`を実行すれば自動的にインストールされます
+- 例外として、`modules/sdk/*`・`modules/s3table/*`が実行時に前提とする`@aws-sdk/client-s3`のみ`devDependencies`として追加しています(後述の`s3IndexTable-crud.test.js`が実際にこのSDKを使って`tools/localAws.js`と通信するため)。`npm install`を実行すれば自動的にインストールされます。`@aws-sdk/client-sqs`は追加していないため、SQS関連のテスト(`localAws-sqs.test.js`・`localSqsPoller.test.js`)は`sqsSdk.js`を経由せず、実際のAWSクライアントが送信するのと同じAWS JSON 1.0 protocolを生の`fetch`で直接叩いて検証しています
 
 ## ディレクトリ構成
 
@@ -51,6 +51,7 @@ test/
 │   ├── localLog.test.js
 │   ├── llrtCheck.test.js
 │   ├── mtPack.test.js
+│   ├── localAws-sqs.test.js
 │   └── .fixtures/          テスト用の補助スクリプト(子プロセス実行用)
 │
 ├── modules/                modules/ 配下の単体テスト
@@ -73,6 +74,7 @@ test/
 └── e2e/                     結合テスト(実際にローカルサーバーを起動して確認)
     ├── webapps.test.js
     ├── tableTool.test.js
+    ├── localSqsPoller.test.js
     └── .fixtures/
         ├── runServer.js            テスト用サーバー起動スクリプト
         └── sample-project/         最小構成のサンプルmintoプロジェクト
@@ -92,6 +94,7 @@ test/
 - **localLog.test.js**: `tools/localLog.js`はrequire時にグローバルの`console`を差し替える作りのため、`.fixtures/localLogRunner.js`を子プロセスとして起動して検証します。ログレベル設定によるファイル出力の抑制/許可、`console.count`のカウントアップ動作を確認します
 - **llrtCheck.test.js**: `tools/llrtCheck.js`のllrt互換性チェック(未サポートAPI検出、`for await`検出、問題なしの場合の空配列返却など)を検証します
 - **mtPack.test.js**: `tools/mtPack.js`(`mtpk`コマンド)を一時プロジェクトディレクトリに対して実際に子プロセス実行し、生成された`mtpack.zip`の中身を検証します。`$MINTO_HOME/public/`のpack対応について、`modules/***`に対応するディレクトリが無い`public/js`等は`--target`指定に関わらず常にpackされること、`modules/auth`に対応する`public/auth`は`-t auth`(または`-t all`)指定時のみpackされ、`modules/***`側と違いpublic以下のパス構造を維持したまま(`mt.html`はjhtml変換)packされること、対象外の`--target`指定時は`public/auth`がpackされないことを確認しています
+- **localAws-sqs.test.js**: `tools/localAws.js`のうち、SQS(AWS JSON 1.0 protocol)エミュレーション部分(S3部分は`s3IndexTable-crud.test.js`等で検証済みのため対象外)を、子プロセスとして起動し生の`fetch`で検証します。SendMessage→ReceiveMessageでの内容取得、DeleteMessage後の再受信抑止、可視性タイムアウト(`VisibilityTimeout`)中の再受信抑止、`MaxNumberOfMessages`による受信件数上限、キュー名(QueueUrl末尾セグメント)ごとの独立管理を確認しています
 
 ### modules/
 
@@ -108,7 +111,7 @@ test/
 - **seqId.test.js**: `modules/s3table/seqId.js`(Snowflake ID方式のユニークID発行、旧`autoIncrement`の代替)を検証します。固定長16桁の小文字hex文字列を返すこと、大量生成しても重複しないこと(同一ミリ秒内のシーケンス処理含む)、生成順に文字列比較で単調増加すること、`$requestId()`が使えない環境でもエラーにならないことを確認しています
 - **s3MasterTable.test.js**: `modules/s3table/s3MasterTable.js`のCRUD/検索エンジン本体を、実際のS3通信を行わずインメモリのフェイクな`s3sdk`/`s3Lock`を`$loadLib`経由で注入して検証します(`s3MasterTable.js`はlistを使用しないため、s3IndexTable.jsと異なりフェイクだけでCRUD全体を実際に動かして検証できます)。createTable/insert/select/update/delete/CSV往復に加え、`flush`/`transaction`(ロック取得→fn実行→flush→ロック解放、例外時のロールバック、ロック競合時のエラー)も検証しています。
 - **s3IndexTable-encode.test.js**: `modules/s3table/s3IndexTable.js`のうち、S3通信を伴わない値エンコードロジック(`encodeInt`/`encodeFloat`/`encodeString`/`encodeBoolean`/`encodeDate`)が数値順・辞書順と一致すること、`generateRowId`の一意性などを検証します
-- **s3IndexTable-crud.test.js**: `modules/s3table/s3IndexTable.js`のCRUD/検索エンジン本体を検証します。`tools/localS3.js`(ローカルS3エミュレータ)を子プロセスとして起動し、実際に`@aws-sdk/client-s3`経由で通信させることで、以下を確認しています。
+- **s3IndexTable-crud.test.js**: `modules/s3table/s3IndexTable.js`のCRUD/検索エンジン本体を検証します。`tools/localAws.js`(ローカルAWSエミュレータ)を子プロセスとして起動し、実際に`@aws-sdk/client-s3`経由で通信させることで、以下を確認しています。
   - createTable/insert/select(eq検索)
   - 複合インデックス(先頭カラム範囲検索+後続カラム完全一致)
   - 範囲検索(gt/gte/lt/lte)・in検索
@@ -136,7 +139,7 @@ test/
     ロックは解放されるがロールバックはしないこと、ロック競合時のエラー)
 
   ポートは`test/e2e/webapps.test.js`と同様に`net`モジュールでOSに空きポートを割り当てる方式、ストレージ先は`os.tmpdir()`配下の一時ディレクトリを使い、テスト終了後に削除しています。
-- **s3MasterTable-crud.test.js**: `modules/s3table/s3MasterTable.js`(テーブル全体1JSON方式)のCRUD/検索エンジン本体を、`s3IndexTable-crud.test.js`と同じ方式(`tools/localS3.js`を子プロセスとして起動)で検証します。
+- **s3MasterTable-crud.test.js**: `modules/s3table/s3MasterTable.js`(テーブル全体1JSON方式)のCRUD/検索エンジン本体を、`s3IndexTable-crud.test.js`と同じ方式(`tools/localAws.js`を子プロセスとして起動)で検証します。
   - createTable(重複作成のエラー含む)/insert/select(全件)
   - where演算子(eq/ne/gt/gte/lt/lte/in/ni/between/regexp)
   - orderBy(asc/desc)、offset/limit、columns指定(カラム投影)
@@ -172,7 +175,7 @@ test/
 
   ポートは`net`モジュールでOSに空きポートを割り当ててもらう方式にしており、固定ポートによる競合を避けています。
 
-- **tableTool.test.js**: `tools/tableTool.js`(テーブル管理コマンド: createTable/dropTable/alterTable/alterIndex/backupTable/restoreTable/listBackups/previewRestore/pruneBackups/restoreBackupAs/describeBackup)を、`tools/localS3.js`を子プロセスとして起動した上で、実際に`node tools/tableTool.js -t ... -c ...`を子プロセス実行して標準出力のJSON結果を検証します。以下を確認しています。
+- **tableTool.test.js**: `tools/tableTool.js`(テーブル管理コマンド: createTable/dropTable/alterTable/alterIndex/backupTable/restoreTable/listBackups/previewRestore/pruneBackups/restoreBackupAs/describeBackup)を、`tools/localAws.js`を子プロセスとして起動した上で、実際に`node tools/tableTool.js -t ... -c ...`を子プロセス実行して標準出力のJSON結果を検証します。以下を確認しています。
   - createTableが未作成テーブルのみを作成すること(べき等性)
   - alterTableがカラムの追加・削除を反映すること
   - alterTableがnotNullカラム追加時にdefault未指定だと検証エラーで中断すること(何も適用されない)
@@ -191,20 +194,23 @@ test/
 
   fixtureプロジェクトの`lib/`には、`modules/s3table/*.js`をコピーせず絶対パスでre-exportするスタブファイルを配置し、実体との重複・鮮度ズレを避けています。
 
+- **localSqsPoller.test.js**: `tools/localSqsPoller.js`(SQSトリガー模擬ポーラー)を、`tools/localAws.js`を子プロセスとして起動した上で、実際に`node tools/localSqsPoller.js -e ... -q ...`を子プロセス実行して検証します。fixtureプロジェクトの`public/runSqs.mt.js`(受信した`params`を1行1JSONでファイルへ追記する実装)に対し、SendMessageで投入した複数件のメッセージが実際に`handler()`へ渡ること、処理後にキューから削除されること(再度ReceiveMessageしても0件になること)、メッセージが無いキューを指定した場合もエラーにならず待機し続けること(SIGINTで正常停止)を確認しています。
+
 ## テスト対象外にしているもの
 
 以下は実際のAWS/Slack/GitHubへの通信が発生するため、`fetch`のモック化などの追加設計が必要になります。今回は対象外としています。
 
 - `modules/notification/*`(sendSlack.js, sendGithub.js)
-- `modules/sdk/dynamoDbSdk.js`・`sqsSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`(S3以外のAWSサービス。`tools/localS3.js`はS3のみが対象のため未対応)
+- `modules/sdk/dynamoDbSdk.js`・`sqsSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`(S3・SQS以外のAWSサービス。`tools/localAws.js`はS3・SQSのみが対象のため未対応。`sqsSdk.js`自体も`@aws-sdk/client-sqs`が`devDependencies`未追加のため、実クライアント経由のテストは未実施)
 
-一方で `modules/s3table/s3sdk.js`・`s3IndexTable.js`・`s3MasterTable.js`・`s3Lock.js` は、[tools/localS3.js](https://github.com/maachang/minto/blob/main/docs/localS3.md)(ファイル/ディレクトリベースのローカルS3エミュレータ)を子プロセスとして起動することで、実AWSへの通信無しに実際の`@aws-sdk/client-s3`経由のテストが可能になっています(`s3IndexTable-crud.test.js`・`s3MasterTable-crud.test.js`を参照)。
+一方で `modules/s3table/s3sdk.js`・`s3IndexTable.js`・`s3MasterTable.js`・`s3Lock.js` は、[tools/localAws.js](https://github.com/maachang/minto/blob/main/docs/localAws.md)(ファイル/ディレクトリベースのローカルAWSエミュレータ)を子プロセスとして起動することで、実AWSへの通信無しに実際の`@aws-sdk/client-s3`経由のテストが可能になっています(`s3IndexTable-crud.test.js`・`s3MasterTable-crud.test.js`を参照)。また`tools/localAws.js`のSQSエミュレーション部分・`tools/localSqsPoller.js`経由の`runSqs.mt.js`配送も、実クライアントは経由しないものの`localAws-sqs.test.js`・`localSqsPoller.test.js`で検証済みです。
 
-以下はまだこの方式(`localS3`経由の実`@aws-sdk/client-s3`テスト)が未整備です。
+以下はまだこの方式(`localAws`経由の実`@aws-sdk/client-*`テスト)が未整備です。
 
 - `modules/auth/session.js`(内部で`modules/s3table/s3sdk.js`を経由してS3にアクセスするため、同様の方式でテスト可能。現状`auth-session.test.js`では`s3sdk.js`自体をインメモリのフェイク実装に差し替えて検証している)
+- `modules/sdk/sqsSdk.js`自体(`@aws-sdk/client-sqs`経由。現状は`localAws.js`のSQS protocol実装を生の`fetch`で直接検証するに留まる)
 
-必要になった場合は、`fetch`をモックに差し替える仕組みや、上記の`localS3`を使ったテストの追加を検討してください。
+必要になった場合は、`fetch`をモックに差し替える仕組みや、上記の`localAws`を使ったテストの追加を検討してください。
 
 ## テストの追加方法
 

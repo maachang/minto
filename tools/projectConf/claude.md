@@ -38,7 +38,7 @@
     - **禁止**: `${MINTO_HOME}/public`配下のファイル(例: `public/auth/mfa/*.mt.html`)を本プロジェクトの`public/`配下にコピーしたり、ラッパーページを自作したりすること。フォールバックの仕組みにより、リンク先URL(例: `/auth/mfa/viewMfa`)やフォームのaction先をそのまま指定するだけで、コピー・ラッパー無しに利用できる。
     - **注意**: `mtpk`でデプロイパッケージ化する場合、`public/js`や`public/css`のように`modules/`側に同名ディレクトリが無いものは常にzipへ含まれるが、`public/auth`のように`modules/auth`など同名ディレクトリが`modules/`側にも存在するものは、対応する`-t {カテゴリ名}`(例: `-t auth`)や`-t all`を指定しないとzipに含まれない。
   - ${MINTO_HOME}/bin: mintoのコマンドが格納されており、これらはPATHが通ってるので、フラットに実行が可能。
-  - ${MINTO_HOME}/docs: mintoフレームワーク自体の機能ドキュメントが格納されている。実装で迷ったらまずここを参照すること。`howto.md`(mt.js/jhtml記法・$loadLib等の説明)、`setup.md`(セットアップ手順)、`s3MasterTable.md`/`s3-row-store-design.md`(s3table関連)、`localS3.md`(ローカルS3エミュレータ)、`lambda.md`(AWS Lambdaデプロイ手順)、`testing.md`(テスト方針)など。
+  - ${MINTO_HOME}/docs: mintoフレームワーク自体の機能ドキュメントが格納されている。実装で迷ったらまずここを参照すること。`howto.md`(mt.js/jhtml記法・$loadLib等の説明)、`setup.md`(セットアップ手順)、`s3MasterTable.md`/`s3-row-store-design.md`(s3table関連)、`localAws.md`(ローカルAWSエミュレータ、S3+SQS)、`lambda.md`(AWS Lambdaデプロイ手順)、`testing.md`(テスト方針)など。
 - これらを前提として、本プロジェクトの実装を行う。
 
 （プロジェクト固有のコーディングルールがあればこの内容を削除して記載する）
@@ -63,14 +63,18 @@
   必要)、どちらにも見つからないかをレポートする。`mtpk`でのデプロイ前に、
   `-t`指定漏れによる本番(AWS Lambda)限定の`$loadLib`失敗を検出するために
   実行すること。
-- `localS3 [-p {ポート}] [-d {ディレクトリ}]`: 実AWS S3の代わりにファイル/
-  ディレクトリベースで動作確認できるローカルS3エミュレータを起動する
-  (デフォルトポート`9911`)。`modules/s3table`の動作確認時に、実際のAWS
-  Credentialを用意せず検証したい場合に使う。
+- `localAws [-p {ポート}] [-d {ディレクトリ}]`: 実AWSの代わりにファイル/
+  ディレクトリ・メモリベースで動作確認できるローカルAWSエミュレータ(S3+SQS)を
+  起動する(デフォルトポート`9911`)。`modules/s3table`・`modules/sdk/sqsSdk.js`
+  の動作確認時に、実際のAWS Credentialを用意せず検証したい場合に使う。
 - `tableTool -t <master|index> -c <createTable|dropTable|alterTable|alterIndex> [-n <テーブル名>]`:
   `modules/s3table`(s3MasterTable.js/s3IndexTable.js)が管理するテーブル定義を
   作成・変更・削除する。事前に`conf/table/master.json`・`conf/table/index.json`
   へ「あるべきテーブル定義」を記載してから実行すること。
+- `localSqsPoller -q <キュー名> [-e {localAwsのURL}] [-i {ポーリング間隔ms}]`:
+  実際のAWSの「SQSトリガー→Lambda」呼び出し(イベントソースマッピングによる
+  ポーリング)をローカルで再現する。`localAws`のキューをポーリングし、
+  `public/runSqs.mt.js`の`handler()`を呼び出す。
 
 # ディレクトリ構成
 
