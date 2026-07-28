@@ -49,7 +49,7 @@
         if (region == undefined || region == null) {
             region = _DEF_REGION;
         }
-        // ローカルS3エミュレータ(tools/localS3.js)接続用endpoint.
+        // ローカルS3エミュレータ(tools/localAws.js)接続用endpoint.
         // 環境変数が設定されている場合、AWS本番環境ではなくローカルサーバーに接続する.
         const localEndpoint = process.env["MINTO_LOCAL_S3_ENDPOINT"];
         if (credentials == undefined || credentials == null) {

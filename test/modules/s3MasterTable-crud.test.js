@@ -1,6 +1,6 @@
 // modules/s3table/s3MasterTable.js のCRUD/検索エンジン本体のテスト.
 //
-// s3IndexTable-crud.test.jsと同じ方針で、tools/localS3.js(ローカルS3
+// s3IndexTable-crud.test.jsと同じ方針で、tools/localAws.js(ローカルS3
 // エミュレータ)を子プロセスとして起動し、実際に@aws-sdk/client-s3経由で
 // テーブル全体1JSON方式のCRUD・where演算子・GROUP BY・CSVエクスポート/
 // インポートを検証する。
@@ -16,7 +16,7 @@ const net = require("node:net");
 const { spawn } = require("node:child_process");
 
 const MINTO_HOME = path.resolve(__dirname, "..", "..");
-const LOCAL_S3_JS = path.join(MINTO_HOME, "tools", "localS3.js");
+const LOCAL_S3_JS = path.join(MINTO_HOME, "tools", "localAws.js");
 const BUCKET = "test-bucket";
 
 let child;

@@ -2,7 +2,7 @@
 //
 // エンコードロジックのみのテストは s3IndexTable-encode.test.js を参照。
 // ここでは実際のS3通信(insert/select/update/delete、インデックス、
-// 範囲検索、GROUP BY、自己修復など)を tools/localS3.js(ローカルS3
+// 範囲検索、GROUP BY、自己修復など)を tools/localAws.js(ローカルS3
 // エミュレータ)を子プロセスとして起動した上で検証する。
 //
 // 本テストの実行には @aws-sdk/client-s3(devDependencies)が必要。
@@ -16,7 +16,7 @@ const net = require("node:net");
 const { spawn } = require("node:child_process");
 
 const MINTO_HOME = path.resolve(__dirname, "..", "..");
-const LOCAL_S3_JS = path.join(MINTO_HOME, "tools", "localS3.js");
+const LOCAL_S3_JS = path.join(MINTO_HOME, "tools", "localAws.js");
 const BUCKET = "test-bucket";
 
 let child;

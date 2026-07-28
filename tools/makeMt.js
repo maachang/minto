@@ -105,7 +105,7 @@
 
     // conf/env.json を作成.
     // modules/s3table(s3sdk.js/s3Lock.js/s3MasterTable.js/s3IndexTable.js)の
-    // ローカル検証環境(tools/localS3.js)向けの環境変数をデフォルトで含める.
+    // ローカル検証環境(tools/localAws.js)向けの環境変数をデフォルトで含める.
     // AWSクレデンシャルは、MINTO_LOCAL_S3_ENDPOINT設定時はコード側
     // (s3sdk.js/s3Lock.js)が自動的にダミー値を使うため、ここでは設定不要.
     const createEnvJson = function (projectName) {

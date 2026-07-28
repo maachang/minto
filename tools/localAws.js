@@ -1,18 +1,23 @@
 ///////////////////////////////////////////////
-// (node専用)ローカルS3エミュレータ.
+// (node専用)ローカルAWSエミュレータ(S3 + SQS).
 //
 // modules/s3table/s3sdk.js・modules/s3table/s3Lock.js が利用する
-// @aws-sdk/client-s3(S3Client)の接続先(endpoint)をこのサーバーに
-// 向けることで、実際のAWS S3へ接続せずにファイル/ディレクトリを
-// バックエンドにしたローカル動作確認ができるようにするもの.
+// @aws-sdk/client-s3(S3Client)、および modules/sdk/sqsSdk.js が
+// 利用する @aws-sdk/client-sqs(SQSClient)の接続先(endpoint)を
+// このサーバーに向けることで、実際のAWSへ接続せずにローカルで
+// 動作確認ができるようにするもの.
 //
 // 本物のS3 REST APIの必要最小限(PutObject/GetObject/DeleteObject/
-// ListObjectsV2、条件付き書き込みIf-None-Match)のみをサポートする。
-// ローカル専用のためSigV4署名検証は行わない.
+// ListObjectsV2、条件付き書き込みIf-None-Match)、および本物のSQS
+// (AWS JSON 1.0 protocol)の必要最小限(SendMessage/ReceiveMessage/
+// DeleteMessage)のみをサポートする。ローカル専用のためSigV4署名
+// 検証は行わない.
 //
-// 利用側(s3sdk.js/s3Lock.js)は環境変数 MINTO_LOCAL_S3_ENDPOINT が
-// 設定されている場合、自動的にこのサーバーをendpointとして利用する
-// (forcePathStyle: true)。
+// 利用側(s3sdk.js/s3Lock.js)は環境変数 MINTO_LOCAL_S3_ENDPOINT が、
+// sqsSdk.js は環境変数 MINTO_LOCAL_SQS_ENDPOINT が設定されている
+// 場合、自動的にこのサーバーをendpointとして利用する
+// (S3側は forcePathStyle: true)。両方とも同じこのサーバー(同一
+// ポート)を指定して問題ない(リクエストヘッダで種別を判定するため).
 ///////////////////////////////////////////////
 (function () {
     'use strict';
@@ -237,8 +242,122 @@
         res.end(xml);
     };
 
+    /////////////////////////
+    // SQSエミュレーション.
+    /////////////////////////
+
+    // キュー名毎のメッセージ配列({ messageId, receiptHandle, body, visibleAt }).
+    // visibleAtを過ぎるまでは受信済み(他のReceiveMessageからは見えない)扱い.
+    const _sqsQueues = {};
+
+    // デフォルトの可視性タイムアウト(秒).
+    const _DEF_VISIBILITY_TIMEOUT = 30;
+
+    // QueueUrlの末尾セグメントをキュー名として扱う.
+    const _queueName = function (queueUrl) {
+        const p = ("" + queueUrl).replace(/\/+$/, "");
+        return p.substring(p.lastIndexOf("/") + 1);
+    };
+
+    // 指定キューを取得(未作成なら生成).
+    const _getQueue = function (name) {
+        if (_sqsQueues[name] == undefined) {
+            _sqsQueues[name] = [];
+        }
+        return _sqsQueues[name];
+    };
+
+    // SendMessage処理.
+    const _sqsSendMessage = function (input) {
+        const name = _queueName(input.QueueUrl);
+        const queue = _getQueue(name);
+        const delaySeconds = input.DelaySeconds != undefined ? parseInt(input.DelaySeconds) : 0;
+        const messageId = crypto.randomUUID();
+        queue.push({
+            messageId: messageId,
+            receiptHandle: null,
+            body: input.MessageBody,
+            visibleAt: Date.now() + (delaySeconds * 1000)
+        });
+        return {
+            MessageId: messageId,
+            MD5OfMessageBody: crypto.createHash("md5").update("" + input.MessageBody).digest("hex")
+        };
+    };
+
+    // ReceiveMessage処理.
+    const _sqsReceiveMessage = function (input) {
+        const name = _queueName(input.QueueUrl);
+        const queue = _getQueue(name);
+        const maxMessages = input.MaxNumberOfMessages != undefined ?
+            parseInt(input.MaxNumberOfMessages) : 1;
+        const visibilityTimeout = input.VisibilityTimeout != undefined ?
+            parseInt(input.VisibilityTimeout) : _DEF_VISIBILITY_TIMEOUT;
+        const now = Date.now();
+        const messages = [];
+        const len = queue.length;
+        for (let i = 0; i < len && messages.length < maxMessages; i++) {
+            const m = queue[i];
+            if (m.visibleAt <= now) {
+                // 受信の都度receiptHandleを発行し直す(実SQSと同様).
+                m.receiptHandle = crypto.randomUUID();
+                m.visibleAt = now + (visibilityTimeout * 1000);
+                messages.push({
+                    MessageId: m.messageId,
+                    ReceiptHandle: m.receiptHandle,
+                    Body: m.body
+                });
+            }
+        }
+        return { Messages: messages };
+    };
+
+    // DeleteMessage処理.
+    const _sqsDeleteMessage = function (input) {
+        const name = _queueName(input.QueueUrl);
+        const queue = _getQueue(name);
+        const idx = queue.findIndex(function (m) { return m.receiptHandle === input.ReceiptHandle; });
+        if (idx !== -1) {
+            queue.splice(idx, 1);
+        }
+        return {};
+    };
+
+    // SQS(AWS JSON 1.0 protocol)リクエストの振り分け.
+    // x-amz-targetヘッダ(例: "AmazonSQS.SendMessage")のアクション名で判定する.
+    const _handleSqs = async function (req, res, action) {
+        const body = await _readBody(req);
+        const input = body.length > 0 ? JSON.parse(body.toString("utf8")) : {};
+        let result;
+        switch (action) {
+            case "SendMessage":
+                result = _sqsSendMessage(input);
+                break;
+            case "ReceiveMessage":
+                result = _sqsReceiveMessage(input);
+                break;
+            case "DeleteMessage":
+                result = _sqsDeleteMessage(input);
+                break;
+            default:
+                res.writeHead(400, { "content-type": "application/x-amz-json-1.0" });
+                res.end(JSON.stringify({ __type: "UnknownOperationException", message: action }));
+                return;
+        }
+        res.writeHead(200, { "content-type": "application/x-amz-json-1.0" });
+        res.end(JSON.stringify(result));
+    };
+
     const _server = http.createServer(async function (req, res) {
         try {
+            // SQS(AWS JSON 1.0 protocol)判定: x-amz-targetヘッダに"AmazonSQS."が
+            // 付与されている場合はSQSリクエストとして扱う(S3のREST APIとは
+            // 別プロトコルのため、同一サーバー・同一ポートでも共存できる).
+            const amzTarget = req.headers["x-amz-target"];
+            if (amzTarget != undefined && amzTarget.indexOf("AmazonSQS.") === 0) {
+                await _handleSqs(req, res, amzTarget.substring("AmazonSQS.".length));
+                return;
+            }
             const url = new URL(req.url, "http://localhost");
             const { bucket, key } = _parsePath(url.pathname);
             if (bucket === "") {
@@ -265,7 +384,7 @@
                     res.end(_errorXml("MethodNotAllowed", "Method not allowed: " + req.method));
             }
         } catch (e) {
-            console.error("[localS3] error", e);
+            console.error("[localAws] error", e);
             res.writeHead(500, { "content-type": "application/xml" });
             res.end(_errorXml("InternalError", "" + (e.message || e)));
         }
@@ -273,7 +392,7 @@
 
     fs.mkdirSync(_root, { recursive: true });
     _server.listen(_port, function () {
-        console.log("[localS3] listening on http://localhost:" + _port +
-            " (storage root: " + _root + ")");
+        console.log("[localAws] listening on http://localhost:" + _port +
+            " (storage root: " + _root + ", S3+SQS emulator)");
     });
 })();

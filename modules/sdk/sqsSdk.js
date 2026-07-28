@@ -40,27 +40,46 @@
     // リージョン毎のSQSClient.
     const _SQS_CLIENT = {};
 
+    // ローカルSQSエミュレータ接続時、明示的なクレデンシャルが1つも
+    // 見つからない場合に使うダミークレデンシャル(署名検証されないため実害無し).
+    const _LOCAL_CREDENTIAL = { "access_key": "local", "secret_access_key": "local" };
+
     // SQSClientオブジェクトを取得.
     const _getSqsClient = function (region, credentials) {
         if (region == undefined || region == null) {
             region = _DEF_REGION;
         }
+        // ローカルAWSエミュレータ(tools/localAws.js)接続用endpoint.
+        // 環境変数が設定されている場合、AWS本番環境ではなくローカルサーバーに接続する.
+        const localEndpoint = process.env["MINTO_LOCAL_SQS_ENDPOINT"];
         // credentialsが設定されていない場合.
         if (credentials == undefined || credentials == null) {
             // 環境変数から取得.
             credentials = _getEnvCredential();
+            // ローカルSQS接続時、環境変数にもクレデンシャルが無ければ、
+            // AWS SDKのデフォルトクレデンシャルプロバイダーチェーン(実AWS向け)を
+            // 経由させずにダミークレデンシャルを使う(実AWSへの接続は行わない
+            // ため、AWS_PROFILE等の設定を要求しないようにするため).
+            if (localEndpoint != undefined && credentials["access_key"] == undefined) {
+                credentials = _LOCAL_CREDENTIAL;
+            }
         }
+        const clientOptions = localEndpoint != undefined ?
+            { endpoint: localEndpoint } : {};
         // accessKeyが存在しない場合.
         if (credentials["access_key"] == undefined) {
-            if (_SQS_CLIENT[region] == undefined) {
-                _SQS_CLIENT[region] = new SQSClient({
+            const clientKey = localEndpoint != undefined ?
+                "local_" + region : region;
+            if (_SQS_CLIENT[clientKey] == undefined) {
+                _SQS_CLIENT[clientKey] = new SQSClient(Object.assign({
                     region: region
-                });
+                }, clientOptions));
             }
-            return _SQS_CLIENT[region];
+            return _SQS_CLIENT[clientKey];
         }
         // SQSClientオブジェクトキャッシュキーを生成.
-        const key = credentials["access_key"] + "_" + region;
+        const key = credentials["access_key"] + "_" + region +
+            (localEndpoint != undefined ? "_local" : "");
         if (_SQS_CLIENT[key] == undefined) {
             let setCredentials;
             if (credentials["session_token"] == undefined) {
@@ -75,10 +94,10 @@
                     sessionToken: credentials["session_token"]
                 }
             }
-            _SQS_CLIENT[key] = new SQSClient({
+            _SQS_CLIENT[key] = new SQSClient(Object.assign({
                 region: region,
                 credentials: setCredentials
-            });
+            }, clientOptions));
         }
         return _SQS_CLIENT[key];
     }

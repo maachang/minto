@@ -1,7 +1,7 @@
 // e2eテスト: tools/tableTool.js(テーブル管理コマンド: createTable/dropTable/
 // alterTable/alterIndex)を、実際に子プロセスとして起動して検証する。
 //
-// tools/localS3.js(ローカルS3エミュレータ)を子プロセスとして起動し、その上で
+// tools/localAws.js(ローカルS3エミュレータ)を子プロセスとして起動し、その上で
 // 実際に`node tools/tableTool.js -t ... -c ...`を実行して、標準出力のJSON結果を
 // 検証する(bin/tableToolが実行するのと同じtools/tableTool.jsを直接使う)。
 //
@@ -16,7 +16,7 @@ const net = require("node:net");
 const { spawn } = require("node:child_process");
 
 const MINTO_HOME = path.resolve(__dirname, "..", "..");
-const LOCAL_S3_JS = path.join(MINTO_HOME, "tools", "localS3.js");
+const LOCAL_S3_JS = path.join(MINTO_HOME, "tools", "localAws.js");
 const TABLE_TOOL_JS = path.join(MINTO_HOME, "tools", "tableTool.js");
 const BUCKET = "test-bucket";
 
