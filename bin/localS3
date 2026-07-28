@@ -1,4 +1,0 @@
-#!/bin/sh
-
-ARGS=${*}
-node ${MINTO_HOME}/tools/localS3.js ${ARGS}
