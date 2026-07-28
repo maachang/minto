@@ -51,6 +51,10 @@
         _c_cache = null;
 
         let rawPath = event.rawPath;
+        // sqsから当該lambdaが呼び出された場合.
+        if (rawPath == null && event['Records'] != null) {
+            return await _responseSqsParams(event['Records']);
+        }   
         // rawPathが無く、event.targetが指定されている場合はテーブル管理
         // コマンド(createTable/dropTable/alterTable/alterIndex/backupTable/
         // restoreTable/listBackups/previewRestore/pruneBackups/
@@ -79,7 +83,8 @@
         let ext = _extends(rawPath);
         // 指定実行対象の末尾が[/filter]パスの場合.
         // .mt.js や .jhtml.js も直接指定はエラー.
-        if (isFilterPath(rawPath) || isMintoJs(rawPath)) {
+        if (isSqsFuncPath(rawPath) || isFilterPath(rawPath) ||
+            isMintoJs(rawPath)) {
             // 拡張子がjsの場合(mintoJs).
             if (ext === "js") {
                 ext = "";
@@ -165,6 +170,12 @@
     const _CONF_PATH = function () {
         return _basePath + "conf/";
     }
+    // sqs実行プログラム名と実行パス
+    const _SQS_FUNC_NAME = "runSqs";
+    const _SQS_FUNC_FILE = _SQS_FUNC_NAME + _RUN_JS;
+    const _SQS_FUNC_PATH = function () {
+        return _PUBLIC_PATH() + _SQS_FUNC_FILE;
+    }    
     // filter名と実行パス.
     const _FILTER_NAME = "filter";
     const _FILTER_FILE = _FILTER_NAME + _RUN_JS;
@@ -404,6 +415,29 @@
         }
         return { addedNames: addedNames, removedNames: removedNames };
     };
+
+    // SQSパラメータ実行処理.
+    const _responseSqsParams = async function(list) {
+        let successCount = 0, jsonStr, json;
+        const len = list.length;
+        for(let i = 0; i < len; i ++) {
+            jsonStr = null;
+            try {
+                // json文字列を取得.
+                jsonStr = list[i]["body"];
+                // json変換.
+                json = JSON.parse(jsonStr);
+                // sqs実行処理を呼び出す.
+                await _runSqsFunction(json);
+                // 処理成功.
+                successCount ++;
+                
+            } catch(e) {
+                console.error("errorSqs: json: " + jsonStr, e);
+            }
+        }
+        return {statusCode: 200, result: {success: successCount, all: len}};
+    }
 
     // テーブル管理コマンド実行本体.
     // event.target "master"|"index" を設定します.
@@ -765,6 +799,14 @@
         return mime;
     }
 
+    // Sqs実行パス(/public/runSqs)が設定されている場合.
+    const isSqsFuncPath = function (path) {
+        if (path.endsWith("/" + _SQS_FUNC_NAME)) {
+            return true;
+        }
+        return false;
+    }
+
     // フィルターパス(/public/filter)が設定されている場合.
     const isFilterPath = function (path) {
         if (path.endsWith("/" + _FILTER_NAME)) {
@@ -781,6 +823,14 @@
             return true;
         }
         return false;
+    }
+
+    // sqsパラメータを処理する実行関数を呼び出す.
+    const _runSqsFunction = async function(params) {
+        // 実行jsを取得.
+        let runJs = _loadJs(_SQS_FUNC_PATH());
+        // 実行jsを実行.
+        await runJs.handler(params);
     }
 
     // filter実行ファイル(リクエスト単位で必ず実行される動的js).
