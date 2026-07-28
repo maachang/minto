@@ -203,22 +203,26 @@ minto
 ### ローカル実行用環境変数コンフィグ定義.
 - `conf/env.json`
 
-`mkmt`でプロジェクトを作成すると、以下の内容(`modules/s3table`のローカル検証環境
-(`localAws`)向けの環境変数)がデフォルトで生成されます。
+`mkmt`でプロジェクトを作成すると、以下の内容(`modules/s3table`・
+`modules/sdk/sqsSdk.js`のローカル検証環境(`localAws`)向けの環境変数)が
+デフォルトで生成されます。
 
 ~~~json
 {
-    "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911"
+    "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911",
+    "MINTO_LOCAL_SQS_ENDPOINT": "http://localhost:9911"
 }
 ~~~
 
-`MINTO_LOCAL_S3_ENDPOINT`が設定されている場合、AWSクレデンシャルは自動的に
-ダミー値が使われるため設定不要です。実際のAWS S3を使う場合は、上記の通り
-`AWS_PROFILE`(または`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`)を追加して
-ください。s3table関連(`modules/s3table/s3sdk.js`・`s3Lock.js`・
-`s3MasterTable.js`・`s3IndexTable.js`)を利用しない場合は
-`MINTO_LOCAL_S3_ENDPOINT`自体を削除しても問題ありません。クレデンシャル解決の
-優先順位の詳細は[localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md#クレデンシャル解決の優先順位)を
+`MINTO_LOCAL_S3_ENDPOINT`/`MINTO_LOCAL_SQS_ENDPOINT`が設定されている場合、
+AWSクレデンシャルは自動的にダミー値が使われるため設定不要です。実際のAWS
+S3/SQSを使う場合は、上記の通り`AWS_PROFILE`(または`AWS_ACCESS_KEY_ID`/
+`AWS_SECRET_ACCESS_KEY`)を追加してください。s3table関連
+(`modules/s3table/s3sdk.js`・`s3Lock.js`・`s3MasterTable.js`・
+`s3IndexTable.js`)を利用しない場合は`MINTO_LOCAL_S3_ENDPOINT`、
+`sqsSdk.js`を利用しない場合は`MINTO_LOCAL_SQS_ENDPOINT`を、それぞれ
+削除しても問題ありません。クレデンシャル解決の優先順位の詳細は
+[localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md#クレデンシャル解決の優先順位)を
 参照してください。
 
 AWS Lambda では環境変数が利用できますが、これを ローカルminto環境では、わざわざ環境変数定義をせずとも、この定義ファイルで環境変数定義が行えます.

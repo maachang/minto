@@ -305,7 +305,8 @@
                 messages.push({
                     MessageId: m.messageId,
                     ReceiptHandle: m.receiptHandle,
-                    Body: m.body
+                    Body: m.body,
+                    MD5OfBody: crypto.createHash("md5").update("" + m.body).digest("hex")
                 });
             }
         }

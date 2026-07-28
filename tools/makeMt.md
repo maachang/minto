@@ -68,15 +68,16 @@ mkmt [PROJECT NAME]
 
 ### conf/env.json
 
-環境固有の設定を記述するファイルです。`modules/s3table`(S3をデータストアとして使うモジュール群)のローカル検証環境(`localAws`)向けの環境変数がデフォルトで設定されます。
+環境固有の設定を記述するファイルです。`modules/s3table`(S3をデータストアとして使うモジュール群)・`modules/sdk/sqsSdk.js`のローカル検証環境(`localAws`)向けの環境変数がデフォルトで設定されます。
 
 ```json
 {
-    "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911"
+    "MINTO_LOCAL_S3_ENDPOINT": "http://localhost:9911",
+    "MINTO_LOCAL_SQS_ENDPOINT": "http://localhost:9911"
 }
 ```
 
-AWSクレデンシャルは設定不要です(`MINTO_LOCAL_S3_ENDPOINT`設定時は`s3sdk.js`/`s3Lock.js`側が自動的にダミー値を使います)。`modules/s3table`を利用しない場合は`MINTO_LOCAL_S3_ENDPOINT`を削除しても問題ありません。実際のAWS S3を使う場合は`AWS_PROFILE`(`~/.aws/credentials`のプロファイル名)を追加してください。詳しくは[docs/localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md)・[docs/setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md)を参照してください。
+AWSクレデンシャルは設定不要です(`MINTO_LOCAL_S3_ENDPOINT`/`MINTO_LOCAL_SQS_ENDPOINT`設定時は`s3sdk.js`/`s3Lock.js`/`sqsSdk.js`側が自動的にダミー値を使います)。`modules/s3table`を利用しない場合は`MINTO_LOCAL_S3_ENDPOINT`、`sqsSdk.js`を利用しない場合は`MINTO_LOCAL_SQS_ENDPOINT`を、それぞれ削除しても問題ありません。実際のAWS S3/SQSを使う場合は`AWS_PROFILE`(`~/.aws/credentials`のプロファイル名)を追加してください。詳しくは[docs/localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md)・[docs/setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md)を参照してください。
 
 ### package.json
 

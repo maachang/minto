@@ -146,9 +146,6 @@ mkmt で作成された mintoプロジェクトによるWebアプリ実装ディ
 }
 ~~~
 
-(`MINTO_LOCAL_SQS_ENDPOINT`は`mkmt`で作成したプロジェクトの`conf/env.json`には
-デフォルトで含まれないため、`sqsSdk.js`を使う場合は手動で追加してください)
-
 AWSクレデンシャル(`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`)は設定不要です。
 上記環境変数が設定されており、かつ他に明示的なクレデンシャル指定が無い場合、
 `s3sdk.js`/`s3Lock.js`/`sqsSdk.js`側で自動的にダミークレデンシャルが使われます

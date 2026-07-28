@@ -3,6 +3,7 @@
     "version": "1.0.0",
     "private": true,
     "dependencies": {
-        "@aws-sdk/client-s3": "latest"
+        "@aws-sdk/client-s3": "latest",
+        "@aws-sdk/client-sqs": "latest"
     }
 }

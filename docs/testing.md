@@ -38,7 +38,7 @@ bun test
 
 - 新規の依存パッケージは追加せず、Node.js標準の `node:test` / `node:assert/strict` のみを使用しています(`node --test` と `bun test` の両方で同一のテストファイルがそのまま動作することを確認済みです)
 - ルートの `package.json` は `npm test` 実行のためだけに追加した最小構成で、依存パッケージ(`dependencies`)は定義していません
-- 例外として、`modules/sdk/*`・`modules/s3table/*`が実行時に前提とする`@aws-sdk/client-s3`のみ`devDependencies`として追加しています(後述の`s3IndexTable-crud.test.js`が実際にこのSDKを使って`tools/localAws.js`と通信するため)。`npm install`を実行すれば自動的にインストールされます。`@aws-sdk/client-sqs`は追加していないため、SQS関連のテスト(`localAws-sqs.test.js`・`localSqsPoller.test.js`)は`sqsSdk.js`を経由せず、実際のAWSクライアントが送信するのと同じAWS JSON 1.0 protocolを生の`fetch`で直接叩いて検証しています
+- 例外として、`modules/sdk/*`・`modules/s3table/*`が実行時に前提とする`@aws-sdk/client-s3`・`@aws-sdk/client-sqs`のみ`devDependencies`として追加しています(後述の`s3IndexTable-crud.test.js`・`sqsSdk.test.js`が実際にこれらのSDKを使って`tools/localAws.js`と通信するため)。`npm install`を実行すれば自動的にインストールされます。`localAws-sqs.test.js`・`localSqsPoller.test.js`は`sqsSdk.js`(実クライアント)を経由せず、実際のAWSクライアントが送信するのと同じAWS JSON 1.0 protocolを生の`fetch`で直接叩いて検証しています
 
 ## ディレクトリ構成
 
@@ -69,7 +69,8 @@ test/
 │   ├── s3IndexTable-encode.test.js
 │   ├── s3IndexTable-crud.test.js
 │   ├── s3MasterTable.test.js
-│   └── s3MasterTable-crud.test.js
+│   ├── s3MasterTable-crud.test.js
+│   └── sqsSdk.test.js
 │
 └── e2e/                     結合テスト(実際にローカルサーバーを起動して確認)
     ├── webapps.test.js
@@ -163,6 +164,7 @@ test/
   - describeBackup(復元せずにスキーマ・行数を確認、存在しないbackupId
     指定時のエラー)、restoreBackupAs(別テーブル名へのクローン、複製先
     テーブル名が既に存在する場合のエラー)
+- **sqsSdk.test.js**: `modules/sdk/sqsSdk.js`を、`tools/localAws.js`を子プロセスとして起動し、実際に`@aws-sdk/client-sqs`経由で通信させることで検証します。send→receive→deleteの一連の流れ、`MINTO_LOCAL_SQS_ENDPOINT`設定時の自動ダミークレデンシャル(`s3sdk.js`と同様の仕組み)、`maxMessages`による受信件数上限、メッセージが無いキューでの空配列返却を確認しています。
 
 ### e2e/
 
@@ -201,14 +203,13 @@ test/
 以下は実際のAWS/Slack/GitHubへの通信が発生するため、`fetch`のモック化などの追加設計が必要になります。今回は対象外としています。
 
 - `modules/notification/*`(sendSlack.js, sendGithub.js)
-- `modules/sdk/dynamoDbSdk.js`・`sqsSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`(S3・SQS以外のAWSサービス。`tools/localAws.js`はS3・SQSのみが対象のため未対応。`sqsSdk.js`自体も`@aws-sdk/client-sqs`が`devDependencies`未追加のため、実クライアント経由のテストは未実施)
+- `modules/sdk/dynamoDbSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`(S3・SQS以外のAWSサービス。`tools/localAws.js`はS3・SQSのみが対象のため未対応)
 
-一方で `modules/s3table/s3sdk.js`・`s3IndexTable.js`・`s3MasterTable.js`・`s3Lock.js` は、[tools/localAws.js](https://github.com/maachang/minto/blob/main/docs/localAws.md)(ファイル/ディレクトリベースのローカルAWSエミュレータ)を子プロセスとして起動することで、実AWSへの通信無しに実際の`@aws-sdk/client-s3`経由のテストが可能になっています(`s3IndexTable-crud.test.js`・`s3MasterTable-crud.test.js`を参照)。また`tools/localAws.js`のSQSエミュレーション部分・`tools/localSqsPoller.js`経由の`runSqs.mt.js`配送も、実クライアントは経由しないものの`localAws-sqs.test.js`・`localSqsPoller.test.js`で検証済みです。
+一方で `modules/s3table/s3sdk.js`・`s3IndexTable.js`・`s3MasterTable.js`・`s3Lock.js`、`modules/sdk/sqsSdk.js` は、[tools/localAws.js](https://github.com/maachang/minto/blob/main/docs/localAws.md)(ファイル/ディレクトリ・メモリベースのローカルAWSエミュレータ、S3+SQS対応)を子プロセスとして起動することで、実AWSへの通信無しに実際の`@aws-sdk/client-s3`・`@aws-sdk/client-sqs`経由のテストが可能になっています(`s3IndexTable-crud.test.js`・`s3MasterTable-crud.test.js`・`sqsSdk.test.js`を参照)。また`tools/localSqsPoller.js`経由の`runSqs.mt.js`配送も`localSqsPoller.test.js`で検証済みです。
 
 以下はまだこの方式(`localAws`経由の実`@aws-sdk/client-*`テスト)が未整備です。
 
 - `modules/auth/session.js`(内部で`modules/s3table/s3sdk.js`を経由してS3にアクセスするため、同様の方式でテスト可能。現状`auth-session.test.js`では`s3sdk.js`自体をインメモリのフェイク実装に差し替えて検証している)
-- `modules/sdk/sqsSdk.js`自体(`@aws-sdk/client-sqs`経由。現状は`localAws.js`のSQS protocol実装を生の`fetch`で直接検証するに留まる)
 
 必要になった場合は、`fetch`をモックに差し替える仕組みや、上記の`localAws`を使ったテストの追加を検討してください。
 

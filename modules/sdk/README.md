@@ -543,8 +543,8 @@ for (const m of messages) {
 
 ## テスト対象外について
 
-`docs/testing.md`に記載の通り、本ディレクトリ配下(`dynamoDbSdk.js`・`sqsSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`)は実際のAWSサービスへの通信が発生するため現状テスト対象外です(`@aws-sdk/client-sqs`等が`devDependencies`に含まれていないため、`sqsSdk.js`自体を経由したテストは未実施)。
+`docs/testing.md`に記載の通り、本ディレクトリ配下のうち`dynamoDbSdk.js`・`snsSdk.js`・`secretsManagerSdk.js`・`parameterStoreSdk.js`・`sesSdk.js`・`kmsSdk.js`は実際のAWSサービスへの通信が発生するため現状テスト対象外です(`tools/localAws.js`がS3・SQS以外のAWSサービスに対応していないため)。
 
-ただし`tools/localAws.js`はS3に加えてSQS(AWS JSON 1.0 protocol)のSendMessage/ReceiveMessage/DeleteMessageにも対応しており、この部分自体は`test/tools/localAws-sqs.test.js`で検証されています。また`tools/localSqsPoller.js`(SQSトリガーのローカル再現。詳細は[docs/localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md#sqsトリガーrunsqsmtjsをローカルで再現するlocalsqspoller)を参照)経由の`public/runSqs.mt.js`への配送・削除も`test/e2e/localSqsPoller.test.js`で検証されています。
+`sqsSdk.js`は対象外ではなく、`@aws-sdk/client-sqs`を`devDependencies`に追加した上で、`tools/localAws.js`のSQS(AWS JSON 1.0 protocol)エミュレーション機能(SendMessage/ReceiveMessage/DeleteMessage)を子プロセスとして起動し、実際に`@aws-sdk/client-sqs`経由で通信させて`test/modules/sqsSdk.test.js`で検証しています。`tools/localAws.js`のSQS protocol実装自体は`test/tools/localAws-sqs.test.js`で、`tools/localSqsPoller.js`(SQSトリガーのローカル再現。詳細は[docs/localAws.md](https://github.com/maachang/minto/blob/main/docs/localAws.md#sqsトリガーrunsqsmtjsをローカルで再現するlocalsqspoller)を参照)経由の`public/runSqs.mt.js`への配送・削除も`test/e2e/localSqsPoller.test.js`で、それぞれ別途検証されています。
 
 # ◆◆◆ EOF ◆◆◆
