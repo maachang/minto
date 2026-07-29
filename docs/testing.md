@@ -91,10 +91,10 @@ test/
 
 - **args.test.js**: `tools/args.js` はrequire時に`process.argv`を読み込む作りのため、実際のCLI起動を再現するように`.fixtures/argsRunner.js`を子プロセスとして起動し、様々な引数パターンでの`get`/`next`/`getArray`/`isValue`/`getFirst`/`getLast`等を検証します
 - **xor128.test.js**: 乱数生成の再現性(同一seed)、`getUUID()`がRFC4122のversion(4)/variant(10)ビットに準拠したフォーマットで返却されること、`getPassword()`の文字種・桁数・境界値などを検証します
-- **mintoUtil.test.js**: `existsFileSync`/`existsDirSync`/`loadJson`/`listDir`/`listFile`(再帰指定含む)を、一時ディレクトリを使って検証します。`resolveLocalConf`(`conf/xxx.local.json`優先解決)についても、`.local.json`が存在する場合・しない場合・`.json`で終わらないパス・既に`.local.json`のパスを渡した場合(二重解決しないこと)を確認しています
+- **mintoUtil.test.js**: `existsFileSync`/`existsDirSync`/`loadJson`/`listDir`/`listFile`(再帰指定含む)を、一時ディレクトリを使って検証します。`resolveLocalConf`(`conf/xxx.local.json`優先解決)についても、`.local.json`が存在する場合・しない場合・`.json`で終わらないパス・既に`.local.json`のパスを渡した場合(二重解決しないこと)を確認しています。`isTestMode`(`MINTO_TEST_MODE`環境変数判定)、および`resolveLocalConf`がテストモード時に`.test.json`を優先し`.local.json`を無視すること(`.test.json`が無ければ通常の`.json`にフォールバックすること含む)も検証しています
 - **localLog.test.js**: `tools/localLog.js`はrequire時にグローバルの`console`を差し替える作りのため、`.fixtures/localLogRunner.js`を子プロセスとして起動して検証します。ログレベル設定によるファイル出力の抑制/許可、`console.count`のカウントアップ動作を確認します
 - **llrtCheck.test.js**: `tools/llrtCheck.js`のllrt互換性チェック(未サポートAPI検出、`for await`検出、問題なしの場合の空配列返却など)を検証します
-- **mtPack.test.js**: `tools/mtPack.js`(`mtpk`コマンド)を一時プロジェクトディレクトリに対して実際に子プロセス実行し、生成された`mtpack.zip`の中身を検証します。`$MINTO_HOME/public/`のpack対応について、`modules/***`に対応するディレクトリが無い`public/js`等は`--target`指定に関わらず常にpackされること、`modules/auth`に対応する`public/auth`は`-t auth`(または`-t all`)指定時のみpackされ、`modules/***`側と違いpublic以下のパス構造を維持したまま(`mt.html`はjhtml変換)packされること、対象外の`--target`指定時は`public/auth`がpackされないことを確認しています。加えて、`conf/xxx.local.json`(ローカル実行専用の設定上書き)がデプロイzipに含まれず、通常の`conf/xxx.json`は含まれることも確認しています
+- **mtPack.test.js**: `tools/mtPack.js`(`mtpk`コマンド)を一時プロジェクトディレクトリに対して実際に子プロセス実行し、生成された`mtpack.zip`の中身を検証します。`$MINTO_HOME/public/`のpack対応について、`modules/***`に対応するディレクトリが無い`public/js`等は`--target`指定に関わらず常にpackされること、`modules/auth`に対応する`public/auth`は`-t auth`(または`-t all`)指定時のみpackされ、`modules/***`側と違いpublic以下のパス構造を維持したまま(`mt.html`はjhtml変換)packされること、対象外の`--target`指定時は`public/auth`がpackされないことを確認しています。加えて、`conf/xxx.local.json`(ローカル実行専用の設定上書き)・`conf/xxx.test.json`(テスト実行専用の設定上書き)がデプロイzipに含まれず、通常の`conf/xxx.json`は含まれることも確認しています
 - **localAws-sqs.test.js**: `tools/localAws.js`のうち、SQS(AWS JSON 1.0 protocol)エミュレーション部分(S3部分は`s3IndexTable-crud.test.js`等で検証済みのため対象外)を、子プロセスとして起動し生の`fetch`で検証します。SendMessage→ReceiveMessageでの内容取得、DeleteMessage後の再受信抑止、可視性タイムアウト(`VisibilityTimeout`)中の再受信抑止、`MaxNumberOfMessages`による受信件数上限、キュー名(QueueUrl末尾セグメント)ごとの独立管理を確認しています
 
 ### modules/
@@ -177,6 +177,8 @@ test/
   - `$loadConf`が通常`conf/xxx.json`を読み込むこと、同名の`conf/xxx.local.json`が存在する場合はそちらを優先すること(`public/loadConf.mt.js`・`conf/sample.json`のfixtureを使用)
 
   ポートは`net`モジュールでOSに空きポートを割り当ててもらう方式にしており、固定ポートによる競合を避けています。
+
+- **loadConf-testMode.test.js**: `sample-project`fixtureを一時ディレクトリへコピーした専用インスタンスに対し、環境変数`MINTO_TEST_MODE=true`を付与して`tools/webapps.js`を起動し、`$loadConf`が`conf/xxx.test.json`をテストモード時に優先すること(`conf/xxx.local.json`は無視されること)、`conf/xxx.test.json`が無い場合は通常の`conf/xxx.json`にフォールバックすること(この場合も`conf/xxx.local.json`は無視されること)を確認します。`webapps.test.js`が使う共有fixtureを直接書き換えると競合するため、コピーした専用ディレクトリを使っています。
 
 - **tableTool.test.js**: `tools/tableTool.js`(テーブル管理コマンド: createTable/dropTable/alterTable/alterIndex/backupTable/restoreTable/listBackups/previewRestore/pruneBackups/restoreBackupAs/describeBackup)を、`tools/localAws.js`を子プロセスとして起動した上で、実際に`node tools/tableTool.js -t ... -c ...`を子プロセス実行して標準出力のJSON結果を検証します。以下を確認しています。
   - createTableが未作成テーブルのみを作成すること(べき等性)

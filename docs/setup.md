@@ -238,6 +238,18 @@ AWS Lambda では環境変数が利用できますが、これを ローカルmi
 
 `mkmt`が生成する`conf/env.local.json`はこの仕組みの一例で、他の`conf/session.json`・`conf/table/master.json`等の設定ファイルにも同様に`.local.json`を追加すれば、ローカル検証時だけ異なる値(S3バケット名など)を使うことができます。
 
+#### `conf/xxx.test.json`によるテスト実行専用の設定上書き
+
+さらに`conf/xxx.local.json`とは別に、`conf/xxx.test.json`という命名規則もサポートしています。これは**テスト実行時のみ**参照される設定で、`env.local.json`のようなローカル実行専用の設定とも区別されます。
+
+- 環境変数`MINTO_TEST_MODE`(`"true"`または`"1"`)が設定されている場合を「テストモード」とみなす
+- テストモード時: `xxx.test.json`が存在すればそちらを使う(**`xxx.local.json`は一切参照しない**)。無ければ`xxx.json`を使う
+- テストモードでない場合: `xxx.test.json`は完全に無視される(`xxx.local.json`→`xxx.json`の通常の解決)
+
+`MINTO_TEST_MODE`は`node --test`実行自体から自動判定されるものではなく、テストコード側が子プロセス起動時などに明示的に環境変数として設定する必要があります。`xxx.local.json`を無視する理由は、開発者個人のローカル設定(`conf/env.local.json`など)がテスト実行に紛れ込み、テスト結果が実行環境によって変わってしまう事故を防ぐためです。
+
+この`*.test.json`も`*.local.json`と同様、`mtpk`のデプロイzipには含まれません。
+
 環境変数の定義方法としては
 - {key: value, key: value ....}
 

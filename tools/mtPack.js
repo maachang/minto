@@ -379,15 +379,16 @@
     // conf関連のpack処理.
     // "*.local.json"は、conf/xxx.jsonに対するローカル実行専用の上書き
     // ファイル(tools/index.js・tools/webapps.jsの$loadConfが優先読み込み
-    // する)のため、デプロイzipには含めない.
+    // する)、"*.test.json"はテスト実行専用の上書きファイルのため、
+    // どちらもデプロイzipには含めない.
     const packConf = function (opt, srcPath) {
         p("# conf: " + srcPath);
         // lambda lib 処理.
         createDir(_WORK_DIR + "conf")
         targetDirLoop(srcPath, _WORK_DIR + "conf", srcPath, opt,
             function (srcBaseDir, destBaseDir, dirName, destDirName, fileName, callOpt) {
-                if (fileName.endsWith(".local.json")) {
-                    p(" > skip(local only): " + dirName + fileName);
+                if (fileName.endsWith(".local.json") || fileName.endsWith(".test.json")) {
+                    p(" > skip(local/test only): " + dirName + fileName);
                     return;
                 }
                 p(" > copy: " + dirName + fileName);

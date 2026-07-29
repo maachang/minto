@@ -93,3 +93,13 @@ test("mtpk: conf/xxx.local.jsonはデプロイzipに含まれない(通常のcon
     fs.rmSync(path.join(projectDir, "conf", "env.local.json"));
     fs.rmSync(path.join(projectDir, "conf", "minto.json"));
 });
+
+test("mtpk: conf/xxx.test.jsonもデプロイzipに含まれない", () => {
+    fs.writeFileSync(path.join(projectDir, "conf", "sample.test.json"),
+        JSON.stringify({ from: "test" }));
+
+    const list = runPackAndListZip(["-t", "all"]);
+    assert.doesNotMatch(list, /conf\/sample\.test\.json/);
+
+    fs.rmSync(path.join(projectDir, "conf", "sample.test.json"));
+});

@@ -119,7 +119,11 @@ mkmt で作成された mintoプロジェクトによるWebアプリ実装ディ
 
 ### `conf/xxx.local.json`によるローカル専用の設定上書き
 
-`env.local.json`に限らず、`conf/`配下の任意の設定ファイルについて、同名の`xxx.local.json`を用意すると、ローカル実行時(`minto`コマンド、`$loadConf`経由で読み込む全てのconfファイル)はそちらが優先され、無ければ`xxx.json`が使われます。`*.local.json`は`mtpk`のデプロイzipには含まれないため、ローカル検証用の値が誤って本番設定に混入する心配がありません。詳細は[docs/setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#confxxxlocaljsonによるローカル専用の設定上書き)を参照してください。
+`env.local.json`に限らず、`conf/`配下の任意の設定ファイルについて、同名の`xxx.local.json`を用意すると、ローカル実行時(`minto`コマンド、`$loadConf`経由で読み込む全てのconfファイル)はそちらが優先され、無ければ`xxx.json`が使われます。`*.local.json`は`mtpk`のデプロイzipには含まれないため、ローカル検証用の値が誤って本番設定に混入する心配がありません。
+
+同様に`xxx.test.json`を用意すると、環境変数`MINTO_TEST_MODE`(`"true"`/`"1"`)設定時(テストモード)のみそちらが優先され(`xxx.local.json`は一切参照されない)、無ければ`xxx.json`が使われます。開発者個人の`xxx.local.json`設定がテスト実行に紛れ込むのを防ぐためのものです。`*.test.json`も`mtpk`のデプロイzipには含まれません。
+
+詳細は[docs/setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#confxxxlocaljsonによるローカル専用の設定上書き)を参照してください。
 
 ## localAws コマンド
 

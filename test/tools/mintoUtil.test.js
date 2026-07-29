@@ -62,6 +62,55 @@ test("mintoUtil: resolveLocalConf は.local.jsonが無ければ元のパスを�
     fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test("mintoUtil: isTestMode はMINTO_TEST_MODE環境変数(true/1)を判定する", () => {
+    const original = process.env.MINTO_TEST_MODE;
+    try {
+        delete process.env.MINTO_TEST_MODE;
+        assert.equal(mintoUtil.isTestMode(), false);
+        process.env.MINTO_TEST_MODE = "true";
+        assert.equal(mintoUtil.isTestMode(), true);
+        process.env.MINTO_TEST_MODE = "1";
+        assert.equal(mintoUtil.isTestMode(), true);
+        process.env.MINTO_TEST_MODE = "false";
+        assert.equal(mintoUtil.isTestMode(), false);
+    } finally {
+        if (original === undefined) {
+            delete process.env.MINTO_TEST_MODE;
+        } else {
+            process.env.MINTO_TEST_MODE = original;
+        }
+    }
+});
+
+test("mintoUtil: resolveLocalConfはテストモード時、.test.jsonを優先し.local.jsonは無視する", () => {
+    const original = process.env.MINTO_TEST_MODE;
+    process.env.MINTO_TEST_MODE = "true";
+    try {
+        const dir = makeTmpDir();
+        const jsonPath = path.join(dir, "env.json");
+        const localPath = path.join(dir, "env.local.json");
+        const testPath = path.join(dir, "env.test.json");
+        fs.writeFileSync(jsonPath, JSON.stringify({ from: "json" }));
+        fs.writeFileSync(localPath, JSON.stringify({ from: "local" }));
+        fs.writeFileSync(testPath, JSON.stringify({ from: "test" }));
+
+        // .test.jsonが優先される(.local.jsonは無視).
+        assert.equal(mintoUtil.resolveLocalConf(jsonPath), testPath);
+
+        // .test.jsonが無ければ、.local.jsonを無視して元の.jsonを使う.
+        fs.rmSync(testPath);
+        assert.equal(mintoUtil.resolveLocalConf(jsonPath), jsonPath);
+
+        fs.rmSync(dir, { recursive: true, force: true });
+    } finally {
+        if (original === undefined) {
+            delete process.env.MINTO_TEST_MODE;
+        } else {
+            process.env.MINTO_TEST_MODE = original;
+        }
+    }
+});
+
 test("mintoUtil: listDir はディレクトリのみを一覧取得する(末尾/付き)", () => {
     const dir = makeTmpDir();
     fs.mkdirSync(path.join(dir, "subA"));
