@@ -506,7 +506,7 @@
             }
         }
 
-        const confFile = $loadConf("table/" + target + ".json");
+        const confFile = _g.$loadConf("table/" + target + ".json");
         if (confFile == null) {
             return { error: "定義ファイルが見つかりません: conf/table/" + target + ".json" };
         }
@@ -843,7 +843,7 @@
         let mime = _MIME[ext];
         if (mime === undefined) {
             if (_c_mime === null) {
-                _c_mime = $loadConf(_MIME_CONF);
+                _c_mime = _g.$loadConf(_MIME_CONF);
                 if (_c_mime === null) {
                     _c_mime = {};
                 }
@@ -931,7 +931,7 @@
         // キャッシュ条件が生成されていない場合.
         if (_c_etag === null) {
             // 対象パスのetag情報のファイルを取得.
-            const etagConf = $loadConf(_ETAGS_CONF_FILE);
+            const etagConf = _g.$loadConf(_ETAGS_CONF_FILE);
             if (etagConf === null) {
                 // 空生成.
                 _c_etag = {};
