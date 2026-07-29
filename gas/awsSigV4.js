@@ -258,20 +258,31 @@
         } else if (typeof (urlParams) == "string") {
             return urlParams;
         }
-        const list = [];
+        // AWS仕様(パラメータ名でソートし、名前が同じ場合のみ値でソート)に
+        // 合わせるため、"key=value"の結合済み文字列ではなく、encode済みkey
+        // 単体でソートする("a"と"a9"のような前方一致キーが混在する場合、
+        // 結合済み文字列ソートだと"="(0x3D)と数字(0x30-0x39)のASCII順の
+        // 関係でキー単体のソート結果と食い違うことがあるため).
+        const keys = [];
         for (let k in urlParams) {
-            list[list.length] =
-                encodeURIComponent(k) + "=" +
-                encodeURIComponent(urlParams[k]);
+            keys[keys.length] = [encodeURIComponent(k), k];
         }
-        list.sort();
-        const len = list.length;
+        keys.sort(function (a, b) {
+            a = a[0]; b = b[0];
+            if (a < b) {
+                return -1;
+            } else if (a > b) {
+                return 1;
+            }
+            return 0;
+        });
+        const len = keys.length;
         let ret = "";
         for (let i = 0; i < len; i++) {
             if (i != 0) {
                 ret += "&";
             }
-            ret += list[i];
+            ret += keys[i][0] + "=" + encodeURIComponent(urlParams[keys[i][1]]);
         }
         return ret;
     }
