@@ -98,7 +98,7 @@ mkmt で作成された mintoプロジェクトによるWebアプリ実装ディ
     |
     +-- conf: minto 実行に対する conf ファイル(json) 配置先.
     |     |
-    |     +-- env.json: ローカル環境で 環境変数定義が設定出来ます.
+    |     +-- env.local.json: ローカル環境で 環境変数定義が設定出来ます(mtpkのデプロイzipには含まれません).
     |     |
     |     +-- minto.json ローカルminto定義(bindPortなど).
     |
@@ -117,6 +117,10 @@ mkmt で作成された mintoプロジェクトによるWebアプリ実装ディ
 
 ※ ちなみに llrt だと http or https モジュールが利用できないようなので、minto=nodeしか利用できません.
 
+### `conf/xxx.local.json`によるローカル専用の設定上書き
+
+`env.local.json`に限らず、`conf/`配下の任意の設定ファイルについて、同名の`xxx.local.json`を用意すると、ローカル実行時(`minto`コマンド、`$loadConf`経由で読み込む全てのconfファイル)はそちらが優先され、無ければ`xxx.json`が使われます。`*.local.json`は`mtpk`のデプロイzipには含まれないため、ローカル検証用の値が誤って本番設定に混入する心配がありません。詳細は[docs/setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#confxxxlocaljsonによるローカル専用の設定上書き)を参照してください。
+
 ## localAws コマンド
 
 `modules/s3table/s3sdk.js`・`modules/s3table/s3Lock.js`・`modules/sdk/sqsSdk.js`を
@@ -134,7 +138,7 @@ mkmt で作成された mintoプロジェクトによるWebアプリ実装ディ
 - `-d` / `--dir`: バケット内容を保存するローカルディレクトリ(デフォルト `./.localS3`。
   S3のみが対象で、SQSのキューはメモリ上のみで永続化されません)
 
-起動後、`minto`コマンド実行時に読み込まれる `conf/env.json` などで以下の環境変数を
+起動後、`minto`コマンド実行時に読み込まれる `conf/env.local.json` などで以下の環境変数を
 設定することで、`s3sdk.js`/`s3Lock.js`・`sqsSdk.js`が自動的にこのローカルサーバーへ
 接続します(実AWS環境で使う場合は、この環境変数を設定しなければ通常通り実AWSに
 接続します)。

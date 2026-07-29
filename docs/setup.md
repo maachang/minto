@@ -157,7 +157,7 @@ public 以下に対して、静的コンテンツ(htmlファイルや jpeg フ�
 
 基本的に `minto 環境＝ aws lambda URL Function` を利用するわけで、ここで「データ保存等=S3」を利用するので検証環境に対して、対象AWS環境で利用するIAMのCredential(AccessKeyなど)を設定する必要があります。
 
-ただしAccessKey/SecretKeyそのものは「センシティブな情報」なので、**プロジェクトディレクトリ内の`conf/env.json`に直接書かないこと**を推奨します(`conf/env.json`はgitignore対応を忘れると誤ってコミットされてしまう危険があるため)。代わりに、`~/.aws/credentials`(プロジェクトディレクトリ外にあり、通常gitの管理対象にはなりません)に定義したプロファイルを`AWS_PROFILE`で参照する方法を推奨します。
+ただしAccessKey/SecretKeyそのものは「センシティブな情報」なので、**プロジェクトディレクトリ内の`conf/env.local.json`に直接書かないこと**を推奨します(`.gitignore`対応を忘れると誤ってコミットされてしまう危険があるため)。代わりに、`~/.aws/credentials`(プロジェクトディレクトリ外にあり、通常gitの管理対象にはなりません)に定義したプロファイルを`AWS_PROFILE`で参照する方法を推奨します。
 
 ~/.aws/credentials
 ~~~ini
@@ -166,14 +166,14 @@ aws_access_key_id = AKI*****************
 aws_secret_access_key = ****************************************
 ~~~
 
-conf/env.json
+conf/env.local.json
 ~~~json
 {
     "AWS_PROFILE": "testMinto"
 }
 ~~~
 
-`AWS_PROFILE`という**プロファイル名自体はセンシティブな情報ではない**ため、`conf/env.json`に書いても問題ありません。実際のAccessKey/SecretKeyは`~/.aws/credentials`側にのみ存在し、プロジェクトディレクトリの外に置かれます。
+`AWS_PROFILE`という**プロファイル名自体はセンシティブな情報ではない**ため、`conf/env.local.json`に書いても問題ありません。実際のAccessKey/SecretKeyは`~/.aws/credentials`側にのみ存在し、プロジェクトディレクトリの外に置かれます。
 
 どうしても環境変数で直接AccessKey/SecretKeyを渡したい場合は、以下のように`.gitignore`でコミット除外した起動スクリプトを使う方法もあります。
 
@@ -201,7 +201,7 @@ minto
 このように実行することで、対象の Credential が有効な検証環境が利用できます。
 
 ### ローカル実行用環境変数コンフィグ定義.
-- `conf/env.json`
+- `conf/env.local.json`
 
 `mkmt`でプロジェクトを作成すると、以下の内容(`modules/s3table`・
 `modules/sdk/sqsSdk.js`のローカル検証環境(`localAws`)向けの環境変数)が
@@ -226,6 +226,17 @@ S3/SQSを使う場合は、上記の通り`AWS_PROFILE`(または`AWS_ACCESS_KEY
 参照してください。
 
 AWS Lambda では環境変数が利用できますが、これを ローカルminto環境では、わざわざ環境変数定義をせずとも、この定義ファイルで環境変数定義が行えます.
+
+### `conf/xxx.local.json`によるローカル専用の設定上書き
+
+`env.json`(環境変数)に限らず、`conf/`配下の**任意の**設定ファイルについて、同名の`xxx.local.json`を用意すると、ローカル実行時(`minto`コマンド、および`$loadConf`経由で読み込む全てのconfファイル)はそちらが優先して読み込まれ、無ければ`xxx.json`が使われます(`conf/minto.json`も同様に`conf/minto.local.json`で上書きできます)。
+
+- `xxx.local.json`が存在する → そちらを使う(ローカル実行専用)
+- 存在しない → `xxx.json`を使う
+
+この`*.local.json`は`mtpk`のデプロイzipには**含まれません**(`tools/mtPack.js`が除外します)。そのため、実際にAWS Lambdaへデプロイされる`xxx.json`とは完全に切り離されており、ローカル検証用の値(ローカルAWSエンドポイント、テスト用バケット名など)を誤って本番設定に混入させる心配がありません。
+
+`mkmt`が生成する`conf/env.local.json`はこの仕組みの一例で、他の`conf/session.json`・`conf/table/master.json`等の設定ファイルにも同様に`.local.json`を追加すれば、ローカル検証時だけ異なる値(S3バケット名など)を使うことができます。
 
 環境変数の定義方法としては
 - {key: value, key: value ....}

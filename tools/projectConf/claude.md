@@ -82,7 +82,7 @@
 |-------------|------|
 | public | HTMLなどのWebコンテンツ・動的コンテンツ(`*.mt.js`/`*.mt.html`)の配置先 |
 | lib | `$loadLib()`で読み込むモジュールJSの配置先 |
-| conf | `$loadConf()`で読み込む設定JSON(`env.json`/`minto.json`/`table/*.json`等)の配置先 |
+| conf | ローカル実行(`minto`コマンド)・`$loadConf()`で読み込む設定JSON(`env.local.json`/`minto.json`/`table/*.json`等)の配置先。任意の`xxx.json`に対して同名の`xxx.local.json`を置くとローカル実行時のみそちらが優先され(`mtpk`のデプロイzipには含まれない)、無ければ`xxx.json`が使われる |
 | package.json | `modules/s3table`が必要とする`@aws-sdk/client-s3`のローカルインストール用(`npm install`) |
 | .claude/CLAUDE.md | 本ファイル |
 

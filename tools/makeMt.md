@@ -45,7 +45,7 @@ mkmt [PROJECT NAME]
 ├── public/          # 公開用静的ファイル格納ディレクトリ
 ├── lib/             # ライブラリ格納ディレクトリ
 ├── conf/            # 設定ファイル格納ディレクトリ
-│   ├── env.json     # 環境設定ファイル
+│   ├── env.local.json     # 環境設定ファイル(ローカル専用)
 │   └── minto.json   # minto サーバー設定ファイル
 ├── package.json     # modules/s3table が必要とする @aws-sdk/client-s3 の
 │                       ローカルインストール用
@@ -66,7 +66,7 @@ mkmt [PROJECT NAME]
 
 ## 生成される設定ファイル
 
-### conf/env.json
+### conf/env.local.json
 
 環境固有の設定を記述するファイルです。`modules/s3table`(S3をデータストアとして使うモジュール群)・`modules/sdk/sqsSdk.js`のローカル検証環境(`localAws`)向けの環境変数がデフォルトで設定されます。
 

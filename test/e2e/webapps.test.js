@@ -4,6 +4,7 @@
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const fs = require("node:fs");
 const net = require("node:net");
 const { spawn } = require("node:child_process");
 
@@ -111,6 +112,26 @@ test("e2e: プロジェクト側に無いパスはminto本体同梱のpublic/へ
 test("e2e: フォールバックしても存在しないパスはそのまま404になる", async () => {
     const res = await fetch(baseUrl + "/auth/mfa/no-such-file");
     assert.equal(res.status, 404);
+});
+
+test("e2e: $loadConfは通常conf/xxx.jsonを読み込む", async () => {
+    const res = await fetch(baseUrl + "/loadConf");
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.deepEqual(body, { from: "json" });
+});
+
+test("e2e: conf/xxx.local.jsonが存在する場合、$loadConfはそちらを優先する", async () => {
+    const localConfPath = path.join(PROJECT_DIR, "conf", "sample.local.json");
+    fs.writeFileSync(localConfPath, JSON.stringify({ from: "local" }));
+    try {
+        const res = await fetch(baseUrl + "/loadConf");
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.deepEqual(body, { from: "local" });
+    } finally {
+        fs.rmSync(localConfPath);
+    }
 });
 
 test("e2e: フォールバック後もプロジェクト側のパス解決に影響しない", async () => {

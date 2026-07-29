@@ -120,6 +120,24 @@
         return JSON.parse(fs.readFileSync(name));
     }
 
+    // ローカル実行専用の"*.local.json"オーバーライドを解決する.
+    // 指定した.jsonパスに対応する同名の.local.jsonが存在する場合はそちらの
+    // パスを、無ければ指定された元のパスをそのまま返す(存在確認自体は
+    // 呼び出し元で行う。tools/index.jsのconf/env.json・conf/minto.json、
+    // tools/webapps.jsの$loadConfから利用する。tools/mtPack.jsは
+    // "*.local.json"自体をデプロイzipに含めないため対象外).
+    // jsonPath 対象の.jsonファイルパス(末尾が.json)を設定します.
+    // 戻り値: 実際に使用すべきパス(文字列)が返却されます.
+    exports.resolveLocalConf = function (jsonPath) {
+        if (jsonPath.endsWith(".json") && !jsonPath.endsWith(".local.json")) {
+            const localPath = jsonPath.substring(0, jsonPath.length - ".json".length) + ".local.json";
+            if (exports.existsFileSync(localPath)) {
+                return localPath;
+            }
+        }
+        return jsonPath;
+    }
+
     // require.resolve("./") に対するパスを取得.
     // __dirname と同じ結果が返却される(ただ現在__dirnameは非推奨).
     // あとこれは llrt では利用出来ない(node専用).

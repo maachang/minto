@@ -79,3 +79,17 @@ test("mtpk: -t all の場合、public/auth(modules/authに対応)もpackされ�
     assert.match(list, /public\/auth\/mfa\/mfa\.jhtml\.js/);
     assert.match(list, /public\/js\/marked\.umd\.js/);
 });
+
+test("mtpk: conf/xxx.local.jsonはデプロイzipに含まれない(通常のconf/xxx.jsonは含まれる)", () => {
+    fs.writeFileSync(path.join(projectDir, "conf", "env.local.json"),
+        JSON.stringify({ MINTO_LOCAL_S3_ENDPOINT: "http://localhost:9911" }));
+    fs.writeFileSync(path.join(projectDir, "conf", "minto.json"),
+        JSON.stringify({ bindPort: 3210 }));
+
+    const list = runPackAndListZip(["-t", "all"]);
+    assert.doesNotMatch(list, /conf\/env\.local\.json/);
+    assert.match(list, /conf\/minto\.json/);
+
+    fs.rmSync(path.join(projectDir, "conf", "env.local.json"));
+    fs.rmSync(path.join(projectDir, "conf", "minto.json"));
+});

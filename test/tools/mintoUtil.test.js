@@ -36,6 +36,32 @@ test("mintoUtil: loadJson はJSONファイルをパースして返す", () => {
     fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test("mintoUtil: resolveLocalConf は同名の.local.jsonが存在すればそちらを返す", () => {
+    const dir = makeTmpDir();
+    const jsonPath = path.join(dir, "env.json");
+    const localPath = path.join(dir, "env.local.json");
+    fs.writeFileSync(jsonPath, JSON.stringify({ from: "json" }));
+    fs.writeFileSync(localPath, JSON.stringify({ from: "local" }));
+
+    assert.equal(mintoUtil.resolveLocalConf(jsonPath), localPath);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("mintoUtil: resolveLocalConf は.local.jsonが無ければ元のパスをそのまま返す", () => {
+    const dir = makeTmpDir();
+    const jsonPath = path.join(dir, "env.json");
+    fs.writeFileSync(jsonPath, JSON.stringify({ from: "json" }));
+
+    assert.equal(mintoUtil.resolveLocalConf(jsonPath), jsonPath);
+    // .jsonで終わらないパスはそのまま返す.
+    assert.equal(mintoUtil.resolveLocalConf(path.join(dir, "note.txt")), path.join(dir, "note.txt"));
+    // 既に.local.jsonのパスはそのまま返す(二重解決しない).
+    assert.equal(mintoUtil.resolveLocalConf(path.join(dir, "env.local.json")), path.join(dir, "env.local.json"));
+
+    fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test("mintoUtil: listDir はディレクトリのみを一覧取得する(末尾/付き)", () => {
     const dir = makeTmpDir();
     fs.mkdirSync(path.join(dir, "subA"));

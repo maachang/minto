@@ -52,7 +52,7 @@
 ### 利用側(s3sdk.js/s3Lock.js)の設定
 
 `mkmt`でプロジェクトを作成すると、`minto`コマンド実行時に読み込まれる
-`conf/env.json` (詳細は[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#ローカル実行用環境変数コンフィグ定義)を参照)に、以下の環境変数がデフォルトで設定されます(手動設定は不要です)。
+`conf/env.local.json` (詳細は[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#ローカル実行用環境変数コンフィグ定義)を参照)に、以下の環境変数がデフォルトで設定されます(手動設定は不要です)。
 
 ~~~json
 {
@@ -61,9 +61,9 @@
 ~~~
 
 - `MINTO_LOCAL_S3_ENDPOINT`: これが設定されている場合、`s3sdk.js`/`s3Lock.js`は実AWS S3ではなくこのURLへ接続します(`forcePathStyle: true`が自動的に付与されます)。
-- AWSクレデンシャル(`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`)は、**設定不要**です。`MINTO_LOCAL_S3_ENDPOINT`が設定されており、かつ他に明示的なクレデンシャル指定(環境変数や呼び出し元の`options.credentials`)が無い場合、`s3sdk.js`/`s3Lock.js`側で自動的にダミークレデンシャルが使われます(`localAws`側では署名検証を行わないため実害はありません)。これにより、実際のAWSクレデンシャルを誤って`conf/env.json`(プロジェクトディレクトリ内、gitignore対応を忘れるとコミットされ得る場所)に書いてしまうリスクを避けられます。
+- AWSクレデンシャル(`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`)は、**設定不要**です。`MINTO_LOCAL_S3_ENDPOINT`が設定されており、かつ他に明示的なクレデンシャル指定(環境変数や呼び出し元の`options.credentials`)が無い場合、`s3sdk.js`/`s3Lock.js`側で自動的にダミークレデンシャルが使われます(`localAws`側では署名検証を行わないため実害はありません)。これにより、実際のAWSクレデンシャルを誤って`conf/env.local.json`(プロジェクトディレクトリ内、gitignore対応を忘れるとコミットされ得る場所)に書いてしまうリスクを避けられます。
 
-この環境変数を設定しない場合は、通常通り実際のAWS S3に接続されます。本番のAWS Lambda環境にデプロイする際は、この環境変数を設定しない(または`conf/env.json`はローカル専用のためLambdaには含まれない)ことで、自動的に本番のAWS S3が使われます。実際のAWS環境に接続する場合のクレデンシャル設定方法は[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#実際の検証環境実行方法＋利用方法を説明)を参照してください。
+この環境変数を設定しない場合は、通常通り実際のAWS S3に接続されます。本番のAWS Lambda環境にデプロイする際は、この環境変数を設定しない(または`conf/env.local.json`はmtpkのデプロイzipに含まれないためLambdaには含まれない)ことで、自動的に本番のAWS S3が使われます。実際のAWS環境に接続する場合のクレデンシャル設定方法は[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#実際の検証環境実行方法＋利用方法を説明)を参照してください。
 
 #### クレデンシャル解決の優先順位
 
@@ -98,7 +98,7 @@
 
 クレデンシャルの解決順位・ダミークレデンシャルの扱いはS3側(`s3sdk.js`)と同様です。
 
-`mkmt`で作成したプロジェクトの`conf/env.json`には、`MINTO_LOCAL_S3_ENDPOINT`と併せてデフォルトで含まれています。`sqsSdk.js`を利用しない場合は削除しても問題ありません。
+`mkmt`で作成したプロジェクトの`conf/env.local.json`には、`MINTO_LOCAL_S3_ENDPOINT`と併せてデフォルトで含まれています。`sqsSdk.js`を利用しない場合は削除しても問題ありません。
 
 ### 対応しているSQS操作
 
