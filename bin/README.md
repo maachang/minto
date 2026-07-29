@@ -178,7 +178,7 @@ DeleteObject・ListObjectsV2 の最低限のみです。それ以外の操作(�
 どちらでも全く同じ処理が行われます)。
 
 ~~~sh
-> tableTool -t <master|index> -c <createTable|dropTable|alterTable|alterIndex|backupTable|restoreTable|listBackups|previewRestore|pruneBackups|restoreBackupAs|describeBackup> [-n <テーブル名>] [-b <backupId>] [-k <keep>] [-d <複製先テーブル名>]
+> tableTool -t <master|index> -c <createTable|dropTable|alterTable|alterIndex|backupTable|restoreTable|listBackups|previewRestore|pruneBackups|restoreBackupAs|describeBackup|exportCsv|importCsv> [-n <テーブル名>] [-b <backupId>] [-k <keep>] [-d <複製先テーブル名>] [--csvBucket <バケット名>] [--csvPrefix <prefix>] [--csvFileName <ファイル名>]
 ~~~
 
 - `-t` / `--target`: 対象(`master` = s3MasterTable.js、`index` = s3IndexTable.js)
@@ -203,15 +203,26 @@ DeleteObject・ListObjectsV2 の最低限のみです。それ以外の操作(�
   - `restoreBackupAs`: バックアップの内容を別テーブル名として新規復元する
     (クローン用途。`master`/`index`両対応、`-n`・`-b`・`-d`必須。複製先
     テーブル名が既に存在する場合はエラー)
+  - `exportCsv`: テーブルの内容をCSV化し、S3の`--csvBucket`+`--csvPrefix`+
+    `--csvFileName`へアップロードする(**`target=master`のみ対応**。`-n`・
+    `--csvBucket`・`--csvFileName`必須。`--csvPrefix`は省略可。出力先は
+    テーブル自体が保存されている`bucket`とは無関係に指定できる)
+  - `importCsv`: S3の`--csvBucket`+`--csvPrefix`+`--csvFileName`からCSVを
+    取得し、テーブルの内容を丸ごと置き換える(**`target=master`のみ対応**。
+    既存の行データは全て破棄される。`-n`・`--csvBucket`・`--csvFileName`必須。
+    `--csvPrefix`は省略可)
 - `-n` / `--table`: `alterIndex`/`backupTable`/`restoreTable`/`listBackups`/
-  `previewRestore`/`pruneBackups`/`restoreBackupAs`/`describeBackup`実行時に
-  対象とするテーブル名(必須。`restoreBackupAs`ではバックアップ取得元の
-  テーブル名)
+  `previewRestore`/`pruneBackups`/`restoreBackupAs`/`describeBackup`/
+  `exportCsv`/`importCsv`実行時に対象とするテーブル名(必須。`restoreBackupAs`
+  ではバックアップ取得元のテーブル名)
 - `-b` / `--backupId`: `restoreTable`/`previewRestore`/`restoreBackupAs`/
   `describeBackup`実行時に対象とするバックアップ世代ID(必須、`backupTable`
   の実行結果で返る`backupId`を指定する)
 - `-k` / `--keep`: `pruneBackups`実行時に残す世代数(0以上の整数、必須)
 - `-d` / `--dest`: `restoreBackupAs`実行時に指定する複製先テーブル名(必須)
+- `--csvBucket` / `--csvPrefix` / `--csvFileName`: `exportCsv`/`importCsv`
+  実行時のCSV入出力先(`--csvBucket`・`--csvFileName`必須、`--csvPrefix`は
+  省略可・省略時は空文字列)
 
 対象(`master`/`index`)ごとに、プロジェクトの`conf/table/master.json`・
 `conf/table/index.json`に「あるべきテーブル定義」を記載しておく必要があります。

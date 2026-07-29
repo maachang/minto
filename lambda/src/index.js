@@ -442,11 +442,13 @@
     // event.target "master"|"index" を設定します.
     // event.command "createTable"|"dropTable"|"alterTable"|"alterIndex"|
     //   "backupTable"|"restoreTable"|"listBackups"|"previewRestore"|
-    //   "pruneBackups"|"restoreBackupAs"|"describeBackup" を設定します.
+    //   "pruneBackups"|"restoreBackupAs"|"describeBackup"|"exportCsv"|
+    //   "importCsv" を設定します.
     // event.tableName alterIndex/backupTable/restoreTable/listBackups/
-    //   previewRestore/pruneBackups/restoreBackupAs/describeBackupの場合に
-    //   必須の対象テーブル名(restoreBackupAsではバックアップ取得元の
-    //   テーブル名。alterIndexのみtarget="index"限定、それ以外はmaster/index
+    //   previewRestore/pruneBackups/restoreBackupAs/describeBackup/
+    //   exportCsv/importCsvの場合に必須の対象テーブル名(restoreBackupAsでは
+    //   バックアップ取得元のテーブル名。alterIndexのみtarget="index"限定、
+    //   exportCsv/importCsvのみtarget="master"限定、それ以外はmaster/index
     //   両対応).
     // event.backupId restoreTable/previewRestore/restoreBackupAs/
     //   describeBackupの場合のみ必須のバックアップ世代ID
@@ -454,19 +456,30 @@
     // event.keep pruneBackupsの場合のみ必須の残す世代数(0以上の整数).
     // event.destTableName restoreBackupAsの場合のみ必須の複製先テーブル名
     //   (既に存在する場合はエラーになる).
+    // event.csvBucket exportCsv/importCsvの場合のみ必須のCSV入出力先S3バケット名
+    //   (テーブル自体が保存されているバケットとは無関係に指定可能).
+    // event.csvPrefix exportCsv/importCsvの場合の任意のCSV入出力先prefix
+    //   (省略時は空文字列).
+    // event.csvFileName exportCsv/importCsvの場合のみ必須のCSVファイル名
+    //   (csvBucket+csvPrefix+csvFileNameがオブジェクトキーになる).
     const _responseTableCommand = async function (event) {
         const target = event.target;
         const command = event.command;
         if (target !== "master" && target !== "index") {
             return { error: "不正なtargetです: " + target };
         }
+        const _CSV_COMMANDS = ["exportCsv", "importCsv"];
         const _TABLE_NAME_REQUIRED_COMMANDS = ["alterIndex", "backupTable", "restoreTable",
-            "listBackups", "previewRestore", "pruneBackups", "restoreBackupAs", "describeBackup"];
+            "listBackups", "previewRestore", "pruneBackups", "restoreBackupAs", "describeBackup"]
+            .concat(_CSV_COMMANDS);
         if (["createTable", "dropTable", "alterTable"].concat(_TABLE_NAME_REQUIRED_COMMANDS).indexOf(command) === -1) {
             return { error: "不正なcommandです: " + command };
         }
         if (command === "alterIndex" && target !== "index") {
             return { error: "alterIndexはtarget=indexのみ対応しています。" };
+        }
+        if (_CSV_COMMANDS.indexOf(command) !== -1 && target !== "master") {
+            return { error: command + "はtarget=masterのみ対応しています。" };
         }
         if (_TABLE_NAME_REQUIRED_COMMANDS.indexOf(command) !== -1) {
             if (event.tableName == null) {
@@ -482,6 +495,14 @@
             }
             if (command === "restoreBackupAs" && event.destTableName == null) {
                 return { error: "restoreBackupAsにはdestTableNameの指定が必須です。" };
+            }
+            if (_CSV_COMMANDS.indexOf(command) !== -1) {
+                if (event.csvBucket == null) {
+                    return { error: command + "にはcsvBucketの指定が必須です。" };
+                }
+                if (event.csvFileName == null) {
+                    return { error: command + "にはcsvFileNameの指定が必須です。" };
+                }
             }
         }
 
@@ -528,6 +549,10 @@
                 return await _tableCommandPruneBackups(db, target, event.tableName, event.keep);
             } else if (command === "restoreBackupAs") {
                 return await _tableCommandRestoreBackupAs(db, target, event.tableName, event.backupId, event.destTableName);
+            } else if (command === "exportCsv") {
+                return await _tableCommandExportCsv(db, event.tableName, event.csvBucket, event.csvPrefix, event.csvFileName, options);
+            } else if (command === "importCsv") {
+                return await _tableCommandImportCsv(db, event.tableName, event.csvBucket, event.csvPrefix, event.csvFileName, options);
             } else {
                 return await _tableCommandDescribeBackup(db, target, event.tableName, event.backupId);
             }
@@ -695,6 +720,36 @@
             ret.indexEntryCount = result.indexEntryCount;
         }
         return ret;
+    };
+
+    // exportCsv: マスターテーブルの内容をCSV文字列化し、指定したS3の
+    // csvBucket+csvPrefix+csvFileNameへアップロードする(target=masterのみ.
+    // テーブル自体が保存されているbucketとは無関係の出力先を指定できる).
+    const _tableCommandExportCsv = async function (db, tableName, csvBucket, csvPrefix, csvFileName, options) {
+        const s3sdk = _g.$loadLib("s3sdk.js");
+        const csv = await db.exportCsv(tableName);
+        const rows = await db.select(tableName, {});
+        await s3sdk.put(csvBucket, csvPrefix || "", csvFileName, csv,
+            { region: options.region, credentials: options.credentials, noError: false });
+        return { command: "exportCsv", target: "master", tableName: tableName,
+            csvBucket: csvBucket, csvPrefix: csvPrefix || "", csvFileName: csvFileName,
+            rowCount: rows.length };
+    };
+
+    // importCsv: 指定したS3のcsvBucket+csvPrefix+csvFileNameからCSVを取得し、
+    // マスターテーブルの内容を丸ごと置き換える(target=masterのみ。既存の
+    // 行データは全て破棄される。restoreTableと同様、置換系操作のため
+    // db.transaction()は使わずこの関数単位でロック済みの状態のまま実行する).
+    const _tableCommandImportCsv = async function (db, tableName, csvBucket, csvPrefix, csvFileName, options) {
+        const s3sdk = _g.$loadLib("s3sdk.js");
+        const res = await s3sdk.get(csvBucket, csvPrefix || "", csvFileName,
+            { region: options.region, credentials: options.credentials, noError: false });
+        const csvString = await res.Body.transformToString("utf-8");
+        const rowCount = await db.importCsv(tableName, csvString);
+        await db.flush(tableName);
+        return { command: "importCsv", target: "master", tableName: tableName,
+            csvBucket: csvBucket, csvPrefix: csvPrefix || "", csvFileName: csvFileName,
+            rowCount: rowCount };
     };
 
     // requestオブジェクトを取得.

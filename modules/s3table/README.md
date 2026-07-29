@@ -275,6 +275,8 @@ const id = seqId.generate();
 | CSV | `exportCsv(table)` | テーブル全体をCSV文字列としてエクスポート |
 | | `importCsv(table, csvString)` | CSV文字列でテーブル全体を置換(インポート) |
 
+`exportCsv`/`importCsv`は、`bin/tableTool`の`exportCsv`/`importCsv`コマンド(`target=master`のみ対応)からも利用できます。テーブル自体が保存されているS3バケットとは無関係な任意のS3バケット/prefix/ファイル名を入出力先として指定できます。詳細は[bin/README.md](https://github.com/maachang/minto/blob/main/bin/README.md#tabletool-コマンド)を参照してください。
+
 ---
 
 ## 書き込みのバッファリング(重要)

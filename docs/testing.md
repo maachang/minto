@@ -199,6 +199,7 @@ test/
   - backupTable等でtableName未指定時のエラー
   - 定義ファイル(`conf/table/{target}.json`)が存在しない場合のエラー応答
   - `MINTO_TEST_MODE=true`指定時、`conf/table/master.test.json`が存在すればそちらのテーブル定義が使われること(本番用の`conf/table/master.json`とは異なる内容で確認)、`MINTO_TEST_MODE`未指定時は通常通り`conf/table/master.json`が使われ`master.test.json`は一切参照されないこと(`tools/lambdaOverrides.js`による`$loadConf`上書きの実地検証)
+  - `exportCsv`/`importCsv`(`target=master`のみ対応)の往復。CSVをテーブル自体のbucketとは別のprefix/ファイル名へ直接PUTしたものを`importCsv`で取り込み、`exportCsv`で別の場所へ書き出した内容を直接GETして確認。`target=index`指定時のエラー、`csvBucket`/`csvFileName`未指定時のエラーも確認しています
 
   fixtureプロジェクトの`lib/`には、`modules/s3table/*.js`をコピーせず絶対パスでre-exportするスタブファイルを配置し、実体との重複・鮮度ズレを避けています。
 

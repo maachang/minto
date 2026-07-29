@@ -418,3 +418,54 @@ test("tableTool: MINTO_TEST_MODE=true時、conf/table/master.test.jsonが存在�
 
     fs.rmSync(path.join(projectDir, "conf", "table", "master.test.json"), { force: true });
 });
+
+test("tableTool: importCsv/exportCsvでCSVの往復ができる(target=masterのみ)", async () => {
+    writeTableConf("master", { bucket: BUCKET }, {
+        csvUsers: { columns: { name: { type: "string" }, age: { type: "int" } } }
+    });
+    await runTableTool(["-t", "master", "-c", "createTable"]);
+
+    // インポート元CSVを、テーブル自体のbucketとは無関係な場所(prefix/ファイル名)
+    // に直接アップロードしておく(localAwsのS3 REST APIへ直接PUT).
+    const csvBody = "name,age\nAlice,30\nBob,25\n";
+    const putRes = await fetch(baseUrl + "/" + BUCKET + "/csvImport/users.csv", {
+        method: "PUT",
+        body: csvBody
+    });
+    assert.equal(putRes.ok, true);
+
+    const rImport = await runTableTool(["-t", "master", "-c", "importCsv", "-n", "csvUsers",
+        "--csvBucket", BUCKET, "--csvPrefix", "csvImport/", "--csvFileName", "users.csv"]);
+    assert.deepEqual(rImport, {
+        command: "importCsv", target: "master", tableName: "csvUsers",
+        csvBucket: BUCKET, csvPrefix: "csvImport/", csvFileName: "users.csv", rowCount: 2
+    });
+
+    // target=indexではエラーになること.
+    const rImportIndexErr = await runTableTool(["-t", "index", "-c", "importCsv", "-n", "csvUsers",
+        "--csvBucket", BUCKET, "--csvFileName", "users.csv"]);
+    assert.match(rImportIndexErr.error, /target=masterのみ対応/);
+
+    // エクスポート先(テーブル自体のbucketとは別prefix)へCSVを書き出す.
+    const rExport = await runTableTool(["-t", "master", "-c", "exportCsv", "-n", "csvUsers",
+        "--csvBucket", BUCKET, "--csvPrefix", "csvExport/", "--csvFileName", "out.csv"]);
+    assert.deepEqual(rExport, {
+        command: "exportCsv", target: "master", tableName: "csvUsers",
+        csvBucket: BUCKET, csvPrefix: "csvExport/", csvFileName: "out.csv", rowCount: 2
+    });
+
+    // 実際にエクスポートされた内容を直接取得して確認する.
+    const getRes = await fetch(baseUrl + "/" + BUCKET + "/csvExport/out.csv");
+    assert.equal(getRes.ok, true);
+    const exportedCsv = await getRes.text();
+    assert.match(exportedCsv, /Alice/);
+    assert.match(exportedCsv, /Bob/);
+
+    // csvBucket/csvFileName未指定はエラーになること.
+    const rNoBucket = await runTableTool(["-t", "master", "-c", "exportCsv", "-n", "csvUsers",
+        "--csvFileName", "out.csv"]);
+    assert.match(rNoBucket.error, /csvBucketの指定が必須/);
+    const rNoFileName = await runTableTool(["-t", "master", "-c", "exportCsv", "-n", "csvUsers",
+        "--csvBucket", BUCKET]);
+    assert.match(rNoFileName.error, /csvFileNameの指定が必須/);
+});
