@@ -59,6 +59,15 @@ minto（llrtを使ったAWS Lambda軽量化） は、軽量化モジュール ll
 
 # あえてやってないこと
 
+# ローカル実行・テスト実行の仕組み（2026-07時点、詳細は docs/setup.md・docs/localAws.md・docs/testing.md 参照）
+
+- `tools/localAws.js`（旧`localS3.js`）: ローカルAWSエミュレータ。S3(REST API)とSQS(AWS JSON 1.0 protocol)の両方を同一サーバー・同一ポートでエミュレートする（`bin/localAws`）
+- `tools/localSqsPoller.js`: SQSトリガー→Lambda呼び出し（実AWSのイベントソースマッピングのポーリング挙動）をローカルで再現するツール（`bin/localSqsPoller`）。`public/runSqs.mt.js`のローカル動作確認に使う
+- `conf/xxx.local.json`（ローカル実行専用）・`conf/xxx.test.json`（`MINTO_TEST_MODE=true`設定時のテスト実行専用）: 任意の`conf/xxx.json`に対する上書き。存在すればそちらが優先され、`mtpk`のデプロイzipには含まれない
+  - この解決ロジック（`resolveLocalConf`/`isTestMode`）は`tools/lambdaOverrides.js`に集約されている
+  - `lambda/src/index.js`自体の内部処理（`conf/table/*.json`・mime.json・etags.json読み込み含む）は、常に公開済みの`_g.$loadConf`経由で呼び出す作りになっており、`tools/webapps.js`（`minto`コマンド）・`tools/lambdaOverrides.js`（`tableTool`・`localSqsPoller`が使用）のどちらが上書きしても一貫して反映される
+  - **AIメモ**: 以前`$loadConf`だけ内部でプライベートなローカル変数（`_$loadConf`）を直接呼んでおり、外部からの`global.$loadConf`上書きが`tableTool`経由の`conf/table/*.json`読み込みに反映されない不具合があった。修正済みだが、今後`lambda/src/index.js`に新しい`_g.$xxx`系の関数を追加する際は、内部利用箇所も必ず`_g.`経由（またはローカル変数を作らず直接`_g.$xxx = ...`で定義）にすること。ローカル変数化して内部だけそれを呼ぶと、この問題を再発させる
+
 # 未対応・残課題(随時更新)
 
 - 以下は方針合意済みだが未実装（詳細は `.claudeWork/progress.md` 参照）
@@ -66,5 +75,5 @@ minto（llrtを使ったAWS Lambda軽量化） は、軽量化モジュール ll
   - XSS対策（jhtml出力時のエスケープ処理などの整備）
   - Bearer token / APIキー認証
   - Webhook署名検証
-- `modules/sdk/*`（dynamoDb, kms, parameterStore, secretsManager, ses, sns, sqs）、`modules/notification/*`（sendSlack, sendGithub）はテスト未対応（外部AWS/API依存でモック困難なため意図的に対象外。詳細は `docs/testing.md` 参照）
+- `modules/sdk/*`のうち`dynamoDb`・`kms`・`parameterStore`・`secretsManager`・`ses`・`sns`、`modules/notification/*`（sendSlack, sendGithub）はテスト未対応（外部AWS/API依存でモック困難なため意図的に対象外。詳細は `docs/testing.md` 参照）。`sqsSdk.js`は`tools/localAws.js`のSQSエミュレーション機能を使ってテスト済み
 - `bin/initMinto`, `bin/mkmt` はCLIラッパー自体の直接テストなし
