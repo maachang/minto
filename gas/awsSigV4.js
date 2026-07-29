@@ -349,6 +349,11 @@
         if (!(path = path.trim()).startsWith("/")) {
             path = "/" + path;
         }
+        // CanonicalURIとしてURIエンコードする(署名対象のAWS REST APIで
+        // スペース・日本語等percent-encodeが必要な文字を含むパスを扱う場合、
+        // これを行わないとAWS側の計算結果と一致せずSignatureDoesNotMatchに
+        // なるため必須).
+        path = encodeURIToPath(path);
         // payloadが設定されていない場合、空文字をセット.
         if (payload == undefined || payload == null) {
             payload = "";
@@ -792,7 +797,7 @@
     const getBodyLength = function (body) {
         if (isBlob(body)) {
             return body.getBytes().length;
-        } else if (Array.isArray()) {
+        } else if (Array.isArray(body)) {
             return body.length;
         }
         // 一旦Blob変換してバイナリ長を返却.
@@ -848,13 +853,13 @@
     //    設定しない場合は `text` になります.
     // 戻り値: bodyが返却されます.
     const request = function (host, path, options) {
-        let charset = "utf8";
-        if (typeof (options.charset) == "string") {
-            charset = options.charset;
-        }
         // optionsが存在しない場合.
         if (options == undefined || options == null) {
             options = {};
+        }
+        let charset = "utf8";
+        if (typeof (options.charset) == "string") {
+            charset = options.charset;
         }
         // requestメソッドを取得.
         options.method = options.method == undefined ?
