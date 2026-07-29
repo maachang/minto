@@ -52,6 +52,7 @@ test/
 │   ├── llrtCheck.test.js
 │   ├── mtPack.test.js
 │   ├── localAws-sqs.test.js
+│   ├── lambdaOverrides.test.js
 │   └── .fixtures/          テスト用の補助スクリプト(子プロセス実行用)
 │
 ├── modules/                modules/ 配下の単体テスト
@@ -91,7 +92,8 @@ test/
 
 - **args.test.js**: `tools/args.js` はrequire時に`process.argv`を読み込む作りのため、実際のCLI起動を再現するように`.fixtures/argsRunner.js`を子プロセスとして起動し、様々な引数パターンでの`get`/`next`/`getArray`/`isValue`/`getFirst`/`getLast`等を検証します
 - **xor128.test.js**: 乱数生成の再現性(同一seed)、`getUUID()`がRFC4122のversion(4)/variant(10)ビットに準拠したフォーマットで返却されること、`getPassword()`の文字種・桁数・境界値などを検証します
-- **mintoUtil.test.js**: `existsFileSync`/`existsDirSync`/`loadJson`/`listDir`/`listFile`(再帰指定含む)を、一時ディレクトリを使って検証します。`resolveLocalConf`(`conf/xxx.local.json`優先解決)についても、`.local.json`が存在する場合・しない場合・`.json`で終わらないパス・既に`.local.json`のパスを渡した場合(二重解決しないこと)を確認しています。`isTestMode`(`MINTO_TEST_MODE`環境変数判定)、および`resolveLocalConf`がテストモード時に`.test.json`を優先し`.local.json`を無視すること(`.test.json`が無ければ通常の`.json`にフォールバックすること含む)も検証しています
+- **mintoUtil.test.js**: `existsFileSync`/`existsDirSync`/`loadJson`/`listDir`/`listFile`(再帰指定含む)を、一時ディレクトリを使って検証します
+- **lambdaOverrides.test.js**: `tools/lambdaOverrides.js`のうち、単体で完結する`resolveLocalConf`(`conf/xxx.local.json`優先解決)・`isTestMode`(`MINTO_TEST_MODE`環境変数判定)を検証します。`.local.json`が存在する場合・しない場合・`.json`で終わらないパス・既に`.local.json`のパスを渡した場合(二重解決しないこと)、テストモード時に`.test.json`を優先し`.local.json`を無視すること(`.test.json`が無ければ通常の`.json`にフォールバックすること含む)を確認しています。`applyLoadLibModulesFallback`/`applyLoadConfLocalOverride`(実際に`global.$xxx`を書き換える処理)自体は`tableTool.test.js`側で実際の動作を通して検証済みのため、ここでは対象外です
 - **localLog.test.js**: `tools/localLog.js`はrequire時にグローバルの`console`を差し替える作りのため、`.fixtures/localLogRunner.js`を子プロセスとして起動して検証します。ログレベル設定によるファイル出力の抑制/許可、`console.count`のカウントアップ動作を確認します
 - **llrtCheck.test.js**: `tools/llrtCheck.js`のllrt互換性チェック(未サポートAPI検出、`for await`検出、問題なしの場合の空配列返却など)を検証します
 - **mtPack.test.js**: `tools/mtPack.js`(`mtpk`コマンド)を一時プロジェクトディレクトリに対して実際に子プロセス実行し、生成された`mtpack.zip`の中身を検証します。`$MINTO_HOME/public/`のpack対応について、`modules/***`に対応するディレクトリが無い`public/js`等は`--target`指定に関わらず常にpackされること、`modules/auth`に対応する`public/auth`は`-t auth`(または`-t all`)指定時のみpackされ、`modules/***`側と違いpublic以下のパス構造を維持したまま(`mt.html`はjhtml変換)packされること、対象外の`--target`指定時は`public/auth`がpackされないことを確認しています。加えて、`conf/xxx.local.json`(ローカル実行専用の設定上書き)・`conf/xxx.test.json`(テスト実行専用の設定上書き)がデプロイzipに含まれず、通常の`conf/xxx.json`は含まれることも確認しています
@@ -196,6 +198,7 @@ test/
     複製先が既に存在する場合のエラー、destTableName未指定時のエラー)
   - backupTable等でtableName未指定時のエラー
   - 定義ファイル(`conf/table/{target}.json`)が存在しない場合のエラー応答
+  - `MINTO_TEST_MODE=true`指定時、`conf/table/master.test.json`が存在すればそちらのテーブル定義が使われること(本番用の`conf/table/master.json`とは異なる内容で確認)、`MINTO_TEST_MODE`未指定時は通常通り`conf/table/master.json`が使われ`master.test.json`は一切参照されないこと(`tools/lambdaOverrides.js`による`$loadConf`上書きの実地検証)
 
   fixtureプロジェクトの`lib/`には、`modules/s3table/*.js`をコピーせず絶対パスでre-exportするスタブファイルを配置し、実体との重複・鮮度ズレを避けています。
 

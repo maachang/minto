@@ -229,7 +229,7 @@ AWS Lambda では環境変数が利用できますが、これを ローカルmi
 
 ### `conf/xxx.local.json`によるローカル専用の設定上書き
 
-`env.json`(環境変数)に限らず、`conf/`配下の**任意の**設定ファイルについて、同名の`xxx.local.json`を用意すると、ローカル実行時(`minto`コマンド、および`$loadConf`経由で読み込む全てのconfファイル)はそちらが優先して読み込まれ、無ければ`xxx.json`が使われます(`conf/minto.json`も同様に`conf/minto.local.json`で上書きできます)。
+`env.json`(環境変数)に限らず、`conf/`配下の**任意の**設定ファイルについて、同名の`xxx.local.json`を用意すると、ローカル実行時(`minto`コマンド、および`tools/webapps.js`が上書きする`$loadConf`経由で読み込む全てのconfファイル)はそちらが優先して読み込まれ、無ければ`xxx.json`が使われます(`conf/minto.json`も同様に`conf/minto.local.json`で上書きできます)。
 
 - `xxx.local.json`が存在する → そちらを使う(ローカル実行専用)
 - 存在しない → `xxx.json`を使う
@@ -249,6 +249,17 @@ AWS Lambda では環境変数が利用できますが、これを ローカルmi
 `MINTO_TEST_MODE`は`node --test`実行自体から自動判定されるものではなく、テストコード側が子プロセス起動時などに明示的に環境変数として設定する必要があります。`xxx.local.json`を無視する理由は、開発者個人のローカル設定(`conf/env.local.json`など)がテスト実行に紛れ込み、テスト結果が実行環境によって変わってしまう事故を防ぐためです。
 
 この`*.test.json`も`*.local.json`と同様、`mtpk`のデプロイzipには含まれません。
+
+#### 適用範囲
+
+`*.local.json`・`*.test.json`は、以下のいずれの実行経路でも同じように優先解決されます。
+
+- `minto`コマンド(`tools/webapps.js`が上書きする`$loadConf`)、および`tools/index.js`が起動時に読む`conf/minto.json`・`conf/env.json`
+- `bin/tableTool`・`bin/localSqsPoller`のように、`tools/webapps.js`を経由せず`lambda/src/index.js`の`handler()`を直接呼び出すツール(`tools/lambdaOverrides.js`の`applyLoadConfLocalOverride`が、実行開始時に`global.$loadConf`を同様に上書きする)
+
+`lambda/src/index.js`自体は、内部の`conf/table/*.json`・`mime.json`・`etags.json`読み込みも含め、常に公開済みの`global.$loadConf`(`_g.$loadConf`)経由で呼び出す作りになっているため、上記どちらの経路でも一貫して`.local.json`/`.test.json`が優先されます(`lambda/src/index.js`自体には`.local.json`/`.test.json`固有のロジックは一切追加しておらず、`_g.$loadConf`という既存の公開インターフェースを一貫して使うようにしただけです)。
+
+例えば`bin/tableTool`実行時に`conf/table/master.test.json`を用意しておけば、`MINTO_TEST_MODE=true`指定時はそちらのテーブル定義が使われ、本番の`conf/table/master.json`には影響しません。
 
 環境変数の定義方法としては
 - {key: value, key: value ....}

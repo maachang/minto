@@ -26,55 +26,20 @@
 
     const path = require("path");
     const args = require("./args.js");
-    const mintoUtil = require("./mintoUtil.js");
 
     // mintoメイン(lambda/src/index.js).
     const mintoLambdaIndex = require("../lambda/src/index.js");
 
+    // webapps.jsを経由せずlambda/src/index.jsを直接呼び出すツール共通の
+    // global $xxx 上書き($loadLibのmodules/フォールバック、$loadConfの
+    // "*.local.json"/"*.test.json"優先解決).
+    const lambdaOverrides = require("./lambdaOverrides.js");
+
     // 対象プロジェクトのカレントパス.
     const _CURRENT_PATH = path.resolve() + "/";
 
-    // modulesパス(s3MasterTable.js/s3IndexTable.js/s3Lock.js等の
-    // フレームワーク同梱ライブラリ配置先).
-    const _MODULES_PATH = path.join(__dirname, "../modules/") + "/";
-
-    // modules以下ディレクトリキャッシュ.
-    let _MODULES_DIRS_CACHE = undefined;
-
-    // modules以下ディレクトリのライブラリ呼び出し処理.
-    const _requireModules = function (name) {
-        let mod = _MODULES_DIRS_CACHE;
-        if (mod == undefined) {
-            _MODULES_DIRS_CACHE = mintoUtil.listDir(_MODULES_PATH);
-            mod = _MODULES_DIRS_CACHE;
-        }
-        const len = mod.length;
-        for (let i = 0; i < len; i++) {
-            const libPath = mod[i] + name;
-            if (mintoUtil.existsFileSync(libPath)) {
-                return require(libPath);
-            }
-        }
-        return null;
-    }
-
-    // lambda/src/index.js内の$loadLibは、プロジェクト直下lib/のみを
-    // 探索しmodules/へのフォールバックを行わない(tools/webapps.jsが
-    // ローカルminto実行時にのみ書き換えを行っているため)。tableToolは
-    // webapps.jsを経由せずhandler()を直接呼び出すため、ここで同等の
-    // modules/フォールバックを$loadLibに追加する.
-    const _originalLoadLib = global.$loadLib;
-    global.$loadLib = function (name) {
-        try {
-            return _originalLoadLib(name);
-        } catch (e) {
-            const ret = _requireModules(("" + name).trim().replace(/^\//, ""));
-            if (ret != null) {
-                return ret;
-            }
-            throw e;
-        }
-    }
+    lambdaOverrides.applyLoadLibModulesFallback();
+    lambdaOverrides.applyLoadConfLocalOverride(_CURRENT_PATH);
 
     // 起動パラメータ取得(-t/--target, -c/--command, -n/--table,
     // -b/--backupId, -k/--keep, -d/--dest).

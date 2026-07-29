@@ -262,7 +262,7 @@
     // コンフィグJSONをロード処理.
     // name: 対象のjsonファイル等を設定します.
     // 戻り値: require結果が返却されます.
-    const _$loadConf = function (name) {
+    _g.$loadConf = function (name) {
         name = ("" + name).trim();
         //if (name[0] === "/") {
         if (name.charCodeAt(0) === 47) {
@@ -275,7 +275,6 @@
         // 取得できない場合は null.
         return null;
     }
-    _g.$loadConf = _$loadConf;
 
     // requireの代替え対応.
     // 基本 mt.jsや jhtml.js の場合、require が利用できない.
@@ -486,7 +485,7 @@
             }
         }
 
-        const confFile = _$loadConf("table/" + target + ".json");
+        const confFile = $loadConf("table/" + target + ".json");
         if (confFile == null) {
             return { error: "定義ファイルが見つかりません: conf/table/" + target + ".json" };
         }
@@ -789,7 +788,7 @@
         let mime = _MIME[ext];
         if (mime === undefined) {
             if (_c_mime === null) {
-                _c_mime = _$loadConf(_MIME_CONF);
+                _c_mime = $loadConf(_MIME_CONF);
                 if (_c_mime === null) {
                     _c_mime = {};
                 }
@@ -877,7 +876,7 @@
         // キャッシュ条件が生成されていない場合.
         if (_c_etag === null) {
             // 対象パスのetag情報のファイルを取得.
-            const etagConf = _$loadConf(_ETAGS_CONF_FILE);
+            const etagConf = $loadConf(_ETAGS_CONF_FILE);
             if (etagConf === null) {
                 // 空生成.
                 _c_etag = {};

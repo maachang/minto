@@ -123,6 +123,8 @@ mkmt で作成された mintoプロジェクトによるWebアプリ実装ディ
 
 同様に`xxx.test.json`を用意すると、環境変数`MINTO_TEST_MODE`(`"true"`/`"1"`)設定時(テストモード)のみそちらが優先され(`xxx.local.json`は一切参照されない)、無ければ`xxx.json`が使われます。開発者個人の`xxx.local.json`設定がテスト実行に紛れ込むのを防ぐためのものです。`*.test.json`も`mtpk`のデプロイzipには含まれません。
 
+この上書きは、`minto`コマンド(`tools/webapps.js`)経由の`$loadConf`・`tools/index.js`の`conf/minto.json`/`conf/env.json`読み込みだけでなく、`tableTool`・`localSqsPoller`のように`lambda/src/index.js`を直接呼び出すツールでも同様に効きます(`tools/lambdaOverrides.js`が実行開始時に`global.$loadConf`を上書きするため)。
+
 詳細は[docs/setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md#confxxxlocaljsonによるローカル専用の設定上書き)を参照してください。
 
 ## localAws コマンド

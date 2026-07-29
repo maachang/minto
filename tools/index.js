@@ -7,6 +7,10 @@
     // mintoユーティリティ.
     const mintoUtil = require("./mintoUtil.js");
 
+    // 本番(lambda/src/index.js)の挙動をローカル実行向けに上書きする処理
+    // ("*.local.json"/"*.test.json"の優先解決を含む).
+    const lambdaOverrides = require("./lambdaOverrides.js");
+
     // ローカルログ(console.log関連のwrapper).
     const localLog = require("./localLog.js");
 
@@ -38,8 +42,8 @@
 
         // MINTO-config.
         // conf/minto.local.jsonが存在する場合はそちらを優先する(ローカル
-        // 実行専用の上書き。詳細はmintoUtil.resolveLocalConfを参照).
-        const _MINTO_CONF = mintoUtil.resolveLocalConf(_CURRENT_PATH + "conf/minto.json");
+        // 実行専用の上書き。詳細はlambdaOverrides.resolveLocalConfを参照).
+        const _MINTO_CONF = lambdaOverrides.resolveLocalConf(_CURRENT_PATH + "conf/minto.json");
         let mintoConf = undefined;
         if (mintoUtil.existsFileSync(_MINTO_CONF)) {
             mintoConf = mintoUtil.loadJson(_MINTO_CONF);
@@ -51,7 +55,7 @@
 
         // ENV-config.
         // conf/env.local.jsonが存在する場合はそちらを優先する(同上).
-        const _ENV_CONF = mintoUtil.resolveLocalConf(_CURRENT_PATH + "conf/env.json");
+        const _ENV_CONF = lambdaOverrides.resolveLocalConf(_CURRENT_PATH + "conf/env.json");
         if (mintoUtil.existsFileSync(_ENV_CONF)) {
             const envConf = mintoUtil.loadJson(_ENV_CONF);
             // 環境変数に定義条件を割り当てる.

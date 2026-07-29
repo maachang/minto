@@ -11,6 +11,10 @@
     // mintoUtil.
     const mintoUtil = require("./mintoUtil.js");
 
+    // 本番(lambda/src/index.js)の挙動をローカル実行向けに上書きする処理
+    // ("*.local.json"/"*.test.json"の優先解決を含む).
+    const lambdaOverrides = require("./lambdaOverrides.js");
+
     // jhtml.
     const jhtml = require("./jhtml.js");
 
@@ -144,7 +148,7 @@
     // name: 対象のjsonファイル等を設定します.
     // 戻り値: require結果が返却されます.
     // プロジェクトのconf/配下については、同名の"xxx.local.json"が存在する
-    // 場合、そちらをローカル実行専用の上書きとして優先する(mintoUtil.
+    // 場合、そちらをローカル実行専用の上書きとして優先する(lambdaOverrides.
     // resolveLocalConfを参照。tools/mtPack.jsのデプロイzipには
     // "*.local.json"自体が含まれないため、本番Lambda実行には影響しない).
     _g.$loadConf = function (name) {
@@ -158,7 +162,7 @@
             return require(confPath);
         }
         // currentディレクトリの conf 配下.
-        confPath = mintoUtil.resolveLocalConf(mainPath + "conf/" + name);
+        confPath = lambdaOverrides.resolveLocalConf(mainPath + "conf/" + name);
         if (mintoUtil.existsFileSync(confPath)) {
             return require(confPath);
         }
@@ -167,7 +171,7 @@
         // (session.js等、呼び出し元プロジェクトのconf設定を前提とした
         // モジュールをframework同梱ページ経由で使うケースに対応するため).
         if (_projectRootPath != null && _projectRootPath !== mainPath) {
-            confPath = mintoUtil.resolveLocalConf(_projectRootPath + "conf/" + name);
+            confPath = lambdaOverrides.resolveLocalConf(_projectRootPath + "conf/" + name);
             if (mintoUtil.existsFileSync(confPath)) {
                 return require(confPath);
             }

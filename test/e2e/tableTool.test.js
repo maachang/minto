@@ -64,11 +64,12 @@ const writeTableConf = function (target, options, tables) {
 };
 
 // tools/tableTool.jsを子プロセスとして実行し、標準出力のJSONを返す.
-const runTableTool = function (args) {
+// extraEnv 追加/上書きしたい環境変数を設定します(省略可).
+const runTableTool = function (args, extraEnv) {
     return new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [TABLE_TOOL_JS].concat(args), {
             cwd: projectDir,
-            env: s3Env,
+            env: Object.assign({}, s3Env, extraEnv || {}),
             stdio: "pipe"
         });
         let stdout = "";
@@ -383,4 +384,37 @@ test("tableTool: 定義ファイルが存在しない場合はエラーを返す
     fs.rmSync(path.join(projectDir, "conf", "table", "master.json"), { force: true });
     const r = await runTableTool(["-t", "master", "-c", "createTable"]);
     assert.match(r.error, /定義ファイルが見つかりません/);
+});
+
+test("tableTool: MINTO_TEST_MODE=true時、conf/table/master.test.jsonが存在すればそちらの定義が使われる", async () => {
+    // 本番用の(と想定される)master.jsonには本番テーブルのみを定義する.
+    writeTableConf("master", { bucket: BUCKET }, {
+        prodOnlyTable: { columns: { name: { type: "string" } } }
+    });
+    // テスト実行専用のmaster.test.jsonにはテスト用テーブルのみを定義する.
+    fs.writeFileSync(
+        path.join(projectDir, "conf", "table", "master.test.json"),
+        JSON.stringify({
+            options: { bucket: BUCKET },
+            tables: { ttOnlyTable: { columns: { name: { type: "string" } } } }
+        })
+    );
+
+    // MINTO_TEST_MODE=true指定時は master.test.json の定義(ttOnlyTable)が使われる.
+    const rTest = await runTableTool(["-t", "master", "-c", "createTable"],
+        { MINTO_TEST_MODE: "true" });
+    assert.deepEqual(rTest, { command: "createTable", target: "master", created: ["ttOnlyTable"] });
+
+    // MINTO_TEST_MODE未指定時は通常通りmaster.jsonの定義(prodOnlyTable)が使われ、
+    // master.test.jsonは一切参照されない(定義に無いttOnlyTableは削除対象になる。
+    // 同じテスト用バケットを使う他のテストが残した無関係なテーブルが混在する
+    // 場合があるため、droppedの内容はttOnlyTableを含むことのみ確認する).
+    const rProd = await runTableTool(["-t", "master", "-c", "dropTable"]);
+    assert.equal(rProd.command, "dropTable");
+    assert.equal(rProd.target, "master");
+    assert.ok(rProd.dropped.includes("ttOnlyTable"));
+    const rProdCreate = await runTableTool(["-t", "master", "-c", "createTable"]);
+    assert.deepEqual(rProdCreate, { command: "createTable", target: "master", created: ["prodOnlyTable"] });
+
+    fs.rmSync(path.join(projectDir, "conf", "table", "master.test.json"), { force: true });
 });
