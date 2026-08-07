@@ -3,7 +3,7 @@
   "private": true,
   "description": "llrtを使ったAWS Lambda URL Functionコールドスタート軽量化フレームワーク",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test test/**/*.test.js"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "latest",

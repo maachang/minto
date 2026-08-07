@@ -99,21 +99,7 @@ const isEmptyEnv = function(name) {
 
 // ランダムバイナリを指定数取得.
 const getRandomBytes = function (len) {
-    const ret = Buffer.alloc(len);
-    let n, i, cnt = 0;
-    const len4 = len >> 2;
-    const lenEtc = len & 0x03;
-    for (i = 0; i < len4; i++) {
-        n = rand.next();
-        ret[cnt++] = n & 0x0ff;
-        ret[cnt++] = (n & 0x0ff00) >> 8;
-        ret[cnt++] = (n & 0x0ff0000) >> 16;
-        ret[cnt++] = ((n & 0xff000000) >> 24) & 0x0ff;
-    }
-    for (i = 0; i < lenEtc; i++) {
-        ret[cnt++] = rand.next() & 0x0ff;
-    }
-    return ret;
+    return crypto.randomBytes(len);
 }
 
 // tokenKeyを生成.
