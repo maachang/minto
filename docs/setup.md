@@ -144,6 +144,11 @@ public 以下に対して、静的コンテンツ(htmlファイルや jpeg フ�
 
 を設定することで、追加のmime設定を行なう事ができます。
 
+また、URL Function 直通アクセスに対して IP アクセス制限（IP制限）を設定したい場合は
+- /conf/ipLimit.json
+
+を設定します。会社の VPN やオフィスの固定 IP / CIDR を許可リスト（`allow`）に設定することで、API Gateway や WAF を挟まない URL Function 直通運用であっても、会社の VPN 経由のみの「安全な社内限定アクセス」が簡単に実現できます（許可対象外の IP アクセスは 403 Forbidden になります。ローカル接続時は自動的に無効化されます）。
+
 またそれ以外のJSON定義を行い、それらを
 - $loadConf(`対象JSONファイル名`)
 

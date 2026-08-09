@@ -19,6 +19,7 @@ Node.jsの代替ランタイムである[llrt（Low Latency Runtime）](https://
 - **S3をKVSとして利用**: RDBMSではなくS3を対象とした「KVS的」なデータ永続化を想定
 - **128MBメモリでの安価な運用**: llrt採用によりAWS Lambdaの最小メモリ環境でも高速に動作
 - **ローカル検証環境あり**: AWS Lambdaに毎回デプロイせずに、ローカルでURL Functionと同様の環境を検証可能（[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md)参照）
+- **IPアクセス制限による安全なアクセス**: `conf/ipLimit.json` を設定することで、会社のVPNや特定オフィスのIP/CIDRのみにアクセスを制限可能。AWS Lambda URL Function直通でも外部からの不正アクセスを遮断し、社内限定の安全な通信を簡単に実現できます（対象外IPからのアクセスは403を返却）。
 - **GoogleWorkspace企業の社内Webアプリに最適**: カスタムドメインや面倒なOAuthクライアント登録が無くても、GAS(GoogleAppsScript)を使った擬似SSOログインをフィルターへの1行追加だけで組み込める（[gasAuth.md](https://github.com/maachang/minto/blob/main/docs/gasAuth.md)参照）
 
 ## 性能実測（llrt + 128MB）

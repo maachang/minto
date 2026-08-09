@@ -304,3 +304,24 @@ exports.handler = async function() {
     return true;
 };
 ```
+
+---
+
+## IPアクセス制限（`conf/ipLimit.json`）
+
+`conf/ipLimit.json` を用意することで、AWS Lambda URL Function 直通アクセスに対して IP アクセス制限（許可リスト方式）を適用できます。会社の VPN やオフィスの固定 IP / CIDR を設定することで、WAF や API Gateway を挟まない構成でも安全な社内限定通信が実現可能です。
+
+```json
+{
+    "enabled": true,
+    "allow": [
+        "203.0.113.50",
+        "198.51.100.0/24",
+        "2001:db8::/32"
+    ]
+}
+```
+
+- **接続元 IP**: Function URL 直通アクセス時の `event.requestContext.http.sourceIp` で判定します。
+- **制限対象外の挙動**: 許可リストに含まれない IP からのアクセスは **403 Forbidden** を返却します。
+- **ローカル接続**: ローカル開発環境（`127.0.0.1` や `::1`）からのアクセスは自動でスキップ（許可）されます。
