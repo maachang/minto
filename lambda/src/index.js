@@ -26,6 +26,9 @@
     // etags.conf.
     const _ETAGS_CONF_FILE = "etags.json";
 
+    // ipLimit.conf.
+    const _IP_LIMIT_CONF = "ipLimit.json";
+
     // mtpkでコンテンツがgzip化されてる拡張子.
     const _PUBLIC_CONTENTS_GZ = ".gz";
 
@@ -63,6 +66,14 @@
         // 形式ではないevent({ target, command, ... })が渡されるケース.
         if (rawPath == null && event.target != null) {
             return await _responseTableCommand(event);
+        }
+        // IPアクセス制限チェック.
+        if (!_checkIpRestriction(event)) {
+            let ext = _extends(rawPath);
+            if (ext === "js") {
+                ext = "";
+            }
+            return _errorStaticResult(403, ext || "");
         }
         // 不正なパスが設定されている場合はエラーにする.
         // AIメモ: 以前は throw new HttpError(...) としていたが、handler()の
@@ -275,6 +286,179 @@
         // 取得できない場合は null.
         return null;
     }
+
+    // IPv4文字列を32bit無符号整数に変換.
+    const _parseIPv4 = function (ip) {
+        if (typeof ip !== "string") return null;
+        const parts = ip.trim().split(".");
+        if (parts.length !== 4) return null;
+        let num = 0;
+        for (let i = 0; i < 4; i++) {
+            const p = parseInt(parts[i], 10);
+            if (isNaN(p) || p < 0 || p > 255 || parts[i] !== String(p)) return null;
+            num = (num << 8) + p;
+        }
+        return num >>> 0;
+    };
+
+    // IPv4 CIDR判定.
+    const _matchIPv4Cidr = function (ipNum, cidrStr) {
+        const parts = cidrStr.split("/");
+        const cidrIpNum = _parseIPv4(parts[0]);
+        if (cidrIpNum === null) return false;
+        const maskLen = parseInt(parts[1], 10);
+        if (isNaN(maskLen) || maskLen < 0 || maskLen > 32) return false;
+        if (maskLen === 0) return true;
+        const mask = (~0 << (32 - maskLen)) >>> 0;
+        return (ipNum & mask) === (cidrIpNum & mask);
+    };
+
+    // IPv6文字列を4つの32bit無符号整数(128bit)配列に変換.
+    const _parseIPv6 = function (ip) {
+        if (typeof ip !== "string") return null;
+        let str = ip.trim().toLowerCase();
+        if (str.includes(".")) {
+            const lastColon = str.lastIndexOf(":");
+            if (lastColon !== -1) {
+                const v4Num = _parseIPv4(str.substring(lastColon + 1));
+                if (v4Num === null) return null;
+                const v4Hex1 = ((v4Num >>> 16) & 0xffff).toString(16);
+                const v4Hex2 = (v4Num & 0xffff).toString(16);
+                str = str.substring(0, lastColon + 1) + v4Hex1 + ":" + v4Hex2;
+            }
+        }
+        const parts = str.split("::");
+        if (parts.length > 2) return null;
+
+        let left = parts[0] ? parts[0].split(":") : [];
+        let right = parts[1] ? parts[1].split(":") : [];
+        if (parts.length === 1 && left.length !== 8) return null;
+
+        const missing = 8 - (left.length + right.length);
+        if (missing < 0) return null;
+
+        const full = [];
+        for (let i = 0; i < left.length; i++) full.push(left[i]);
+        for (let i = 0; i < missing; i++) full.push("0");
+        for (let i = 0; i < right.length; i++) full.push(right[i]);
+
+        if (full.length !== 8) return null;
+
+        const words = [];
+        for (let i = 0; i < 8; i++) {
+            if (!full[i]) full[i] = "0";
+            const val = parseInt(full[i], 16);
+            if (isNaN(val) || val < 0 || val > 0xffff) return null;
+            words.push(val);
+        }
+
+        return [
+            ((words[0] << 16) | words[1]) >>> 0,
+            ((words[2] << 16) | words[3]) >>> 0,
+            ((words[4] << 16) | words[5]) >>> 0,
+            ((words[6] << 16) | words[7]) >>> 0
+        ];
+    };
+
+    // IPv6 CIDR判定.
+    const _matchIPv6Cidr = function (ipArr, cidrStr) {
+        const parts = cidrStr.split("/");
+        const cidrIpArr = _parseIPv6(parts[0]);
+        if (!cidrIpArr) return false;
+        const maskLen = parseInt(parts[1], 10);
+        if (isNaN(maskLen) || maskLen < 0 || maskLen > 128) return false;
+        if (maskLen === 0) return true;
+
+        let remaining = maskLen;
+        for (let i = 0; i < 4; i++) {
+            if (remaining <= 0) break;
+            if (remaining >= 32) {
+                if (ipArr[i] !== cidrIpArr[i]) return false;
+                remaining -= 32;
+            } else {
+                const mask = (~0 << (32 - remaining)) >>> 0;
+                if ((ipArr[i] & mask) !== (cidrIpArr[i] & mask)) return false;
+                remaining = 0;
+            }
+        }
+        return true;
+    };
+
+    // 単一IPまたはCIDRパターンに一致するか判定.
+    const _matchIp = function (sourceIp, pattern) {
+        if (!sourceIp || !pattern) return false;
+        pattern = pattern.trim();
+        sourceIp = sourceIp.trim();
+
+        if (pattern === "*" || pattern === "0.0.0.0/0" || pattern === "::/0") {
+            return true;
+        }
+        if (sourceIp === pattern) {
+            return true;
+        }
+
+        const v4Source = _parseIPv4(sourceIp);
+        if (v4Source !== null) {
+            if (pattern.includes("/")) {
+                return _matchIPv4Cidr(v4Source, pattern);
+            }
+            const v4Pattern = _parseIPv4(pattern);
+            return v4Pattern !== null && v4Source === v4Pattern;
+        }
+
+        const v6Source = _parseIPv6(sourceIp);
+        if (v6Source !== null) {
+            if (pattern.includes("/")) {
+                return _matchIPv6Cidr(v6Source, pattern);
+            }
+            const v6Pattern = _parseIPv6(pattern);
+            if (v6Pattern !== null) {
+                return v6Source[0] === v6Pattern[0] &&
+                       v6Source[1] === v6Pattern[1] &&
+                       v6Source[2] === v6Pattern[2] &&
+                       v6Source[3] === v6Pattern[3];
+            }
+        }
+        return false;
+    };
+
+    // IPアクセス制限チェック.
+    // 戻り値: 制限対象(拒否)の場合 false、許可の場合 true.
+    const _checkIpRestriction = function (event) {
+        const conf = _g.$loadConf(_IP_LIMIT_CONF) || _g.$loadConf("ipRestriction.json");
+        if (!conf) {
+            return true;
+        }
+
+        let allowList = null;
+        if (Array.isArray(conf)) {
+            allowList = conf;
+        } else if (typeof conf === "object" && conf !== null) {
+            if (conf.enabled === false) {
+                return true;
+            }
+            allowList = conf.allow || conf.allowedIps || conf.ips || null;
+        }
+
+        if (!allowList || !Array.isArray(allowList)) {
+            return true;
+        }
+
+        const sourceIp = (event && event.requestContext && event.requestContext.http && event.requestContext.http.sourceIp)
+            || (event && event.requestContext && event.requestContext.identity && event.requestContext.identity.sourceIp)
+            || null;
+
+        if (!sourceIp) {
+            return false;
+        }
+
+        for (let i = 0; i < allowList.length; i++) {
+            if (_matchIp(sourceIp, allowList[i])) {
+                return true;
+            }
+        }
+        return false;
+    };
 
     // requireの代替え対応.
     // 基本 mt.jsや jhtml.js の場合、require が利用できない.

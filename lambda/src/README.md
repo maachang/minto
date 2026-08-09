@@ -38,7 +38,7 @@ HTTP Request (Lambda Function URL)
 |---|---|
 | `public/` | 静的ファイル・動的実行ファイル（`.mt.js`, `.jhtml.js`）の配置先 |
 | `lib/` | `$loadLib()` で読み込むライブラリ群 |
-| `conf/` | `$loadConf()` で読み込む JSON 設定ファイル（`mime.json`, `etags.json` 等） |
+| `conf/` | `$loadConf()` で読み込む JSON 設定ファイル（`mime.json`, `etags.json`, `ipLimit.json` 等） |
 
 ---
 
@@ -51,10 +51,11 @@ Lambda のメインハンドラー（async 関数）。第3引数の `callback` 
 **処理フロー:**
 
 1. 内部状態（request / response / mime / etag キャッシュ）を初期化
-2. `favicon.ico` リクエストの場合、フィルターを経由せず専用処理で即時返却
-3. `/filter` パスや `.mt.js` / `.jhtml.js` / `.mt.html` への直接アクセスは **403** で拒否
-4. `public/filter.mt.js` が存在する場合、フィルター処理を実行
-5. 拡張子に応じて動的実行 or 静的ファイル配信に分岐
+2. SQS / TableCommand 以外の通常の HTTP リクエスト時、`conf/ipLimit.json` の設定に従って IP アクセス制限をチェック（対象外 IP からのアクセスの場合は **403** を返却）
+3. `favicon.ico` リクエストの場合、フィルターを経由せず専用処理で即時返却
+4. `/filter` パスや `.mt.js` / `.jhtml.js` / `.mt.html` への直接アクセスは **403** で拒否
+5. `public/filter.mt.js` が存在する場合、フィルター処理を実行
+6. 拡張子に応じて動的実行 or 静的ファイル配信に分岐
 
 ---
 
