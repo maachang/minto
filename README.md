@@ -1,118 +1,84 @@
 # minto
 
-**minto**（minimize to = [AWS Lambda関数URL実行を]最小化する）は、AWS LambdaのURL Function（関数URL）向けに、CJSで実装された「超軽量実行環境」です。
+**minto**（minimize to = [AWS Lambda関数URL実行を]最小化する）は、**AI時代の「超簡単・固定費ほぼ0円・安全」なサーバレスWebアプリ構築環境**です。
 
-Node.jsの代替ランタイムである[llrt（Low Latency Runtime）](https://github.com/awslabs/llrt)での実行を前提とすることで、AWS Lambdaの最小メモリ環境（128MB）でも「コールドスタートで高速に動作する」ことを目指しています。
+AWS Lambdaの関数URL（URL Function）と、超軽量JavaScriptランタイム[llrt（Low Latency Runtime）](https://github.com/awslabs/llrt)を組み合わせることで、AWSの最小メモリ環境（128MB）でもコールドスタート数十msで動作し、アクセスがない時は維持費完全0円で運用可能です。
 
-## 目次
+さらに、AI CLI（claude=Claude Code / agy=Antigravity2等）との親和性、充実したローカル検証環境、IPアクセス制限、S3ベースの無料データベース機構（S3Table）を備えており、現代のAI駆動開発に最適化されています。
 
-- [特徴](#特徴)
-- [性能実測（llrt + 128MB）](#性能実測llrt--128mb)
-- [想定用途](#想定用途)
-- [llrtの機能制限について](#llrtの機能制限について)
-- [ドキュメント一覧](#ドキュメント一覧)
+---
 
-## 特徴
+## 💡 minto が提供する4つのコア価値
 
-- **index.js 1ファイルでURL Functionが動く**: 機能は最低限のWebアプリ機能に絞られています
-- **mt.js / jhtml の2種類の動的コンテンツ**: JSON返却用（mt.js）とHTML返却用（jhtml）のシンプルな実行環境を提供
-- **S3をKVSとして利用**: RDBMSではなくS3を対象とした「KVS的」なデータ永続化を想定
-- **128MBメモリでの安価な運用**: llrt採用によりAWS Lambdaの最小メモリ環境でも高速に動作
-- **ローカル検証環境あり**: AWS Lambdaに毎回デプロイせずに、ローカルでURL Functionと同様の環境を検証可能（[setup.md](https://github.com/maachang/minto/blob/main/docs/setup.md)参照）
-- **IPアクセス制限による安全なアクセス**: `conf/ipLimit.json` を設定することで、会社のVPNや特定オフィスのIP/CIDRのみにアクセスを制限可能。AWS Lambda URL Function直通でも外部からの不正アクセスを遮断し、社内限定の安全な通信を簡単に実現できます（対象外IPからのアクセスは403を返却）。
-- **GoogleWorkspace企業の社内Webアプリに最適**: カスタムドメインや面倒なOAuthクライアント登録が無くても、GAS(GoogleAppsScript)を使った擬似SSOログインをフィルターへの1行追加だけで組み込める（[gasAuth.md](https://github.com/maachang/minto/blob/main/docs/gasAuth.md)参照）
+### 🤖 1. AI Native 開発（Claude Code / AIコマンド対応）
+- **AIが迷わないシンプル構造**: `.mt.js`（JSON用）/ `.jhtml.js`（HTML用）と明確な作法（`$request()`, `$loadConf()`）により、AIがプロンプト一発でバグのないWebアプリを生成可能。
+- **指示書の標準化**: `.claude/CLAUDE.md` や詳細なドキュメント群が整っており、AIエージェントに頼むだけで機能追加やリファクタリングが即座に完結します。
 
-## 性能実測（llrt + 128MB）
+### 💻 2. 完全なローカル検証環境（Self-Healing 開発）
+- **デプロイ不要の即時テスト**: 組み込みのローカルサーバー（`minto` コマンド）や `localAws.js` により、AWSにデプロイすることなく手元でWebアプリやS3/SQS操作を全検証可能。
+- **AIによる自動修正ループ**: AIがコード生成 ➔ ローカルテスト実行 ➔ エラー検知 ➔ 自動バグ修正のループを完結できます。
 
-以下の環境で、AWS Lambda + URL FunctionでS3からテキストを取得しJSONを返却するだけの処理を実行した結果です。
+### 🔒 3. IP制限 ＆ GAS認証による安全なアクセス
+- **VPN / 社内IPアクセス制限**: `conf/ipLimit.json` で会社のVPNやオフィスのIP/CIDRを指定可能。API GatewayやWAFを挟まないURL Function直通でも外部アクセスを遮断（403応答）し、社内限定の安全な通信を実現します。
+- **GASを使ったOAuth要らずの擬似SSO**: Google Workspace導入企業なら、GAS（Google Apps Script）を認可機関にすることで、OAuthクライアント登録なしにフィルター1行追加で「社員限定ログイン」を構築できます。
 
-- アーキテクチャー: arm64
-- メモリ: 128MB
-- ランタイム: Amazon Linux 2023
-- llrt（レイヤー）: llrt v0.7.0-beta full-sdk（https://github.com/awslabs/llrt/releases）
+### 💰 4. S3Table ＆ LLRT による究極の低コスト（固定費0円）
+- **DBサーバーの固定費0円（S3Table）**: RDSやDynamoDBを用意する必要がなく、S3をトランザクション対応のデータベースとして利用（`s3MasterTable` / `tableTool`）。何十個アプリを作っても維持費は実質0円です。
+- **128MBメモリで高速起動**: LLRTの採用によりコールドスタートは数十〜数百ms。128MBメモリの最小構成で動作するためコストを極限まで圧縮します。
 
-実行ソース:
-~~~js
-const s3sdk = $loadLib("s3sdk.js");
+---
 
-exports.handler = async function () {
-    const res = await s3sdk.get("test-minto", null, "test/hogehoge");
-    const text = await res.Body.transformToString("utf-8");
-    return { "hoge": 100, "hogehoge": text }
-}
-~~~
+## 📊 性能実測（llrt + 128MB）
+
+以下の環境で、AWS Lambda + URL FunctionでS3からテキストを取得しJSONを返却する処理を実行した比較結果です。
+
+- **アーキテクチャー**: arm64
+- **メモリ**: 128MB
+- **ランタイム**: Amazon Linux 2023 / llrt v0.7.0-beta full-sdk
 
 | 実行環境 | 実行パターン | Billed Duration | Init Duration | Max Memory Used |
 |---|---|---|---|---|
-| llrt v0.7.0-beta full（AWS-SDK-V3） | コールドスタート | 258 ms | 67.85 ms | 31 MB |
+| **llrt v0.7.0-beta full（AWS-SDK-V3）** | **コールドスタート** | **258 ms** | **67.85 ms** | **31 MB** |
 | Node.js v22（AWS-SDK-V3） | コールドスタート | 4802 ms | 156.66 ms | 97 MB |
 
-- AWS-SDK-V3を使うllrt full版でも258 msと、Node.js版（4802 ms）に比べれば十分高速です。
-- 比較用に計測したNode.js（v22, AWS-SDK-V3）でのコールドスタートは4802 ms・97 MBとなり、llrtランタイムの軽量さが際立つ結果となっています。
+- LLRTはNode.js版（4802 ms）に比べ、**コールドスタート約258 ms・メモリ使用量31 MB**と圧巻の軽量さを誇ります。
 
-<details>
-<summary>各実行結果の生ログ</summary>
+---
 
-AWS lambda URL Function実行結果（コールドスタート / llrt full, AWS-SDK-V3）:
-> REPORT RequestId: 3851698e-8163-4f38-a9f6-3d943a064465 Duration: 190.13 ms Billed Duration: 258 ms Memory Size: 128 MB Max Memory Used: 31 MB Init Duration: 67.85 ms
+## 🎯 想定用途
 
-AWS lambda URL Function実行結果（コールドスタート / Node.js v22, AWS-SDK-V3）:
-> REPORT RequestId: 828f62d0-ddf7-4f81-81d6-b3bd777bfd72 Duration: 4801.02 ms Billed Duration: 4802 ms Memory Size: 128 MB Max Memory Used: 97 MB Init Duration: 156.66 ms
+- **小〜中規模の社内Webアプリケーション・業務管理ツール**
+- **AI（Claude Code等）を活用した爆速PoC / MVPプロトタイプ開発**
+- **固定費0円で維持したい各種Webツール / Webhook受信用プロキシ**
+- **Google Workspaceを導入している企業の社内限定Webツール**（GAS認証 ＋ IP制限）
 
-</details>
+---
 
-## 想定用途
+## ⚠️ llrtの機能制限について
 
-mintoは「機能としては最低限」のWebアプリ機能しか実装しておらず、想定しているのは以下のような小～中規模用途です。
+- Node.jsで非推奨（deprecate）となった機能や一部標準ライブラリ（`https`等）は未実装ですが、標準の `fetch` が利用可能です。
+- 通常のWebアプリ開発に必要な機能（JSON/HTML返却、S3/SQS連携、HTTPリクエスト操作等）は `minto` の標準ライブラリでカバーされています。
 
-- 小規模の社内Webアプリの作成
-- メモリ128MB（安価な実行環境）＋ S3 KVS（安価なデータベース環境）で完結する構成
+---
 
-RDBMSが必要な本格的なWebアプリや、大規模なデータ操作が必要な用途には向いていません。
+## 📚 ドキュメント一覧
 
-特に**GoogleWorkspaceを契約している企業の社内Webアプリ開発**とは相性が良いです。
-社内ツールには「社員だけがログインできる」機能がほぼ必須ですが、Lambda関数URLには
-カスタムドメインが無いことが多く、通常のGoogle OAuthをフルセットで用意するのは
-オーバースペックになりがちです。mintoはGoogleWorkspaceで標準的に使える
-GAS(GoogleAppsScript)を認可機関として使うことで、Google Cloud側の追加設定
-（OAuthクライアント登録・同意画面・ドメイン確認）を一切行わずに、フィルターへの
-1行追加だけで「社員限定ログイン」を実現できます（詳細は
-[gasAuth.md](https://github.com/maachang/minto/blob/main/docs/gasAuth.md)、
-すぐ試せるサンプルは
-[sample/gas-oauth-login](https://github.com/maachang/minto/blob/main/sample/gas-oauth-login/README.md)参照）。
-
-## llrtの機能制限について
-
-llrtはNode.jsライクに利用できますが、以下のような制限があります。
-
-- Node.jsで不要と位置づけられた機能や非推奨（deprecate）の機能は、大体実装されていません
-- そのため、既存のNode.js向けソースコードがAWS Lambda上のllrtでそのまま動くかどうかは、実際に動かしてみないとわからないのが実情です
-- `https`などのモジュールは利用できませんが、代わりにNode.js標準の`fetch`が使えるため、httpClient機能はこれで対応可能です
-
-なお、llrtは現在もベータ版（2025年12月時点）ですが、AWS Lambdaの関数URLは問題なく利用できています。
-
-## ドキュメント一覧
-
-興味を持ちましたら、以下のドキュメントをご覧いただき、利用していただければ幸いです。
-
-- ローカル環境
+- **ローカル環境**
   - [mintoをローカル環境セットアップ](https://github.com/maachang/minto/blob/main/docs/setup.md)
   - [mintoのローカル開発説明](https://github.com/maachang/minto/blob/main/docs/howto.md)
-- Lambda生成・デプロイ
+- **Lambda生成・デプロイ**
   - [mintoのローカル環境のAWS Lambdaデプロイ](https://github.com/maachang/minto/blob/main/docs/lambda.md)
-- 開発・動作確認
+- **開発・動作確認**
   - [mintoのテスト環境](https://github.com/maachang/minto/blob/main/docs/testing.md)
-- モジュール（S3データベース。書き込み頻度に応じて使い分ける）
-  - [s3MasterTable.js（書き込み頻度が少なく読み込み頻度が多い用途向け）](https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md)
-  - [s3IndexTable.js（書き込み頻度が多い用途向け）設計ドキュメント](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)
-- 認証（GoogleWorkspace企業の社内Webアプリ向け）
-  - [認証方式の選び方（Lambda関数URLのコスパ制約から）](https://github.com/maachang/minto/blob/main/docs/authStrategy.md)
+- **モジュール（S3データベース: S3Table）**
+  - [s3MasterTable.js（マスターテーブル / トランザクション対応）](https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md)
+  - [s3IndexTable.js（書き込み頻度が多い用途向け設計）](https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md)
+- **認証 ＆ セキュリティ**
+  - [IPアクセス制限（conf/ipLimit.json）](https://github.com/maachang/minto/blob/main/lambda/src/README.md#ipアクセス制限confiplimitjson)
+  - [認証方式の選び方](https://github.com/maachang/minto/blob/main/docs/authStrategy.md)
   - [GASを使った擬似SSOログイン](https://github.com/maachang/minto/blob/main/docs/gasAuth.md)
-  - [session.js（S3ベースセッション管理、Cookie連携・1実行毎キャッシュ）](https://github.com/maachang/minto/blob/main/docs/session.md)
-  - [admin.js（S3ベース管理者情報管理、暗号化保存）](https://github.com/maachang/minto/blob/main/docs/admin.md)
+  - [session.js（S3ベースセッション管理）](https://github.com/maachang/minto/blob/main/docs/session.md)
+  - [admin.js（S3ベース管理者情報管理）](https://github.com/maachang/minto/blob/main/docs/admin.md)
   - [動作するサンプル一式（sample/gas-oauth-login）](https://github.com/maachang/minto/blob/main/sample/gas-oauth-login/README.md)
-- モジュール（入力検証）
+- **モジュール（入力検証）**
   - [validate.js（汎用オブジェクトバリデーター）](https://github.com/maachang/minto/blob/main/docs/validate.md)
-
-以上、ありがとうございました。
-</content>
