@@ -422,6 +422,13 @@
         return false;
     };
 
+    // ローカルIP(ループバック)判定.
+    const _isLocalIp = function (ip) {
+        if (!ip) return false;
+        const trimmed = ip.trim().toLowerCase();
+        return trimmed === "127.0.0.1" || trimmed === "::1" || trimmed === "::ffff:127.0.0.1" || trimmed === "localhost";
+    };
+
     // IPアクセス制限チェック.
     // 戻り値: 制限対象(拒否)の場合 false、許可の場合 true.
     const _checkIpRestriction = function (event) {
@@ -447,6 +454,11 @@
         const sourceIp = (event && event.requestContext && event.requestContext.http && event.requestContext.http.sourceIp)
             || (event && event.requestContext && event.requestContext.identity && event.requestContext.identity.sourceIp)
             || null;
+
+        // ローカル接続(127.0.0.1, ::1等)の場合はIP制限を無効化(許可).
+        if (_isLocalIp(sourceIp)) {
+            return true;
+        }
 
         if (!sourceIp) {
             return false;

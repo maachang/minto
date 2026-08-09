@@ -109,3 +109,34 @@ test("IP制限: 配列形式のipLimit.json設定にも対応する", async () =
         global.$loadConf = originalLoadConf;
     }
 });
+
+test("IP制限: ローカル接続(127.0.0.1や::1)では許可リストに含まれていなくてもIP制限が無効化される", async () => {
+    const originalLoadConf = global.$loadConf;
+    global.$loadConf = (name) => {
+        if (name === "ipLimit.json") {
+            return {
+                enabled: true,
+                allow: ["203.0.113.1"] // 127.0.0.1 や ::1 を含めない
+            };
+        }
+        return null;
+    };
+
+    try {
+        // 127.0.0.1 からの接続 -> 無効化(許可)
+        const resV4Local = await lambdaIndex.handler({
+            rawPath: "/hello",
+            requestContext: { http: { sourceIp: "127.0.0.1" } }
+        }, {});
+        assert.notEqual(resV4Local.statusCode, 403);
+
+        // ::1 からの接続 -> 無効化(許可)
+        const resV6Local = await lambdaIndex.handler({
+            rawPath: "/hello",
+            requestContext: { http: { sourceIp: "::1" } }
+        }, {});
+        assert.notEqual(resV6Local.statusCode, 403);
+    } finally {
+        global.$loadConf = originalLoadConf;
+    }
+});
