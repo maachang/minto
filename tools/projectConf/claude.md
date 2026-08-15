@@ -1,90 +1,116 @@
 # ${PROJECT_NAME} プロジェクト固有の情報
 
-このファイルはClaude Codeがセッション開始時に自動的に読み込みます。ここにはプロジェクト固有の事実を書く。汎用的な開発知識（言語仕様・設計原則の教科書的説明など）は書かない。
+このファイルは Claude Code や agy (Google Antigravity) がセッション開始時に自動的に読み込みます。ここにはプロジェクト固有の事実および minto フレームワークの利用ルールを記載します。
 
 # プロジェクト概要
 
-このプロジェクトは [minto](https://github.com/maachang/minto)（llrtを使ったAWS Lambda軽量化フレームワーク）を使って構築されたWebアプリケーションで、mintoは aws lambdaの url function(サーバーレスWebアプリ)を構築。
+このプロジェクトは [minto](https://github.com/maachang/minto)（LLRT を使った AWS Lambda 軽量高速化フレームワーク）を使って構築されたサーバーレス Web アプリケーション / API（AWS Lambda 関数 URL または API Gateway 連携）です。
 
 （このプロジェクト「${PROJECT_NAME}」が何をするものか、ここに記載する）
 
 # 作業領域（.claudeWork）
 
-- プロジェクト直下の `.claudeWork/` はClaude Code専用の作業領域（Gitには一切コミットしない、.gitignore済み）。
-- セッションが落ちて再起動すると直前の会話内容は失われるため、途中の提案・調査結果・未確定の方針などで残しておきたいものは、このフォルダにファイルとして書いておくこと。
-- セッション開始時、作業に関連しそうであれば `.claudeWork/` の中身を確認すること。
-- プロジェクト固有の永続的な事実はここではなく本ファイル（CLAUDE.md）に書く。`.claudeWork`はあくまで一時的な作業メモ置き場。
+- プロジェクト直下の `.claudeWork/` は AI 専用の作業領域（Git には一切コミットしない、`.gitignore` 済み）。
+- セッション再起動時の引き継ぎ用メモや、調査結果・設計方針のドラフト置き場として利用する。
+- プロジェクト固有の永続的な仕様は本ファイル（`CLAUDE.md`）に記載する。
 
-# コーディング規約
+# コーディング規約 & AI 開発ルール
 
-- 私の認識が常に正しいとは限らない。言っていることが本当に正しいか常に批判的に検証すること
-- 実際の作業（コード生成など）に着手する前に、計画しているアプローチを報告すること
-- 場当たり的、あるいは即興的で指示と関係ない狭い範囲を見ての対応を、許可無く行う事は絶対に禁止（必ず承認を得る）
-- 実装を任された際「妥当」と思われる自身の判断に基づいて「詳細仕様」（データフィルタリング手法、抽出ロジック、初期値、制限値、除外基準など）を独断で決定・補完することは禁止
-- 既存のコメントは、処理が変わって意味が通じなくなる場合以外は削除しない
-- ただし、一時的なログ出力などの実装については、役割が終わった場合は削除する
-- コメントは日本語で書く
-- ユーザーへの返答・要約・説明文は常に日本語で書く（英語での応答は禁止）
-- バグ・エラーの原因調査を依頼された場合、原因が判明しても即座に修正しない。まず原因内容と修正方針を報告し、ユーザーの承認を得てから修正に着手すること（「原因確認」と「修正」は別の許可が必要な作業として扱う）
+- **独断での仕様決定禁止**: 実装を任された際、詳細仕様（データフィルタリング手法、抽出ロジック、制限値、除外基準など）を独断で決定・補完することは禁止。必ずユーザーの承認を得ること。
+- **車輪の再発明の禁止**: minto が標準提供しているモジュール（`s3table`, `auth`, `notification`, `sdk`, `validate` 等）やグローバルヘルパー（`$log`, `$notifyError`, `$request()`, `$response()`）を優先活用し、独自ライブラリを安易に自作しない。
+- **既存コメントの維持**: 処理内容が変わって意味が通じなくなる場合を除き、既存コメントを削除しない。
+- **言語ルール**: コメントおよびユーザーへの返答・要約・説明文は常に**日本語**で記述する。
+- **バグ修正フロー**: バグやエラーの原因調査を依頼された場合、即座に修正せず、まず原因と修正方針を報告して承認を得てから修正に着手する。
+- **LLRT 互換性の維持**: Lambda 実行環境である LLRT の制約に従うこと（`for-await-of` 構文を避け `transformToString()` 等を使用、未サポート Node.js API を使わない）。
 
-# プロジェクト原則
+# minto フレームワーク原則 & アーキテクチャ
 
-- 対象プロジェクトディレクトリは、minto環境上でのプロジェクト実装なので、minto本体である `${MINTO_HOME}` 環境変数以下のプログラムが実装上必要となる。
-  - ${MINTO_HOME}/lambda/src/index.js: 実際に aws lambda で関数URLとして実行されるハンドラ本体(デプロイ時は`mtpk`により`index.cjs`にリネームされる)。
-  - ${MINTO_HOME}/modules: mintoを支援するモジュール群が格納されており、これらは $loadLib("モジュール.js") でフラットに呼び出しができる。
-    - **注意**: これは`minto`コマンドによる**ローカル実行時のみ**の挙動(`${MINTO_HOME}/modules`配下を自動フォールバック検索する)。`mtpk`でAWS Lambda用にデプロイパッケージ化する場合、`modules/`配下は`-t {カテゴリ名}`(例: `-t s3table`)や`-t all`で明示的に指定したものしかzipに含まれない。ローカルでは動くのにLambda上で`$loadLib`が失敗する場合、このデプロイオプション指定漏れを疑うこと。
-    - **禁止**: `modules/`配下のファイルを本プロジェクトの`lib/`配下にコピーして使うこと。`$loadLib`が自動フォールバック検索するため、コピーは不要かつ二重管理・追随漏れの原因になる。
-  - ${MINTO_HOME}/public: mintoが提供する認証画面等の既製ページ・共通JS(例: `public/auth/mfa/`のMFA登録・ログイン画面一式、`public/auth/js/qrcode.js`)が格納されている。本プロジェクトの`public/`配下に該当パスのファイルが無い場合、ローカル実行時(`minto`コマンド)・デプロイ後(Lambda)のいずれも自動的に`${MINTO_HOME}/public`側の同パスへフォールバックされ、そのまま動作する。
-    - **禁止**: `${MINTO_HOME}/public`配下のファイル(例: `public/auth/mfa/*.mt.html`)を本プロジェクトの`public/`配下にコピーしたり、ラッパーページを自作したりすること。フォールバックの仕組みにより、リンク先URL(例: `/auth/mfa/viewMfa`)やフォームのaction先をそのまま指定するだけで、コピー・ラッパー無しに利用できる。
-    - **注意**: `mtpk`でデプロイパッケージ化する場合、`public/js`や`public/css`のように`modules/`側に同名ディレクトリが無いものは常にzipへ含まれるが、`public/auth`のように`modules/auth`など同名ディレクトリが`modules/`側にも存在するものは、対応する`-t {カテゴリ名}`(例: `-t auth`)や`-t all`を指定しないとzipに含まれない。
-  - ${MINTO_HOME}/bin: mintoのコマンドが格納されており、これらはPATHが通ってるので、フラットに実行が可能。
-  - ${MINTO_HOME}/docs: mintoフレームワーク自体の機能ドキュメントが格納されている。実装で迷ったらまずここを参照すること。`howto.md`(mt.js/jhtml記法・$loadLib等の説明)、`setup.md`(セットアップ手順)、`s3MasterTable.md`/`s3-row-store-design.md`(s3table関連)、`localAws.md`(ローカルAWSエミュレータ、S3+SQS)、`lambda.md`(AWS Lambdaデプロイ手順)、`testing.md`(テスト方針)など。
-- これらを前提として、本プロジェクトの実装を行う。
+本プロジェクトは minto 環境（`${MINTO_HOME}`）上で動作します。
 
-（プロジェクト固有のコーディングルールがあればこの内容を削除して記載する）
+- **`${MINTO_HOME}/lambda/src/index.js`**: Lambda 関数 URL のリクエストハンドラ本体（デプロイ時は `mtpk` により `index.cjs` に変換）。
+- **`${MINTO_HOME}/modules/`**: 共通モジュール群。`$loadLib("モジュール名.js")` でフラットにロード可能。
+  - **自動フォールバック**: ローカル実行時は `${MINTO_HOME}/modules/` 配下を自動検索するため、プロジェクトの `lib/` 配下にファイルを**コピーしてはならない**。
+  - **デプロイ時注意**: `mtpk` でデプロイ zip を作成する際、必要なモジュールカテゴリ（例: `-t s3table -t auth`）または `-t all` を明示的に指定する必要がある（`checkModules` コマンドで事前検査可能）。
+- **`${MINTO_HOME}/public/`**: minto が提供する既製画面・静的アセット（例: `public/auth/mfa/` の MFA 画面一式など）。
+  - プロジェクトの `public/` に同名ファイルがない場合、自動的に `${MINTO_HOME}/public/` 側へフォールバックされるため、コピーやラッパー作成は不要。
+- **`${MINTO_HOME}/bin/`**: minto コマンド群（PATH 登録済み）。
+- **`${MINTO_HOME}/docs/`**: フレームワークのドキュメント（`howto.md`, `s3MasterTable.md`, `s3-row-store-design.md`, `localAws.md`, `lambda.md` 等）。
+
+---
+
+# グローバルオブジェクト & 組み込みヘルパー
+
+minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事前定義なしで利用できます。
+
+| ヘルパー | 説明 | 主なメソッド / プロパティ |
+|---|---|---|
+| `$request()` | リクエスト情報の取得 | `.query(key)`, `.param(key)`, `.params()`, `.path()`, `.method()`, `.headers()`, `.header(key)`, `.body()`, `.json()`, `.ip()`, `.cookie(key)` |
+| `$response()` | レスポンスの生成・返却 | `.json(data, status?)`, `.html(html, status?)`, `.redirect(url, status?)`, `.cookie(name, val, opt?)`, `.header(key, val)`, `.status(code)` |
+| `$log` | 構造化 JSON ログ出力 | `$log.info(...)`, `$log.warn(...)`, `$log.error(...)`, `$log.debug(...)`<br>※ `$requestId()`, `path`, `method` が自動付与される。 |
+| `$notifyError(err, context?, opt?)` | Slack への一元化エラー通知 | Webhook URL (`SLACK_WEBHOOK_URL`) または Slack Bot Token を自動判別してスタックトレース付きリッチ通知を送信 |
+| `$loadLib("name.js")` | モジュールのロード | `lib/` → `${MINTO_HOME}/modules/` の順で検索してロード |
+| `$loadConf("conf名")` | 設定 JSON の取得 | `conf/{conf名}.json` を取得（`.local.json` / `.test.json` があれば自動優先） |
+| `$view(path, data)` | JHTML の描画 | `public/` 配下の JHTML テンプレートをサーバーサイドレンダリング |
+| `$requestId()` | リクエスト ID | Snowflake / Lambda リクエスト一意 ID |
+| `$require(mod)` | Node 標準ライブラリ require | `crypto`, `path`, `fs` 等の安全な呼び出し |
+
+---
+
+# 主要モジュール クイックリファレンス (`$loadLib`)
+
+### 1. `s3table`（S3 データストア & ページネーション）
+- **`s3MasterTable.js`**: テーブル全体を 1 つの JSON として S3 に保存。**書き込み少・読み込み多**向け（全件キャッシュ・インメモリ高速検索）。
+- **`s3IndexTable.js`**: 1 行 = 1 ファイルで S3 保存。**書き込み頻度高**向け（物理インデックスによる $O(1)$ 検索、書き込み競合なし）。
+- **`paginate.js`**:
+  - `paginate.query(db, tableName, options)`: S3 `StartAfter` 直結の高速カーソル式（$O(1)$）およびオフセット式ページネーション。
+  - `paginate.url(url, cursorOrPage, paramName)`: SSR / リンク生成用ヘルパー。
+- **`s3presign.js`**: AWS SigV4 署名付き URL 生成（Direct to S3 アップロード / 一時ダウンロード）。
+- **`s3Lock.js`**: S3 `IfNoneMatch` による分散排他ロック。
+- **`seqId.js`**: Snowflake ID（固定長 16 桁 hex）採番。
+
+### 2. `auth`（認証・認可 & セキュリティ）
+- **`session.js`**: S3 ベースセッション管理（Cookie 自動連携、1 実行毎キャッシュ内蔵）。
+- **`rbac.js`**: ロールベース認可（`hasRole`, `hasPermission`, `routeGuard`、ロール階層継承）。
+- **`password.js`**: パスワードハッシュ化（SHA-256 + salt）。
+- **`jwt.js`**: JWT 署名・検証（HS256）。
+- **`cors.js`**: CORS プリフライト / レスポンスヘッダー組み立て。
+
+### 3. `notification`（ログ & 通知）
+- **`log.js`**: 構造化 JSON ログ出力。
+- **`notifyError.js`**: Slack エラー通知。
+- **`sendSlack.js`**: Slack メッセージ送信（Incoming Webhook & Bot Token `chat.postMessage`）。
+- **`sendGithub.js`**: GitHub Issue 自動起票。
+
+### 4. `validate` & `csv` & `sdk`
+- **`validate.js`**: オブジェクトのスキーマ検証（string, int, float, boolean, date, enum, pattern, custom）。
+- **`csv.js` / `memoryTable.js`**: CSV パース・エクスポート、インメモリソート・集計。
+- **`sdk/*.js`**: AWS SDK v3 ラッパー（`sqsSdk`, `dynamoDbSdk`, `sesSdk`, `kmsSdk`, `secretsManagerSdk`, `parameterStoreSdk`, `snsSdk`）。
+
+---
 
 # ローカル実行・デプロイ手順
 
-`${MINTO_HOME}/bin` にPATHが通っているため、以下のコマンドがそのままシェルで
-実行できる(詳細は`${MINTO_HOME}/bin/README.md`を参照)。
+`${MINTO_HOME}/bin` に PATH が通っているため、以下のコマンドがそのまま実行できます。
 
-- `npm install`: `package.json`記載の`@aws-sdk/client-s3`をインストールする
-  (`modules/s3table`利用時に必要)。
-- `minto`: ローカルでURL Function相当の検証サーバーを起動する
-  (デフォルト http://127.0.0.1:3210/)。カレントディレクトリ(本プロジェクト
-  ディレクトリ)を対象として実行すること。
-- `mtpk [-t {カテゴリ名} ...] [-t all] [-m] [-e] [-z] [-c]`: AWS Lambda
-  デプロイ用のzip(`mtpack.zip`)を作成する。`modules/`配下を含めたい場合は
-  `-t`指定が必須(前述「コーディング規約」の注意を参照)。
-- `checkModules [-v/--verbose]`: `public/**/*.mt.js`・`public/**/*.mt.html`・
-  `lib/**/*.js`内の`$loadLib("xxx.js")`呼び出しを走査し、参照先が
-  プロジェクトの`lib/`配下にあるか、`${MINTO_HOME}/modules/{カテゴリ名}/`
-  配下にのみ存在するか(`mtpk`実行時に対応する`-t {カテゴリ名}`指定が
-  必要)、どちらにも見つからないかをレポートする。`mtpk`でのデプロイ前に、
-  `-t`指定漏れによる本番(AWS Lambda)限定の`$loadLib`失敗を検出するために
-  実行すること。
-- `localAws [-p {ポート}] [-d {ディレクトリ}]`: 実AWSの代わりにファイル/
-  ディレクトリ・メモリベースで動作確認できるローカルAWSエミュレータ(S3+SQS)を
-  起動する(デフォルトポート`9911`)。`modules/s3table`・`modules/sdk/sqsSdk.js`
-  の動作確認時に、実際のAWS Credentialを用意せず検証したい場合に使う。
-- `tableTool -t <master|index> -c <createTable|dropTable|alterTable|alterIndex> [-n <テーブル名>]`:
-  `modules/s3table`(s3MasterTable.js/s3IndexTable.js)が管理するテーブル定義を
-  作成・変更・削除する。事前に`conf/table/master.json`・`conf/table/index.json`
-  へ「あるべきテーブル定義」を記載してから実行すること。
-- `localSqsPoller -q <キュー名> [-e {localAwsのURL}] [-i {ポーリング間隔ms}]`:
-  実際のAWSの「SQSトリガー→Lambda」呼び出し(イベントソースマッピングによる
-  ポーリング)をローカルで再現する。`localAws`のキューをポーリングし、
-  `public/runSqs.mt.js`の`handler()`を呼び出す。
+- `npm install`: `@aws-sdk/client-s3` のローカルインストール。
+- `minto`: ローカル開発サーバー起動（デフォルト `http://127.0.0.1:3210/`）。
+  - **ホットリロード / ライブリロード内蔵**: `public/`, `lib/`, `conf/` の変更はサーバー再起動不要で即座に反映される。
+- `localAws [-p 9911] [-d .localS3]`: ローカル S3 + SQS エミュレータ。
+- `tableTool -t <master|index> -c <createTable|alterTable|alterIndex|dropTable|backupTable|restoreTable>`: S3 テーブル定義の管理・マイグレーション。
+- `checkModules`: デプロイ前の `$loadLib` 依存関係・`-t` オプション漏れチェック。
+- `mtpk [-t {カテゴリ名} ...] [-t all]`: AWS Lambda デプロイ用 zip (`mtpack.zip`) の作成。
+
+---
 
 # ディレクトリ構成
 
 | ディレクトリ・ファイル | 役割 |
-|-------------|------|
-| public | HTMLなどのWebコンテンツ・動的コンテンツ(`*.mt.js`/`*.mt.html`)の配置先 |
-| lib | `$loadLib()`で読み込むモジュールJSの配置先 |
-| conf | ローカル実行(`minto`コマンド)・`$loadConf()`で読み込む設定JSON(`env.local.json`/`minto.json`/`table/*.json`等)の配置先。任意の`xxx.json`に対して同名の`xxx.local.json`を置くとローカル実行時のみそちらが優先され、`xxx.test.json`を置くと環境変数`MINTO_TEST_MODE`設定時のみそちらが優先される(`xxx.local.json`は無視される)。どちらも`mtpk`のデプロイzipには含まれない。`tableTool`・`localSqsPoller`のように`lambda/src/index.js`を直接呼び出すツールでも同様に効く(`tools/lambdaOverrides.js`が上書きするため) |
-| package.json | `modules/s3table`が必要とする`@aws-sdk/client-s3`のローカルインストール用(`npm install`) |
-| .claude/CLAUDE.md | 本ファイル |
+|---|---|
+| `public/` | Web コンテンツ・動的スクリプト (`*.mt.js` / `*.mt.html`) の配置先 |
+| `lib/` | プロジェクト固有の `$loadLib()` モジュールの配置先 |
+| `conf/` | 設定 JSON (`minto.json`, `table/*.json`, `notify.json` 等) の配置先。<br>`*.local.json` はローカル実行時優先、`*.test.json` はテスト時優先（デプロイ zip からは自動除外）。 |
+| `package.json` | ローカル開発用依存関係 |
+| `.claude/CLAUDE.md` | 本ファイル |
 
 # あえてやってないこと
 
