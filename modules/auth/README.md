@@ -699,4 +699,102 @@ if (!csrf.verify()) {
 - 環境変数 `CSRF_HEADER_NAME`(省略時 `"x-csrf-token"`) — 検証対象のリクエストヘッダー名。
 - セッションCookie名の解決は `session.js` と同じロジック(環境変数 `MINTO_COOKIE_SESSION_NAME`、省略時 `"minto_sid"`)です。
 
+---
+
+# ◆◆◆ rbac.js ◆◆◆
+
+ロールベース認可(RBAC: Role-Based Access Control)ヘルパーモジュールです。
+ユーザーのロール(`admin`, `editor`, `viewer` 等)や権限(`users:write`, `posts:read` 等)に基づくアクセス制御、ロール階層(継承)、ワイルドカード権限マッチング(`users:*`, `*`)を提供します。
+
+`public/filter.mt.js` でのグローバルアクセス制御や、各 `*.mt.js` ハンドラ内での権限ガードとして利用できます。
+設定ファイル `conf/rbac.json` があれば自動ロードし、未設定時でも `admin -> editor -> viewer` のデフォルト階層でそのまま利用可能です。
+
+---
+
+## エクスポート
+
+| 関数 | 説明 |
+|---|---|
+| `exports.hasRole(user, requiredRoles, options)` | ユーザーが指定ロール(階層継承含む)を持つか判定(`boolean`) |
+| `exports.hasPermission(user, requiredPermissions, options)` | ユーザーが指定権限(ロール由来/個別付与/ワイルドカード含む)を持つか判定(`boolean`) |
+| `exports.can(user, action, options)` | `hasPermission` のエイリアス |
+| `exports.requireRole(requiredRoles, options)` | 現在のリクエストユーザーのロールを検証し、不足時は 401/403 設定 or リダイレクト |
+| `exports.requirePermission(requiredPermissions, options)` | 現在のリクエストユーザーのパーミッションを検証し、不足時は 401/403 設定 or リダイレクト |
+| `exports.getUser()` | 現在のセッション(`session.js`)からログインユーザー情報を取得 |
+| `exports.create(config)` | カスタム設定を持つ独立した RBAC インスタンスを生成 |
+
+---
+
+## 設定ファイル (`conf/rbac.json`) 例
+
+```json
+{
+  "roles": {
+    "admin": {
+      "inherits": ["editor"],
+      "permissions": ["*"]
+    },
+    "editor": {
+      "inherits": ["viewer"],
+      "permissions": ["posts:*", "comments:*"]
+    },
+    "viewer": {
+      "inherits": [],
+      "permissions": ["posts:read", "comments:read"]
+    }
+  },
+  "defaultRole": "viewer",
+  "loginUrl": "/login",
+  "forbiddenUrl": "/forbidden"
+}
+```
+
+---
+
+## 使用例
+
+### 1. `filter.mt.js` でのルーティング制御 (ガード)
+
+```javascript
+const rbac = $loadLib("rbac.js");
+
+exports.handler = async function() {
+    const req = $request();
+    const path = req.path();
+
+    // 管理者専用エンドポイントの保護
+    if (path.startsWith("/admin")) {
+        const ok = await rbac.requireRole("admin");
+        if (!ok) return false; // 401/403が自動設定される
+    }
+
+    // 編集者専用エンドポイントの保護
+    if (path.startsWith("/editor")) {
+        const ok = await rbac.requireRole(["editor", "admin"]);
+        if (!ok) return false;
+    }
+
+    return true;
+};
+```
+
+### 2. `*.mt.js` 内でのきめ細かな権限判定 (Boolean)
+
+```javascript
+const rbac = $loadLib("rbac.js");
+
+exports.handler = async function() {
+    const user = await rbac.getUser();
+    
+    // 削除権限があるかチェック
+    if (!rbac.can(user, "posts:delete")) {
+        $response().status(403, "Forbidden");
+        return { error: "権限がありません" };
+    }
+
+    // 削除処理...
+    return { success: true };
+};
+```
+
 # ◆◆◆ EOF ◆◆◆
