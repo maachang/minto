@@ -18,7 +18,7 @@
   - `parameterStoreSdk.js`: AWS Systems Manager Parameter Storeの取得ラッパー。getのみ提供、TTL付きメモリキャッシュ(デフォルト60秒)を内蔵.
   - `sesSdk.js`: Amazon SESのメール送信ラッパー。sendのみ提供(text/html本文のシンプル送信、添付ファイル非対応).
   - `kmsSdk.js`: AWS KMSのエンベロープ暗号化ラッパー。encrypt/decryptを提供。ローカルのAES-256-GCM暗号化にはllrtの制約上crypto.subtle(WebCrypto)を使用.
-- `notification`: よく使う slack通知やgithubリポジトリのissue作成を行うライブラリ群.
+- `notification`: 構造化ログ(`log.js`)、一元化エラー通知(`notifyError.js`)、Slack通知(`sendSlack.js`)、GitHub issue作成(`sendGithub.js`)などの通知・ログ系ライブラリ群.
 - `csv`: CSVファイルのパーサーやCSVエクスポート系ライブラリ、メモリーテーブル機能.
 - `auth`: パスワードハッシュ化、S3ベースのセッション管理、ロールベース認可(RBAC: `rbac.js`)、CORS共通ヘルパー、JWT署名/検証(HS256のみ)など認証まわりのライブラリ群(`session.js`は`s3table/s3sdk.js`に依存).
 - `http`: `$response()`のJSON/エラーレスポンス組み立てを共通化するヘルパー群.

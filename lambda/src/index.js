@@ -287,6 +287,64 @@
         return null;
     }
 
+    // 構造化ログ(JSON Logger).
+    let _logModule = null;
+    const _getLog = function () {
+        if (_logModule == null) {
+            try {
+                _logModule = _g.$loadLib("log.js");
+            } catch (e) {
+                const _simpleLog = function (msg, data, opt) {
+                    console.log(JSON.stringify({ time: (new Date()).toISOString(), level: "INFO", message: msg, data: data }));
+                };
+                _simpleLog.info = _simpleLog;
+                _simpleLog.warn = function (msg, data) { console.warn(JSON.stringify({ time: (new Date()).toISOString(), level: "WARN", message: msg, data: data })); };
+                _simpleLog.error = function (msg, data) { console.error(JSON.stringify({ time: (new Date()).toISOString(), level: "ERROR", message: msg, data: data })); };
+                _simpleLog.debug = _simpleLog;
+                _simpleLog.trace = _simpleLog;
+                _logModule = _simpleLog;
+            }
+        }
+        return _logModule;
+    };
+    _g.$log = function (message, data, options) {
+        return _getLog()(message, data, options);
+    };
+    _g.$log.info = function (message, data, options) {
+        return _getLog().info(message, data, options);
+    };
+    _g.$log.warn = function (message, data, options) {
+        return _getLog().warn(message, data, options);
+    };
+    _g.$log.error = function (message, data, options) {
+        return _getLog().error(message, data, options);
+    };
+    _g.$log.debug = function (message, data, options) {
+        return _getLog().debug(message, data, options);
+    };
+    _g.$log.trace = function (message, data, options) {
+        return _getLog().trace(message, data, options);
+    };
+
+    // 一元化エラー通知(Slack対応).
+    let _notifyModule = null;
+    const _getNotifyError = function () {
+        if (_notifyModule == null) {
+            try {
+                _notifyModule = _g.$loadLib("notifyError.js");
+            } catch (e) {
+                _notifyModule = async function (err, ctx) {
+                    _g.$log.error("Unhandled Error", err, ctx);
+                    return { ok: false, reason: "notifyError module not loaded" };
+                };
+            }
+        }
+        return _notifyModule;
+    };
+    _g.$notifyError = async function (err, context, options) {
+        return await _getNotifyError()(err, context, options);
+    };
+
     // IPv4文字列を32bit無符号整数に変換.
     const _parseIPv4 = function (ip) {
         if (typeof ip !== "string") return null;

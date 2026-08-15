@@ -171,9 +171,85 @@ console.log(issue.url);
 
 ## 依存・設定・注意事項
 
-- 他モジュールへの依存(`$loadLib`)は無し。`fetch` のみ利用。
-- 認証トークンは関数引数 `token` で明示的に渡す必要がある(環境変数からの自動取得機能は無い)。
-- HTTPステータスが400以上の場合は `Error("HTTP status ... error occurred: ...")` をthrowする。
 - 外部API(GitHub)呼び出しのため、テスト対象外(モック無しの単体テストは想定されていない)。
+
+---
+
+# ◆◆◆ log.js ◆◆◆
+
+CloudWatch Logs Insights やローカルでの解析が容易な、JSON 1行形式の構造化ログ出力モジュールです。
+`$log(message, data)` や `$log.info(...)`、`$log.warn(...)`、`$log.error(...)`、`$log.debug(...)`、`$log.trace(...)` としてグローバルおよび `$loadLib("log.js")` から利用可能です。
+
+リクエストコンテキスト(`$requestId()`, `$request().path()`, `$request().method()`)およびエラーオブジェクト(`name`, `message`, `stack`, `code`, `status`)を自動的にシリアライズして JSON 出力します。
+
+---
+
+## 主なメソッド
+
+| メソッド | 説明 |
+|---|---|
+| `$log(message, data, options)` / `$log.info(...)` | INFOレベルの構造化ログを出力 |
+| `$log.warn(message, data, options)` | WARNレベルの構造化ログを出力 |
+| `$log.error(message, dataOrError, options)` | ERRORレベルの構造化ログを出力(Errorスタック自動付与) |
+| `$log.debug(message, data, options)` | DEBUGレベルの構造化ログを出力 |
+| `$log.trace(message, data, options)` | TRACEレベルの構造化ログを出力 |
+
+---
+
+## 環境変数によるログレベル制御
+
+環境変数 `LOG_LEVEL` (または `MINTO_LOG_LEVEL`) で出力最小レベルを指定できます。
+- `"trace"`, `"debug"`, `"info"`(デフォルト), `"warn"`, `"error"`, `"none"`
+
+---
+
+# ◆◆◆ notifyError.js ◆◆◆
+
+発生した例外を一元的に構造化ログ(`$log.error`)へ記録し、Slackへ即時エラーアラートを送信するモジュールです。
+グローバル `$notifyError(err, context, options)` または `$loadLib("notifyError.js")` から利用可能です。
+
+Incoming Webhook URL (`SLACK_WEBHOOK_URL` / `SLACK_ERROR_WEBHOOK_URL`) または Slack Bot Token (`SLACK_TOKEN` / `SLACK_CHANNEL`) のどちらの設定でも自動対応します。
+
+---
+
+## 主なメソッド
+
+| メソッド | 説明 |
+|---|---|
+| `$notifyError(err, context, options)` | 例外をログ出力し、Slackへリッチアラートを送信 |
+| `notifyError.catch(fn, context, options)` | 非同期関数のエラーを自動検知・通知して再throwするラッパー |
+
+---
+
+## 設定項目
+
+| 設定元 | 項目名 | 説明 |
+|---|---|---|
+| 環境変数 | `SLACK_WEBHOOK_URL` / `SLACK_ERROR_WEBHOOK_URL` | Slack Incoming Webhook URL |
+| 環境変数 | `SLACK_TOKEN` | Slack Bot Token (`xoxb-...`) |
+| 環境変数 | `SLACK_CHANNEL` / `SLACK_ERROR_CHANNEL` | 送信先チャンネル(デフォルト: `#alerts`) |
+| `conf/notify.json` | `webhookUrl`, `slackToken`, `channel`, `appName` | 設定ファイルでの定義 |
+
+※ WebhookやTokenが未設定の環境(ローカル検証時など)でも例外でクラッシュせず、安全にスキップしてログ出力のみ行います。
+
+---
+
+## 使用例
+
+```javascript
+// 1. try-catch での個別エラー通知
+try {
+    await processOrder(orderId);
+} catch (err) {
+    await $notifyError(err, { orderId: orderId, userId: user.id });
+    $response().status(500);
+    return { error: "注文処理中にエラーが発生しました" };
+}
+
+// 2. 自動キャッチラッパー
+const safeHandler = $loadLib("notifyError.js").catch(async () => {
+    // 処理...
+}, { contextInfo: "batch-job" });
+```
 
 # ◆◆◆ EOF ◆◆◆
