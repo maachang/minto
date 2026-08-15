@@ -12,6 +12,10 @@ AWS-SDK-V3(`@aws-sdk/client-s3`)を利用した、S3への最低限のI/O(put/ge
 | `exports.delete(bucket, prefix, key, options)` | オブジェクトを削除する |
 | `exports.get(bucket, prefix, key, options)` | オブジェクトを取得する |
 | `exports.list(bucket, prefix, options)` | prefix以下のオブジェクト一覧を取得する |
+| `exports.createPresignedUrl(method, bucket, prefix, key, options)` | 任意のHTTPメソッドに対する署名付きURL(Pre-signed URL)を生成する |
+| `exports.createPresignedPutUrl(bucket, prefix, key, options)` | アップロード用(PUT)の署名付きURLを生成する |
+| `exports.createPresignedGetUrl(bucket, prefix, key, options)` | ダウンロード用(GET)の署名付きURLを生成する |
+| `exports.createPresignedDeleteUrl(bucket, prefix, key, options)` | 削除用(DELETE)の署名付きURLを生成する |
 
 いずれの関数も第一引数`bucket`が必須で、`options`で接続先リージョン・クレデンシャル・エラー時の挙動を共通的に制御できます。
 
@@ -502,5 +506,75 @@ const stats = await db.select("users", {
 - バックアップ/リストア系API(`backupTable`/`listBackups`/`restoreTable`/`previewRestore`/`pruneBackups`/`describeBackup`/`restoreBackupAs`)は`s3MasterTable.js`と共通の物理コピー方式(S3の`CopyObject`は使わずget/put経由で複製)です。行データに加えてインデックスエントリも複製する点が`s3MasterTable.js`との違いです。
 - AWS Lambda環境では`@aws-sdk/client-s3`を利用するため`llrt-lambda-{cpu名}-full-sdk.zip`のレイヤーが必要です。
 - `createTable`/`dropTable`/`alterColumns`/`createIndex`/`dropIndex`等のテーブル管理操作は`bin/tableTool`コマンドから操作する想定です(詳細は`bin/README.md`のtableToolコマンド節を参照)。
+
+---
+
+# ◆◆◆ s3presign.js ◆◆◆
+
+S3の署名付きURL(Pre-signed URL)生成モジュール(AWS SigV4)です。Lambda Function URLのペイロード上限(6MB)を回避し、ブラウザからS3への直接アップロード(PUT)や、一時的なセキュアダウンロード(GET)を行うためのURLを生成します。
+
+外部の追加ライブラリ(`@aws-sdk/s3-request-presigner`等)に依存せず、Node.js標準/LLRT内蔵の`crypto`(HMAC-SHA256 / SHA256)のみで完全なAWS SigV4クエリ認証URLを生成するため、超軽量・128MBメモリ環境で高速に動作します。`tools/localAws.js`(ローカルAWSエミュレータ)および実AWS S3に完全対応しています。
+
+---
+
+## エクスポート
+
+| 関数 | 説明 |
+|---|---|
+| `exports.createPresignedUrl(method, bucket, prefix, key, options)` | 指定HTTPメソッドの署名付きURLを生成 |
+| `exports.createPresignedPutUrl(bucket, prefix, key, options)` | アップロード用(PUT)の署名付きURLを生成 |
+| `exports.createPresignedGetUrl(bucket, prefix, key, options)` | ダウンロード用(GET)の署名付きURLを生成 |
+| `exports.createPresignedDeleteUrl(bucket, prefix, key, options)` | 削除用(DELETE)の署名付きURLを生成 |
+
+※ `s3sdk.js` からも同名関数および `getPresigned*` のショートハンドとして利用可能です。
+
+---
+
+## 主な引数・オプション (`options`)
+
+| オプション | 型 | 説明 |
+|---|---|---|
+| `expiresIn` | `number` | 有効期限(秒)。デフォルト: `900`(15分)、最大: `604800`(7日間) |
+| `region` | `string` | 接続先リージョン(デフォルト: `"ap-northeast-1"`) |
+| `credentials` | `object` | `{access_key, secret_access_key, session_token}`(省略時は環境変数より自動取得) |
+| `endpoint` | `string` | カスタムエンドポイント(例: `http://localhost:9911`)。環境変数`MINTO_LOCAL_S3_ENDPOINT`があれば自動適用 |
+| `forcePathStyle` | `boolean` | パス形式URLを強制するかどうか(ローカル/IP指定時は自動で`true`) |
+| `contentType` | `string` | PUT時のContent-Type(指定時は`x-amz-signedheaders`に含まれ、クライアント側のContentType偽装を防止) |
+| `headers` | `object` | 署名対象に含める追加HTTPヘッダー |
+| `responseContentType` | `string` | GET時のレスポンス`Content-Type`上書きクエリパラメータ |
+| `responseContentDisposition` | `string` | GET時のレスポンス`Content-Disposition`上書き(ファイル名強制ダウンロード指定等) |
+| `queryParams` | `object` | 署名に含める追加クエリパラメータ |
+| `noError` | `boolean` | `false`の場合、エラー時に例外をthrow(デフォルト: `true`＝`null`返却) |
+
+---
+
+## 使用例
+
+### 1. アップロード用URL (Direct to S3)
+
+```javascript
+const s3presign = $loadLib("s3presign.js");
+
+// アップロード用URL (15分有効、PNG画像指定)
+const uploadUrl = s3presign.createPresignedPutUrl("my-bucket", "uploads/2026", "photo.png", {
+    contentType: "image/png",
+    expiresIn: 900
+});
+
+// フロントエンド(ブラウザ)側で直接PUT
+// await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": "image/png" }, body: fileBlob });
+```
+
+### 2. ダウンロード用URL (ファイル名指定ダウンロード)
+
+```javascript
+const s3presign = $loadLib("s3presign.js");
+
+// ダウンロード用URL (ファイル名を"invoice_202608.pdf"としてダウンロード)
+const downloadUrl = s3presign.createPresignedGetUrl("my-bucket", "invoices", "inv_001.pdf", {
+    responseContentDisposition: 'attachment; filename="invoice_202608.pdf"',
+    expiresIn: 300
+});
+```
 
 # ◆◆◆ EOF ◆◆◆

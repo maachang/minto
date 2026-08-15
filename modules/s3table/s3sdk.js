@@ -289,4 +289,55 @@
             return { "Contents": [], "IsTruncated": false };
         }
     }
+
+    // s3presignモジュール (遅延ロード).
+    let _s3presign = null;
+    const _getPresign = function () {
+        if (_s3presign == null) {
+            try {
+                _s3presign = $loadLib("s3presign.js");
+            } catch (e) {
+                _s3presign = require("./s3presign.js");
+            }
+        }
+        return _s3presign;
+    };
+
+    // 指定BucketのPrefix+Keyに対する署名付きURL(Pre-signed URL)を生成.
+    // method 対象のHTTPメソッド("GET", "PUT", "DELETE", "HEAD")
+    // bucket 対象のBucket名を設定します.
+    // prefix 対象のprefixを設定します.
+    // key 対象のkeyを設定します.
+    // options 任意のオプションを設定します.
+    //         expiresIn: 有効期限秒数(デフォルト: 900)
+    //         contentType: PUT時のContent-Type
+    //         responseContentType: GET時のContent-Type上書き
+    //         responseContentDisposition: GET時のContent-Disposition上書き
+    //         region: 接続先リージョン(デフォルト: 東京)
+    //         credentials: access_key, secret_access_key, session_token 等
+    //         noError: false の場合例外返却(デフォルト: true)
+    exports.createPresignedUrl = function (method, bucket, prefix, key, options) {
+        return _getPresign().createPresignedUrl(method, bucket, prefix, key, options);
+    };
+
+    // アップロード用署名付きURL (PUT)
+    exports.createPresignedPutUrl = function (bucket, prefix, key, options) {
+        return _getPresign().createPresignedPutUrl(bucket, prefix, key, options);
+    };
+
+    // ダウンロード用署名付きURL (GET)
+    exports.createPresignedGetUrl = function (bucket, prefix, key, options) {
+        return _getPresign().createPresignedGetUrl(bucket, prefix, key, options);
+    };
+
+    // 削除用署名付きURL (DELETE)
+    exports.createPresignedDeleteUrl = function (bucket, prefix, key, options) {
+        return _getPresign().createPresignedDeleteUrl(bucket, prefix, key, options);
+    };
+
+    // ショートハンド
+    exports.getPresignedUrl = exports.createPresignedUrl;
+    exports.getPresignedPutUrl = exports.createPresignedPutUrl;
+    exports.getPresignedGetUrl = exports.createPresignedGetUrl;
+    exports.getPresignedDeleteUrl = exports.createPresignedDeleteUrl;
 })();
