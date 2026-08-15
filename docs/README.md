@@ -11,9 +11,13 @@
 - 開発・動作確認
   - mintoのテスト環境: https://github.com/maachang/minto/blob/main/docs/testing.md
 
-- モジュール（S3データベース。書き込み頻度に応じて使い分ける）
+- モジュール（S3データベース・認証・ログ・ヘルパー）
+  - モジュール一覧と利用方法: https://github.com/maachang/minto/blob/main/modules/README.md
   - s3MasterTable.js（書き込み頻度が少なく読み込み頻度が多い用途向け）: https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md
   - s3IndexTable.js（書き込み頻度が多い用途向け）設計ドキュメント: https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md
+  - s3tableモジュール詳細 (s3sdk / s3presign / paginate / s3Lock / seqId): https://github.com/maachang/minto/blob/main/modules/s3table/README.md
+  - 構造化ログ & 一元化エラー通知 ($log / $notifyError / sendSlack): https://github.com/maachang/minto/blob/main/modules/notification/README.md
+  - ロールベース認可 (RBAC / routeGuard): https://github.com/maachang/minto/blob/main/modules/auth/README.md
 
 - 認証（GoogleWorkspace企業の社内Webアプリ向け）
   - GASを使った擬似SSOログイン: https://github.com/maachang/minto/blob/main/docs/gasAuth.md

@@ -333,6 +333,8 @@ S3の`ListObjectsV2`はカーソル（`ContinuationToken`）ベースのペー�
 
 これらはいずれも「補助的なページング機能」という位置づけの範囲内の制約として許容する。
 
+> **Note (高速ページング)**: 大量件数の連続ページングやWeb API/無限スクロール用途には、S3の `StartAfter` 機構を直接活用してスキップ不要でO(1)読み出しを行う **`modules/s3table/paginate.js`（カーソル式ページネーションヘルパー）** の利用を推奨します。詳細は `modules/s3table/README.md` を参照してください。
+
 ### GROUP BY / 集計関数（SUM, COUNT, AVG, MIN, MAX）
 
 S3側で集計はできないため、`memoryTable.js`と同様に「インデックスで絞り込んだ結果セットを取得してから、アプリ側（JS）で集計する」方式にする。
