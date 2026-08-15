@@ -68,16 +68,16 @@
     'use strict';
 
     // S3の低レベル操作(put/get/delete/list).
-    const s3sdk = $loadLib("s3sdk.js");
+    const s3sdk = typeof $loadLib === "function" ? $loadLib("s3sdk.js") : require("./s3sdk.js");
 
     // Snowflake ID方式のユニークID発行(autoIncrementの代替).
-    const seqId = $loadLib("seqId.js");
+    const seqId = typeof $loadLib === "function" ? $loadLib("seqId.js") : require("./seqId.js");
 
     // テーブル単位の排他ロック(transaction用).
-    const s3Lock = $loadLib("s3Lock.js");
+    const s3Lock = typeof $loadLib === "function" ? $loadLib("s3Lock.js") : require("./s3Lock.js");
 
     // crypto(行ファイル名のランダム部分生成用).
-    const crypto = $require("crypto");
+    const crypto = typeof $require === "function" ? $require("crypto") : require("crypto");
 
     // NULL値の予約トークン.
     // "~" はhexエンコード(0-9a-f)には出現しない文字なので、
@@ -798,7 +798,7 @@
         };
 
         // 指定条件(1インデックス分)にマッチする行ファイル名の配列を取得する.
-        const _scanIndex = async function (tableName, schema, indexName, cond) {
+        const _scanIndex = async function (tableName, schema, indexName, cond, options) {
             const columns = schema.indexes[indexName];
             if (columns == null) {
                 throw new Error("Unknown index: " + indexName);
@@ -889,6 +889,10 @@
                 }
             }
 
+            if (options && options.startAfterKey) {
+                startAfter = basePrefix + "/" + options.startAfterKey;
+            }
+
             const ids = [];
             let token = undefined;
             outer:
@@ -919,6 +923,9 @@
                     }
                     if (matched) {
                         ids.push(rowId);
+                        if (options && options.limit != null && ids.length >= options.limit) {
+                            break outer;
+                        }
                     }
                 }
                 token = res.IsTruncated ? res.NextContinuationToken : undefined;
@@ -928,14 +935,14 @@
 
         // where条件(複数インデックス可)から、マッチする行ファイル名の
         // 積集合(Set)を取得する.
-        const _resolveCandidates = async function (tableName, schema, where) {
+        const _resolveCandidates = async function (tableName, schema, where, options) {
             const idxNames = Object.keys(where || {});
             if (idxNames.length === 0) {
                 throw new Error("where must reference at least one index.");
             }
             let result = null;
             for (let i = 0; i < idxNames.length; i++) {
-                const ids = await _scanIndex(tableName, schema, idxNames[i], where[idxNames[i]]);
+                const ids = await _scanIndex(tableName, schema, idxNames[i], where[idxNames[i]], options);
                 const idSet = new Set(ids);
                 if (result == null) {
                     result = idSet;
@@ -980,6 +987,7 @@
                     out[colName] = row[colName];
                 }
             }
+            out._rowId = rowId;
             return out;
         };
 
@@ -1018,7 +1026,13 @@
         const select = async function (tableName, query) {
             query = query || {};
             const schema = await _loadSchema(tableName);
-            const candidateSet = await _resolveCandidates(tableName, schema, query.where);
+            const scanOptions = {};
+            if (query.startAfterKey) scanOptions.startAfterKey = query.startAfterKey;
+            if (query.startAfter) scanOptions.startAfter = query.startAfter;
+            if (query.limit && !query.offset && !query.groupBy && !query.orderBy) {
+                scanOptions.limit = query.limit;
+            }
+            const candidateSet = await _resolveCandidates(tableName, schema, query.where, scanOptions);
             let ids = Array.from(candidateSet);
 
             // orderBy処理.

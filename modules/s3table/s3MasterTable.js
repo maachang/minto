@@ -61,13 +61,13 @@
     'use strict';
 
     // S3の低レベル操作(put/get/delete/list).
-    const s3sdk = $loadLib("s3sdk.js");
+    const s3sdk = typeof $loadLib === "function" ? $loadLib("s3sdk.js") : require("./s3sdk.js");
 
     // Snowflake ID方式のユニークID発行(autoIncrementの代替).
-    const seqId = $loadLib("seqId.js");
+    const seqId = typeof $loadLib === "function" ? $loadLib("seqId.js") : require("./seqId.js");
 
     // テーブル単位の排他ロック(transaction用).
-    const s3Lock = $loadLib("s3Lock.js");
+    const s3Lock = typeof $loadLib === "function" ? $loadLib("s3Lock.js") : require("./s3Lock.js");
 
     // StreamをStringに変換.
     // (llrtでは for-await-of 構文が動作しない事例があるため

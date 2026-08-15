@@ -567,14 +567,145 @@ const uploadUrl = s3presign.createPresignedPutUrl("my-bucket", "uploads/2026", "
 
 ### 2. ダウンロード用URL (ファイル名指定ダウンロード)
 
-```javascript
-const s3presign = $loadLib("s3presign.js");
+```
 
-// ダウンロード用URL (ファイル名を"invoice_202608.pdf"としてダウンロード)
-const downloadUrl = s3presign.createPresignedGetUrl("my-bucket", "invoices", "inv_001.pdf", {
-    responseContentDisposition: 'attachment; filename="invoice_202608.pdf"',
-    expiresIn: 300
+---
+
+# ◆◆◆ paginate.js ◆◆◆
+
+`s3IndexTable.js`、`s3MasterTable.js`、および通常のインメモリ配列に対応した**ページネーション＆カーソル検索ヘルパー**です。
+S3 の `StartAfter` 機構に直結した高速・低コストなカーソルページネーション、従来のオフセット/ページ番号方式、URL-Safe Base64URL 不透明カーソルトークンの生成/解析、SSR/JHTML 向けのクエリパラメータURL生成を提供します。
+
+---
+
+## 主な機能
+
+1. **カーソル式ページネーション (Cursor-based Pagination)**
+   - `s3IndexTable` の S3 `StartAfter` 機能を活用し、数千〜万件のデータでもスキップ不要で O(1) に近い高速読み出しを実現。
+   - 内部の rowId や複合キーを Base64URL 形式の不透明トークン（`nextCursor`）としてカプセル化。
+2. **オフセット/ページ番号式ページネーション (Offset / Page-based Pagination)**
+   - `page: 1, limit: 20` 形式で `totalCount`, `totalPages`, `currentPage` 等を含むメタ情報を自動計算。
+3. **複数データソースの統一抽象化**
+   - `s3IndexTable`（S3物理インデックス駆動）
+   - `s3MasterTable`（インメモリデータ駆動）
+   - 通常の JavaScript オブジェクト配列（`Array`）
+4. **URL 生成ヘルパー (`paginate.url`)**
+   - SSR/JHTML での「次へ」「前へ」リンクやページ番号リンクのクエリパラメータを安全に生成・置換。
+
+---
+
+## エクスポート
+
+| 関数 | 説明 |
+|---|---|
+| `query(dataSource, tableNameOrOptions, options)` | 対象データソースに対してカーソルまたはオフセットページングを実行 |
+| `encodeCursor(cursorObj)` | カーソルオブジェクトを URL-Safe Base64URL 文字列にシリアライズ |
+| `decodeCursor(cursorStr)` | Base64URL 文字列をカーソルオブジェクトに復元 |
+| `url(baseUrl, cursorOrPage, paramName)` | URL にページネーションクエリパラメータ（`cursor` または `page`）を付与/置換 |
+
+---
+
+## `query(dataSource, tableNameOrOptions, options)`
+
+### 引数
+
+- **`s3IndexTable` / `s3MasterTable` インスタンスを渡す場合:**
+  - `dataSource`: DB インスタンス
+  - `tableNameOrOptions`: テーブル名 (`string`)
+  - `options`: `{ cursor, page, offset, limit, where, orderBy, idKey }`
+- **配列を渡す場合:**
+  - `dataSource`: オブジェクト配列 (`Array`)
+  - `tableNameOrOptions`: オプションオブジェクト `{ cursor, page, offset, limit, orderBy, idKey }`
+
+### オプション (`options`)
+
+| プロパティ | 型 | デフォルト | 説明 |
+|---|---|---|---|
+| `cursor` | `string \| object` | `null` | 前回の `nextCursor` 文字列（カーソル方式） |
+| `page` | `number` | `null` | ページ番号（1始まり。指定時はオフセット方式） |
+| `offset` | `number` | `null` | スキップ件数（指定時はオフセット方式） |
+| `limit` | `number` | `20` | 1ページあたりの取得件数（最大100） |
+| `where` | `object` | `undefined` | 検索条件（`s3IndexTable` / `s3MasterTable` 用） |
+| `orderBy` | `object` | `undefined` | ソート条件（例: `{ created_at: "desc" }`） |
+| `idKey` | `string` | `"id"` | 一意キーのカラム名 |
+
+### 戻り値
+
+```javascript
+{
+    items: [...],       // 取得された行データ配列
+    count: 20,          // 現在のページの件数
+    hasNext: true,      // 次のページが存在するか
+    nextCursor: "...",  // 次ページ用カーソル (hasNext=false時はnull)
+    hasPrev: false,     // 前ページが存在するか
+    totalCount: 100,    // 総件数 (オフセット方式のみ)
+    totalPages: 5,      // 総ページ数 (オフセット方式のみ)
+    currentPage: 1      // 現在ページ番号 (オフセット方式のみ)
+}
+```
+
+---
+
+## 使用例
+
+### 1. s3IndexTable でのカーソルページネーション (REST API / 無限スクロール)
+
+```javascript
+const paginate = $loadLib("paginate.js");
+const s3IndexTable = $loadLib("s3IndexTable.js");
+const db = s3IndexTable.create({ bucket: "my-bucket" });
+
+// リクエストパラメータから cursor と limit を取得
+const cursor = $request().query("cursor");
+const limit = $request().query("limit") || 20;
+
+const result = await paginate.query(db, "articles", {
+    where: { byCategory: { category: "tech" } },
+    limit: limit,
+    cursor: cursor
 });
+
+// レスポンス返却
+return $response().json({
+    articles: result.items,
+    hasNext: result.hasNext,
+    nextCursor: result.nextCursor
+});
+```
+
+### 2. オフセット式ページネーション (管理画面・ページャー付き一覧)
+
+```javascript
+const page = parseInt($request().query("page")) || 1;
+
+const result = await paginate.query(db, "articles", {
+    where: { byCategory: { category: "tech" } },
+    limit: 20,
+    page: page
+});
+
+// result: { items, count, totalCount, totalPages, currentPage, hasNext, hasPrev }
+```
+
+### 3. 通常配列のページネーション
+
+```javascript
+const users = [ { id: 1, name: "Alice" }, { id: 2, name: "Bob" }, ... ];
+
+const result = await paginate.query(users, {
+    limit: 10,
+    cursor: $request().query("cursor")
+});
+```
+
+### 4. URL 生成ヘルパー (`paginate.url`)
+
+```javascript
+const nextUrl = paginate.url("/articles?category=tech", result.nextCursor);
+// -> "/articles?category=tech&cursor=eyJpZHgiOiJ..."
+
+const page2Url = paginate.url("/articles?category=tech&page=1", 2);
+// -> "/articles?category=tech&page=2"
 ```
 
 # ◆◆◆ EOF ◆◆◆

@@ -46,6 +46,15 @@
         // ローカルS3エミュレータ(tools/localAws.js)接続用endpoint.
         // 環境変数が設定されている場合、AWS本番環境ではなくローカルサーバーに接続する.
         const localEndpoint = process.env["MINTO_LOCAL_S3_ENDPOINT"];
+        if (credentials != null) {
+            if (credentials["access_key"] == null && credentials["accessKeyId"] != null) {
+                credentials = {
+                    "access_key": credentials["accessKeyId"],
+                    "secret_access_key": credentials["secretAccessKey"],
+                    "session_token": credentials["sessionToken"]
+                };
+            }
+        }
         // credentialsが設定されていない場合.
         if (credentials == undefined || credentials == null) {
             // 環境変数から取得.

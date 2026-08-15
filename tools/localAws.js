@@ -166,13 +166,13 @@
     // ListObjectsV2処理.
     const _handleList = function (req, res, bucket, query) {
         const bucketDir = path.join(_root, bucket);
-        const prefix = query.get("prefix") || "";
-        const delimiter = query.get("delimiter") || null;
-        const maxKeys = parseInt(query.get("max-keys")) || _DEF_MAX_KEYS;
-        const startAfter = query.get("start-after") || null;
+        const prefix = query.get("prefix") || query.get("Prefix") || "";
+        const delimiter = query.get("delimiter") || query.get("Delimiter") || null;
+        const maxKeys = parseInt(query.get("max-keys") || query.get("maxKeys") || query.get("MaxKeys")) || _DEF_MAX_KEYS;
+        const startAfter = query.get("start-after") || query.get("startAfter") || query.get("StartAfter") || null;
         // continuation-tokenは前回応答のNextContinuationToken(=最後に返したkey)を
         // そのまま引き継ぐ簡易実装(本物のS3のような不透明トークンではない).
-        const continuationToken = query.get("continuation-token") || null;
+        const continuationToken = query.get("continuation-token") || query.get("continuationToken") || query.get("ContinuationToken") || null;
         const afterKey = continuationToken || startAfter;
 
         let allKeys = _listAllFiles(bucketDir, bucketDir)
