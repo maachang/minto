@@ -24,6 +24,11 @@
 - `auth`: パスワードハッシュ化、S3ベースのセッション管理、ロールベース認可(RBAC: `rbac.js`)、CORS共通ヘルパー、JWT署名/検証(HS256のみ)など認証まわりのライブラリ群(`session.js`は`s3table/s3sdk.js`に依存).
 - `http`: `$response()`のJSON/エラーレスポンス組み立てを共通化するヘルパー群.
 - `validate`: 任意のJSオブジェクトをスキーマ定義(string/int/float/boolean/date)に沿って検証する汎用バリデーター.
+- `util`: 汎用ユーティリティ群.
+  - `dateEx.js`: Date拡張ユーティリティ。タイムゾーン時差ずれ防止パース、チェーン加減算(`change`)・リセット(`clear`)、フォーマット出力(`toFormatString`/`toString`)、期間計算・範囲内外判定(`between`/`isBetween`).
+  - `encrypt.js`: AES-256-GCM可逆暗号化(`encrypt`/`decrypt`)、URLセーフトークン生成(`randomToken`)、SHA-256(`sha256`)、HMAC(`hmac`).
+  - `format.js`: 金額/カンマ区切り(`money`/`comma`)、全角半角変換(`toHalfWidth`/`toFullWidth`)、かな変換(`toHiragana`/`toKatakana`)、バイト表記(`bytes`)、マスキング(`mask`)、切り詰め(`truncate`)、HTMLエスケープ(`escapeHtml`).
+  - `http.js`: タイムアウト・自動リトライ・クエリ結合・JSON送受信を備えた軽量HTTPクライアント(`get`/`getJson`/`post`/`postJson`/`put`/`delete`).
 
 ## 利用方法(実装方法)
 
