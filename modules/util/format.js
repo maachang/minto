@@ -31,6 +31,38 @@ function money(value, prefix = '') {
 }
 
 /**
+ * 金額・カンマ区切り文字列を数値（Number）に復元 (money の逆変換)
+ * @param {string|number} value 例: '1,250,000', '¥1,250,000', '￥ １,２５０円', '▲1,000', '(500)'
+ * @param {number} [defaultValue=0] パース不能・空文字時のデフォルト値
+ * @returns {number}
+ */
+function unmoney(value, defaultValue = 0) {
+    if (value === null || value === undefined || value === '') return defaultValue;
+    if (typeof value === 'number') return isNaN(value) ? defaultValue : value;
+
+    let s = toHalfWidth(String(value)).trim();
+    if (!s) return defaultValue;
+
+    // 負数表現の検出: ▲ / △ / (1,000) / -1,000
+    let isNegative = false;
+    if (s.startsWith('-') || s.startsWith('▲') || s.startsWith('△')) {
+        isNegative = true;
+        s = s.slice(1).trim();
+    } else if (s.startsWith('(') && s.endsWith(')')) {
+        isNegative = true;
+        s = s.slice(1, -1).trim();
+    }
+
+    // 通貨記号・カンマ・単位（円, $, ¥, 等）・空白を除去
+    s = s.replace(/[¥￥$€£円,\s]/g, '');
+
+    const num = Number(s);
+    if (isNaN(num)) return defaultValue;
+
+    return isNegative ? -num : num;
+}
+
+/**
  * 全角英数・スペース・記号を半角に変換
  * @param {string} str 
  * @returns {string}
@@ -153,6 +185,10 @@ function escapeHtml(str) {
 module.exports = {
     money,
     comma: money,
+    unmoney,
+    uncomma: unmoney,
+    parseMoney: unmoney,
+    parseNumber: unmoney,
     toHalfWidth,
     toFullWidth,
     toHiragana,

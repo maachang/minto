@@ -85,7 +85,7 @@ minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事�
 - **`modules/util/`**:
   - `dateEx.js`: Date 拡張（時差防止パース、チェーン加減算 `change`・リセット `clear`、フォーマット出力 `toFormatString`/`toString`、期間判定 `between`/`isBetween`）。
   - `encrypt.js`: WebCrypto AES-256-GCM 可逆暗号化（`encrypt`/`decrypt`）、ランダムトークン（`randomToken`）、ハッシュ（`sha256`/`hmac`）。
-  - `format.js`: 金額/カンマ（`money`/`comma`）、全角半角（`toHalfWidth`/`toFullWidth`）、かな（`toHiragana`/`toKatakana`）、バイト表記（`bytes`）、マスク（`mask`）、切り詰め（`truncate`）、HTMLエスケープ（`escapeHtml`）。
+  - `format.js`: 金額/カンマ（`money`/`comma`）・逆変換（`unmoney`/`uncomma`）、全角半角（`toHalfWidth`/`toFullWidth`）、かな（`toHiragana`/`toKatakana`）、バイト表記（`bytes`）、マスク（`mask`）、切り詰め（`truncate`）、HTMLエスケープ（`escapeHtml`）。
   - `http.js`: タイムアウト・自動リトライ・クエリ結合付き軽量 HTTP クライアント（`get`/`getJson`/`post`/`postJson`/`put`/`delete`）。
 - **`validate.js`**: オブジェクトのスキーマ検証（string, int, float, boolean, date, enum, pattern, custom）。
 - **`csv.js` / `memoryTable.js`**: CSV パース・エクスポート、インメモリソート・集計。

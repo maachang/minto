@@ -72,6 +72,7 @@ const signature = encrypt.hmac("message", "secret-key");
 | 関数 | 説明 | 例 |
 |---|---|---|
 | `money(val, prefix?)` / `comma(val)` | 金額・カンマ区切り | `money(1250000, "¥")` → `"¥1,250,000"` |
+| `unmoney(val, default=0)` / `uncomma` / `parseMoney` | 金額・カンマ文字列を数値へ復元（▲/△/括弧/全角/通貨記号対応） | `unmoney("¥1,250,000")` → `1250000`<br>`unmoney("▲1,000")` → `-1000`<br>`unmoney("(500)")` → `-500` |
 | `toHalfWidth(str)` | 全角英数・記号・スペースを半角へ | `toHalfWidth("ＡＢＣ１２３　！")` → `"ABC123 !"` |
 | `toFullWidth(str)` | 半角英数・記号・スペースを全角へ | `toFullWidth("ABC123 !")` → `"ＡＢＣ１２３　！"` |
 | `toHiragana(str)` | 全角カタカナをひらがなへ | `toHiragana("テスト")` → `"てすと"` |
@@ -85,6 +86,8 @@ const signature = encrypt.hmac("message", "secret-key");
 const format = $loadLib("format.js");
 
 const formattedMoney = format.money(98000, "¥"); // "¥98,000"
+const numValue = format.unmoney("¥98,000");      // 98000
+const negValue = format.unmoney("▲1,250円");     // -1250
 const halfStr = format.toHalfWidth("０９０－１２３４－５６７８"); // "090-1234-5678"
 const maskedPhone = format.mask(halfStr, 3, 4); // "090******5678"
 const fileSize = format.bytes(2500000); // "2.4 MB"

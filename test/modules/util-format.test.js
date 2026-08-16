@@ -19,6 +19,43 @@ test("format: money / comma 金額・数値フォーマット", () => {
     assert.equal(format.money("invalid"), "invalid");
 });
 
+test("format: unmoney / uncomma / parseMoney 金額文字列の数値逆変換", () => {
+    // 1. 基本的なカンマ付き数値
+    assert.equal(format.unmoney("1,250,000"), 1250000);
+    assert.equal(format.unmoney("1,250,000.5"), 1250000.5);
+    assert.equal(format.uncomma("1,000"), 1000);
+    assert.equal(format.parseMoney("500"), 500);
+
+    // 2. 通貨記号・単位付き
+    assert.equal(format.unmoney("¥1,250,000"), 1250000);
+    assert.equal(format.unmoney("￥1,250,000"), 1250000);
+    assert.equal(format.unmoney("$1,250.50"), 1250.5);
+    assert.equal(format.unmoney("€100"), 100);
+    assert.equal(format.unmoney("1,250円"), 1250);
+    assert.equal(format.unmoney("  ￥ 1,250,000 円  "), 1250000);
+
+    // 3. 全角文字・全角カンマ
+    assert.equal(format.unmoney("１，２５０，０００"), 1250000);
+    assert.equal(format.unmoney("￥ １，２５０ 円"), 1250);
+
+    // 4. 負数表現 (マイナス、▲、△、括弧)
+    assert.equal(format.unmoney("-1,250,000"), -1250000);
+    assert.equal(format.unmoney("-¥1,250"), -1250);
+    assert.equal(format.unmoney("▲1,250,000"), -1250000);
+    assert.equal(format.unmoney("△1,250"), -1250);
+    assert.equal(format.unmoney("(1,250,000)"), -1250000);
+
+    // 5. 数値・エッジケース
+    assert.equal(format.unmoney(1250000), 1250000);
+    assert.equal(format.unmoney(0), 0);
+    assert.equal(format.unmoney(""), 0);
+    assert.equal(format.unmoney(null), 0);
+    assert.equal(format.unmoney(undefined), 0);
+    assert.equal(format.unmoney("invalid-string"), 0);
+    assert.equal(format.unmoney("invalid-string", null), null);
+    assert.equal(format.unmoney("", -1), -1);
+});
+
 test("format: 全角・半角変換 (toHalfWidth / toFullWidth)", () => {
     // 全角 -> 半角
     assert.equal(format.toHalfWidth("ＡＢＣ１２３　！＃"), "ABC123 !#");
