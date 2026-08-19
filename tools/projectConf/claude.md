@@ -88,7 +88,18 @@ minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事�
   - `format.js`: 金額/カンマ（`money`/`comma`）・逆変換（`unmoney`/`uncomma`）、全角半角（`toHalfWidth`/`toFullWidth`）、かな（`toHiragana`/`toKatakana`）、バイト表記（`bytes`）、マスク（`mask`）、切り詰め（`truncate`）、HTMLエスケープ（`escapeHtml`）。
   - `http.js`: タイムアウト・自動リトライ・クエリ結合付き軽量 HTTP クライアント（`get`/`getJson`/`post`/`postJson`/`put`/`delete`）。
 - **`validate.js`**: オブジェクトのスキーマ検証。`validate.check(data, schema)` で検証を実施（サポート型: `string`, `int`, `float`, `boolean`, `date` / ルール: `required`, `default`, `minLen`/`maxLen`, `min`/`max`, `range`, `mail`, `url`, `zip`, `tel`, `date`, `time`, `alphaNum`, `pattern`, `enum`, `custom`, `messages`）。
-  - **AIバリデーション定義 (`validates/`)**: AIで定義・生成したバリデーションスキーマ（JSモジュール）は `validates/{name}.js` に配置し、エンドポイントから `$loadLib("validates/{name}.js")` または `lib/` 経由で読み込んで `validate.check()` で利用する。
+  - **AIバリデーション定義 (`validates/`)**: AIで定義・生成したバリデーションスキーマ（JSモジュール）は `validates/{name}.js` に配置し、エンドポイントから `$loadLib("validates/{name}.js")` で読み込んで `validate.check()` で利用する。
+    ```js
+    // validates/userRegister.js
+    module.exports = {
+        userId: { type: "string", required: true, minLen: 3, maxLen: 32, alphaNum: true },
+        email:  { type: "string", required: true, mail: true }
+    };
+    // public/api/register.mt.js 内での利用例:
+    // const validate = $loadLib("validate.js");
+    // const schema = $loadLib("validates/userRegister.js");
+    // const result = validate.check($request().params(), schema);
+    ```
 - **`csv.js` / `memoryTable.js`**: CSV パース・エクスポート、インメモリソート・集計。
 - **`sdk/*.js`**: AWS SDK v3 ラッパー（`sqsSdk`, `dynamoDbSdk`, `sesSdk`, `kmsSdk`, `secretsManagerSdk`, `parameterStoreSdk`, `snsSdk`）。
 
