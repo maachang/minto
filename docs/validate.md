@@ -97,6 +97,38 @@ GETリクエストの`$request().params()`(`event.queryStringParameters`)は値�
 module.exports = require("(minto直下からの相対パス)/modules/validate/validate.js");
 ```
 
+## AIバリデーション定義（validates/ディレクトリ連携）
+
+mintoプロジェクトでは、AI（Claude Code / agy等）によって生成・定義されたバリデーションスキーマを `validates/{name}.js` に配置して管理することができます。
+
+```js
+// validates/userRegister.js
+module.exports = {
+    userId:   { type: "string", required: true, minLen: 3, maxLen: 32, alphaNum: true },
+    email:    { type: "string", required: true, mail: true },
+    age:      { type: "int", range: [0, 150] },
+    birthday: { type: "string", date: true },
+    siteUrl:  { type: "string", url: true }
+};
+```
+
+各APIエンドポイント（`*.mt.js`）からは、以下のようにスキーマを読み込んで検証を実行します。
+
+```js
+// public/api/register.mt.js
+const validate = $loadLib("validate.js");
+const schema = $loadLib("validates/userRegister.js");
+
+const p = $request().params();
+const result = validate.check(p, schema);
+if (!result.valid) {
+    return $response().json({
+        success: false,
+        error: result.errors[0].message
+    }, 400);
+}
+```
+
 実際に組み込んだ例は
 [sample/login-logout/public/api/register.mt.js](https://github.com/maachang/minto/blob/main/sample/login-logout/public/api/register.mt.js)
 を参照してください(ユーザーID/パスワード/パスワード確認欄の検証を

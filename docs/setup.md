@@ -79,11 +79,13 @@ mintoによるWebアプリ実装ディレクトリ:
     |
     +-- lib: minto 対象の モジュールjs の配置先.
     |
+    +-- validates: バリデーションスキーマ定義(AI定義等)の配置先.
+    |
     +-- conf: minto 実行に対する conf ファイル(json) 配置先.
     |     |
-    |     +-- env.json: ローカル環境で 環境変数定義が設定出来ます.
+    |     +-- env.local.json: ローカル環境で 環境変数定義が設定出来ます(ローカル専用).
     |     |
-    |     +-- minto.json ローカルminto定義(bindPortなど).
+    |     +-- minto.json: ローカルminto定義(bindPortなど).
     |
     +-- package.json: modules/s3table(S3をデータストアとして使うモジュール群)が
           必要とする @aws-sdk/client-s3 をローカルインストールするためのもの.
@@ -134,6 +136,12 @@ public 以下に対して、静的コンテンツ(htmlファイルや jpeg フ�
 ここでのライブラリの実装方法は基本的に通常の `commonjs` における利用と同様になります。
 
 あと「mintoでの標準libの利用」として[ここの内容](https://github.com/maachang/minto/blob/main/lambda/src/lib/) に存在するライブラリが利用できます。
+
+### validatesディレクトリ
+
+ここにはAI（Claude Code / Antigravity等）で生成したバリデーション定義や、プロジェクト固有のバリデーションスキーマファイル（`validates/{name}.js`）を配置します。
+
+`validate.js`（`modules/validate/validate.js`）と連携し、エンドポイントからスキーマをロードして入力値検証を行う際に利用します。
 
 ### confディレクトリ
 
