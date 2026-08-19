@@ -87,7 +87,8 @@ minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事�
   - `encrypt.js`: WebCrypto AES-256-GCM 可逆暗号化（`encrypt`/`decrypt`）、ランダムトークン（`randomToken`）、ハッシュ（`sha256`/`hmac`）。
   - `format.js`: 金額/カンマ（`money`/`comma`）・逆変換（`unmoney`/`uncomma`）、全角半角（`toHalfWidth`/`toFullWidth`）、かな（`toHiragana`/`toKatakana`）、バイト表記（`bytes`）、マスク（`mask`）、切り詰め（`truncate`）、HTMLエスケープ（`escapeHtml`）。
   - `http.js`: タイムアウト・自動リトライ・クエリ結合付き軽量 HTTP クライアント（`get`/`getJson`/`post`/`postJson`/`put`/`delete`）。
-- **`validate.js`**: オブジェクトのスキーマ検証（string, int, float, boolean, date, enum, pattern, custom）。
+- **`validate.js`**: オブジェクトのスキーマ検証。`validate.check(data, schema)` で検証を実施（サポート型: `string`, `int`, `float`, `boolean`, `date` / ルール: `required`, `default`, `minLen`/`maxLen`, `min`/`max`, `range`, `mail`, `url`, `zip`, `tel`, `date`, `time`, `alphaNum`, `pattern`, `enum`, `custom`, `messages`）。
+  - **AIバリデーション定義 (`validates/`)**: AIで定義・生成したバリデーションスキーマ（JSモジュール）は `validates/{name}.js` に配置し、エンドポイントから `$loadLib("validates/{name}.js")` または `lib/` 経由で読み込んで `validate.check()` で利用する。
 - **`csv.js` / `memoryTable.js`**: CSV パース・エクスポート、インメモリソート・集計。
 - **`sdk/*.js`**: AWS SDK v3 ラッパー（`sqsSdk`, `dynamoDbSdk`, `sesSdk`, `kmsSdk`, `secretsManagerSdk`, `parameterStoreSdk`, `snsSdk`）。
 
@@ -113,6 +114,7 @@ minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事�
 |---|---|
 | `public/` | Web コンテンツ・動的スクリプト (`*.mt.js` / `*.mt.html`) の配置先 |
 | `lib/` | プロジェクト固有の `$loadLib()` モジュールの配置先 |
+| `validates/` | AI定義またはプロジェクト固有のバリデーションスキーマ定義 (`*.js`) の配置先 |
 | `conf/` | 設定 JSON (`minto.json`, `table/*.json`, `notify.json` 等) の配置先。<br>`*.local.json` はローカル実行時優先、`*.test.json` はテスト時優先（デプロイ zip からは自動除外）。 |
 | `package.json` | ローカル開発用依存関係 |
 | `.claude/CLAUDE.md` | 本ファイル |

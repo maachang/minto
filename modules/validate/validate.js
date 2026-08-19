@@ -50,6 +50,22 @@
                 return field + "は" + params.min + "以上で入力してください";
             case "max":
                 return field + "は" + params.max + "以下で入力してください";
+            case "range":
+                return field + "は" + params.min + "〜" + params.max + "の範囲で入力してください";
+            case "mail":
+                return field + "はメールアドレスの形式で入力してください";
+            case "url":
+                return field + "はURLの形式で入力してください";
+            case "zip":
+                return field + "は郵便番号の形式で入力してください";
+            case "tel":
+                return field + "は電話番号の形式で入力してください";
+            case "date":
+                return field + "は日付の形式で入力してください";
+            case "time":
+                return field + "は時間の形式で入力してください";
+            case "alphaNum":
+                return field + "は半角英数字で入力してください";
             case "pattern":
                 return field + "の形式が不正です";
             case "enum":
@@ -110,10 +126,42 @@
         return value;
     };
 
+    // 組み込み検証用正規表現パターン.
+    const _PATTERNS = {
+        // メールアドレス (簡易チェック: @ の前後に文字、ドメイン部にドットを含む)
+        mail: /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/,
+        // URL (http:// または https:// から始まる)
+        url: /^https?:\/\/[^\s/$.?#].[^\s]*$/i,
+        // 郵便番号 (7桁数字、ハイフンあり 123-4567 またはなし 1234567)
+        zip: /^\d{3}-?\d{4}$/,
+        // 電話番号 (固定電話・携帯電話・フリーダイヤル等のハイフンあり/なし)
+        tel: /^(0\d{1,4}-?\d{1,4}-?\d{3,4}|0[789]0-?\d{4}-?\d{4}|0120-?\d{3}-?\d{3}|0800-?\d{3}-?\d{3}|050-?\d{4}-?\d{4})$/,
+        // 日付 (yyyy-MM-dd または yyyy/MM/dd)
+        date: /^\d{4}[-/](?:0?[1-9]|1[0-2])[-/](?:0?[1-9]|[12]\d|3[01])$/,
+        // 時間 (HH:mm または HH:mm:ss)
+        time: /^(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/,
+        // 半角英数字
+        alphaNum: /^[a-zA-Z0-9]+$/
+    };
+
+    // 日付文字列としての妥当性チェック(閏年や各月の日数確認).
+    const _isValidDateString = function (s) {
+        if (!_PATTERNS.date.test(s)) {
+            return false;
+        }
+        const parts = s.split(/[-/]/).map(Number);
+        const y = parts[0];
+        const m = parts[1];
+        const d = parts[2];
+        const date = new Date(y, m - 1, d);
+        return date.getFullYear() === y && (date.getMonth() + 1) === m && date.getDate() === d;
+    };
+
     // 1フィールド分の検証を実施.
     // field フィールド名を設定します.
     // rule スキーマ定義({type, required, default, minLen, maxLen,
-    //      min, max, pattern, enum, custom, messages})を設定します.
+    //      min, max, range, mail, url, zip, tel, date, time, alphaNum,
+    //      pattern, enum, custom, messages})を設定します.
     // value 検証対象の値(dataからの取得値)を設定します.
     // hasValue dataにこのフィールドのキー自体が存在するかを設定します.
     // data 検証対象のオブジェクト全体を設定します(rule.customへ
@@ -166,6 +214,38 @@
             }
             if (rule.max != undefined && n > _numeric(rule.max)) {
                 return { error: makeError("max", { max: rule.max }), value: value };
+            }
+            if (rule.range != undefined) {
+                const min = Array.isArray(rule.range) ? rule.range[0] : rule.range.min;
+                const max = Array.isArray(rule.range) ? rule.range[1] : rule.range.max;
+                if ((min != undefined && n < _numeric(min)) || (max != undefined && n > _numeric(max))) {
+                    return { error: makeError("range", { min: min, max: max }), value: value };
+                }
+            }
+        }
+
+        // 組み込み形式チェック(string限定).
+        if (rule.type === "string") {
+            if (rule.mail === true && !_PATTERNS.mail.test(value)) {
+                return { error: makeError("mail"), value: value };
+            }
+            if (rule.url === true && !_PATTERNS.url.test(value)) {
+                return { error: makeError("url"), value: value };
+            }
+            if (rule.zip === true && !_PATTERNS.zip.test(value)) {
+                return { error: makeError("zip"), value: value };
+            }
+            if (rule.tel === true && !_PATTERNS.tel.test(value)) {
+                return { error: makeError("tel"), value: value };
+            }
+            if (rule.date === true && !_isValidDateString(value)) {
+                return { error: makeError("date"), value: value };
+            }
+            if (rule.time === true && !_PATTERNS.time.test(value)) {
+                return { error: makeError("time"), value: value };
+            }
+            if (rule.alphaNum === true && !_PATTERNS.alphaNum.test(value)) {
+                return { error: makeError("alphaNum"), value: value };
             }
         }
 

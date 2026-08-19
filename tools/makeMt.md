@@ -44,6 +44,7 @@ mkmt [PROJECT NAME]
 <PROJECT NAME>/
 ├── public/          # 公開用静的ファイル格納ディレクトリ
 ├── lib/             # ライブラリ格納ディレクトリ
+├── validates/       # AI・バリデーション定義格納ディレクトリ
 ├── conf/            # 設定ファイル格納ディレクトリ
 │   ├── env.local.json     # 環境設定ファイル(ローカル専用)
 │   └── minto.json   # minto サーバー設定ファイル

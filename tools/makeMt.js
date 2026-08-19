@@ -27,12 +27,15 @@
     const _LIB_FOLDER = "lib";
     // 作成対象フォルダ: conf.
     const _CONF_FOLDER = "conf";
+    // 作成対象フォルダ: validates.
+    const _VALIDATES_FOLDER = "validates";
 
     // 作成対象フォルダ群.
     const _CREATE_FOLDERS = [
         _PUBLIC_FOLDER,
         _LIB_FOLDER,
-        _CONF_FOLDER
+        _CONF_FOLDER,
+        _VALIDATES_FOLDER
     ];
 
     // コマンド名.
