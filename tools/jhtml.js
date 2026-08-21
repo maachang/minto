@@ -20,6 +20,12 @@
 //     stringをhtmlとして出力するFunction.
 //     戻り値が$outのfunctionなので
 //     > $out("abc")(def) ... 的に実装が出来る.
+//   $include = async function(path, params)
+//     別テンプレート(jhtml/html)をインクルードして出力するFunction.
+//     $paramsでパラメータの受け渡しが可能.
+//     ${$include("header.mt.html", { title: "..." })}
+//   $params = object
+//     $include呼び出し時に渡されたパラメータオブジェクト.
 //   $request = object
 //     リクエストオブジェクトが利用できる.
 //   $response = object
@@ -222,6 +228,10 @@
                         if (ret.length != 0) {
                             ret += "\n";
                         }
+                        // $include(...) 呼び出しに await が無い場合は補完.
+                        if (/^\$include\s*\(/.test(n)) {
+                            n = "await " + n;
+                        }
                         ret += out + "(" + n + ");\n";
                     } else if (n == "#") {
                         // コメントなので、何もしない.
@@ -271,9 +281,10 @@
         // outメソッドが実行時に設定しない場合.
         if (noOut != true) {
             // メモリ上にoutメソッドを出力する形で設定します.
-            ret = "exports.handler = async function() {\n" +
+            ret = "exports.handler = async function($params) {\n" +
+                "if ($params === undefined || $params === null) { $params = {}; }\n" +
                 "let _$outString = \"\";\n" +
-                "const " + outFunc + " = function(n) { _$outString += n; };\n" +
+                "const " + outFunc + " = function(n) { _$outString += (n !== undefined && n !== null ? n : \"\"); return " + outFunc + "; };\n" +
                 ret +
                 "\nreturn _$outString;\n" +
                 "}\n";

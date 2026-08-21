@@ -86,6 +86,15 @@ test("e2e: jhtml(mt.html) はパラメータ省略時にデフォルト値を使
     assert.match(text, /Hello, minto!/);
 });
 
+test("e2e: jhtml(mt.html) は $include で別テンプレートを読み込んで展開する", async () => {
+    const res = await fetch(baseUrl + "/includeTest");
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type") || "", /text\/html/);
+    const text = await res.text();
+    assert.match(text, /<div>Header: E2ETitle<\/div>/);
+    assert.match(text, /<main>PageBody<\/main>/);
+});
+
 test("e2e: 存在しないパスは404を返す", async () => {
     const res = await fetch(baseUrl + "/no-such-path");
     assert.equal(res.status, 404);

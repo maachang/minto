@@ -11,9 +11,9 @@ jhtmlテンプレートでは、HTMLテンプレート内にJavaScriptコード�
 jhtmlテンプレートの埋め込み構文は以下のようになります。
 
 - **テンプレート構文** — `<% %>`, `<%= %>`, `<%# %>`, `${ }` の4種類の埋め込みタグの説明と使用例
-- **組み込み機能** — `$out`, `$request`, `$response` の説明
+- **組み込み機能** — `$out`, `$include`, `$params`, `$request`, `$response` の説明
 
-また、この jhtml テンプレートファイルは、aws lambda 上では利用されず `mtpk` コマンドで、対象プロジェクトをデプロイする時に `mt.js` ファイルに変換される。
+また、この jhtml テンプレートファイルは、aws lambda 上では利用されず `mtpk` コマンドで、対象プロジェクトをデプロイする時に `.jhtml.js` ファイルに変換される。
 
 ---
 
@@ -61,8 +61,69 @@ JavaScriptの式を評価し、結果をHTML出力に挿入します。末尾の
 | 名前 | 種別 | 説明 |
 |---|---|---|
 | `$out` | Function | 文字列をHTML出力に追加する関数。戻り値が`$out`自身のため、`$out("abc")("def")`のようにチェーン呼び出しが可能。 |
-| `$request` | Object | リクエストオブジェクト。|
-| `$response` | Object | レスポンスオブジェクト。 |
+| `$include` | Async Function | 別テンプレート（`.mt.html` / `.jhtml.js` / `.html`）を読み込んで展開する関数。パラメータ受け渡しに対応。 |
+| `$params` | Object | `$include` 呼び出し時に渡されたパラメータオブジェクト（未指定時は `{}`）。 |
+| `$request` | Function | リクエストオブジェクトを取得する関数（`$request()`）。 |
+| `$response` | Function | レスポンスオブジェクトを取得する関数（`$response()`）。 |
+
+---
+
+## `$include` の使用方法
+
+別ファイルに分割された共通部品（ヘッダー、フッター、ナビゲーション、カードなど）をテンプレート内にインクルードできます。
+
+### 基本的な書き方（拡張子省略を推奨）
+
+```html
+${$include("./parts/header")}
+```
+
+または式タグでも利用できます（自動で `await` が補完されます）。
+
+```html
+<%= $include("./parts/header") %>
+```
+
+### なぜ拡張子省略（`${$include("./parts/header")}`）が推奨されるか
+
+minto では、**開発中（ローカル）の実ファイルは `.mt.html`** ですが、**デプロイ時（Lambda環境）には `mtpk` コマンドにより事前コンパイルされて `.jhtml.js`** に変換されます。
+
+`$include` は内部で拡張子を自動解決するため、コード上は拡張子を省略して記述することで、開発環境とデプロイ環境の両方で透過的かつ安全に動作します。
+
+| パス指定例 | 開発環境（ローカル）の解決先 | デプロイ環境（Lambda）の解決先 | 備考 |
+|---|---|---|---|
+| `${$include("./parts/header")}` | `parts/header.mt.html` | `parts/header.jhtml.js` | **★ 推奨記法** |
+| `${$include("./parts/header.mt.html")}` | `parts/header.mt.html` | `parts/header.jhtml.js`（自動読み替え） | 互換動作 |
+| `${$include("./parts/footer.html")}` | `parts/footer.html` | `parts/footer.html` | 静的HTMLの読み込み |
+
+### パラメータの受け渡し (`$params`)
+
+第2引数にオブジェクトを渡すことで、インクルード先テンプレートで `$params` として受け取ることができます。
+
+**呼び出し元 (index.mt.html):**
+```html
+${$include("./parts/header", { title: "マイページ", isLogin: true })}
+<main>コンテンツ</main>
+${$include("./parts/footer.html")}
+```
+
+**インクルード先 (parts/header.mt.html):**
+```html
+<header>
+  <h1>${$params.title}</h1>
+  <% if ($params.isLogin) { %>
+    <a href="/logout">ログアウト</a>
+  <% } %>
+</header>
+```
+
+### パス指定のルール
+
+- **相対パス**: `./header` や `../common/footer`（呼び出し元テンプレートのディレクトリ基準）
+- **ルートパス**: `/parts/header`（`public/` ディレクトリ基準）
+- **拡張子省略**: `${$include("./parts/header")}`（`.mt.html`、`.jhtml.js`、`.html` を自動解決）
+- **静的HTMLのインクルード**: `footer.html` などのプレーンなHTMLファイルもそのままインクルード可能
+
 
 ---
 

@@ -200,7 +200,7 @@
     // を設定します.
     let _jhtmlConvFunc = null;
     exports.setJHTMLConvFunc = function (func) {
-        if (typeof (func) === "function") {
+        if (typeof (func) === "function" || func === null) {
             _jhtmlConvFunc = func;
         }
     }
@@ -214,6 +214,7 @@
         _c_mime = null;
         _c_etag = null;
         _c_cache = null;
+        _includeStack.length = 0;
         // キャッシュ情報.
         _existsCache.clear();
         _jsCache.clear();
@@ -286,6 +287,117 @@
         // 取得できない場合は null.
         return null;
     }
+
+    // 実行中のテンプレートパスのスタック.
+    const _includeStack = [];
+
+    // テンプレート(jhtml/html)のインクルード処理.
+    // name インクルード対象のファイル名/パスを設定します.
+    // params インクルード先へ渡すパラメータオブジェクト(任意).
+    // 戻り値: レンダリングされた文字列が返却されます.
+    _g.$include = async function (name, params) {
+        if (name == null || typeof name !== "string") {
+            throw new Error("$include: target path must be a non-empty string");
+        }
+        name = name.trim();
+        if (name.length === 0) {
+            throw new Error("$include: target path is empty");
+        }
+        if (_includeStack.length >= 32) {
+            throw new Error("Circular $include detected or maximum include depth exceeded: " + name);
+        }
+
+        // 呼び出し元のディレクトリを特定.
+        const callerPath = _includeStack.length > 0 ? _includeStack[_includeStack.length - 1] : null;
+        const callerDir = callerPath ? pathLib.dirname(callerPath) : _PUBLIC_PATH();
+
+        const isRelative = name.startsWith("./") || name.startsWith("../");
+        const isAbsolute = name.startsWith("/");
+
+        const candidateBases = [];
+        if (isAbsolute) {
+            candidateBases.push(pathLib.resolve(_PUBLIC_PATH(), name.substring(1)));
+        } else if (isRelative) {
+            candidateBases.push(pathLib.resolve(callerDir, name));
+        } else {
+            // callerDir基準とpublic基準の両方を候補とする.
+            candidateBases.push(pathLib.resolve(callerDir, name));
+            const pubBase = pathLib.resolve(_PUBLIC_PATH(), name);
+            if (candidateBases[0] !== pubBase) {
+                candidateBases.push(pubBase);
+            }
+        }
+
+        // 拡張子に応じた候補パスを展開.
+        const candidates = [];
+        for (let base of candidateBases) {
+            if (base.endsWith(_JHTML_SRC_EXTENSION)) {
+                // .mt.html 指定時
+                if (_jhtmlConvFunc !== null) {
+                    candidates.push({ path: base, conv: _jhtmlConvFunc });
+                    candidates.push({ path: base.substring(0, base.length - _JHTML_SRC_EXTENSION.length) + _RUN_JHTML, conv: null });
+                } else {
+                    candidates.push({ path: base.substring(0, base.length - _JHTML_SRC_EXTENSION.length) + _RUN_JHTML, conv: null });
+                    candidates.push({ path: base, conv: null });
+                }
+            } else if (base.endsWith(_RUN_JHTML)) {
+                // .jhtml.js 指定時
+                if (_jhtmlConvFunc !== null) {
+                    candidates.push({ path: base.substring(0, base.length - _RUN_JHTML.length) + _JHTML_SRC_EXTENSION, conv: _jhtmlConvFunc });
+                    candidates.push({ path: base, conv: null });
+                } else {
+                    candidates.push({ path: base, conv: null });
+                }
+            } else if (base.endsWith(".html") || base.endsWith(".htm")) {
+                // .html / .htm 指定時
+                candidates.push({ path: base, conv: _jhtmlConvFunc });
+            } else {
+                // 拡張子省略時
+                if (_jhtmlConvFunc !== null) {
+                    candidates.push({ path: base + _JHTML_SRC_EXTENSION, conv: _jhtmlConvFunc });
+                    candidates.push({ path: base + _RUN_JHTML, conv: null });
+                    candidates.push({ path: base + ".html", conv: _jhtmlConvFunc });
+                    candidates.push({ path: base + ".htm", conv: _jhtmlConvFunc });
+                    candidates.push({ path: base, conv: null });
+                } else {
+                    candidates.push({ path: base + _RUN_JHTML, conv: null });
+                    candidates.push({ path: base + _JHTML_SRC_EXTENSION, conv: null });
+                    candidates.push({ path: base + ".html", conv: null });
+                    candidates.push({ path: base + ".htm", conv: null });
+                    candidates.push({ path: base, conv: null });
+                }
+            }
+        }
+
+        // 存在する候補を探す.
+        let target = null;
+        for (let cand of candidates) {
+            if (_existsSync(cand.path)) {
+                target = cand;
+                break;
+            }
+        }
+
+        if (!target) {
+            throw new Error("Failed to $include file: " + name);
+        }
+
+        // static html (convなし) の場合、ファイル内容を直接返す.
+        if ((target.path.endsWith(".html") || target.path.endsWith(".htm")) && target.conv === null) {
+            return fs.readFileSync(target.path, "utf8");
+        }
+
+        _includeStack.push(target.path);
+        try {
+            const runJs = _loadJs(target.path, target.conv);
+            if (typeof runJs.handler !== "function") {
+                throw new Error("Included file does not export a handler: " + name);
+            }
+            return await runJs.handler(params || {});
+        } finally {
+            _includeStack.pop();
+        }
+    };
 
     // 構造化ログ(JSON Logger).
     let _logModule = null;
@@ -1437,11 +1549,17 @@
                 console.warn("[warning][" + $requestId() + "] not RunJs file: " + path);
                 return _errorStaticResult(404, (ext === "jhtml") ? "html" : "js");
             }
-            // 実行jsを取得.
-            let runJs = _loadJs(path, convFunc);
-            // 実行jsを実行.
-            let body = await runJs.handler();
-            runJs = undefined;
+            _includeStack.push(path);
+            let body;
+            try {
+                // 実行jsを取得.
+                let runJs = _loadJs(path, convFunc);
+                // 実行jsを実行.
+                body = await runJs.handler();
+                runJs = undefined;
+            } finally {
+                _includeStack.pop();
+            }
             let response = null;
             // $responseが利用されている場合.
             if (_c_response !== null) {
