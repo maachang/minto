@@ -106,6 +106,19 @@
         return ret;
     }
 
+    // HTML特殊文字をエスケープ (XSS対策).
+    const _$escape = function (v) {
+        if (v === undefined || v === null) {
+            return "";
+        }
+        return String(v)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll("\"", "&quot;")
+            .replaceAll("'", "&#39;");
+    };
+
     // jhtml 変換対象のjhtml内容を設定します.
     // 戻り値: 変換された内容が返却されます.
     const analysis$braces = function (jhtml) {
@@ -114,11 +127,13 @@
         by = false;
         $pos = -1;
         braces = 0;
+        let isRaw = false;
+        let prefixLen = 2;
         const len = jhtml.length;
         for (let i = 0; i < len; i++) {
             c = jhtml[i];
 
-            // ${ 検出中
+            // ${ or !{ or ${! 検出中
             if ($pos != -1) {
                 // クォーテーション内.
                 if (qt != undefined) {
@@ -127,7 +142,7 @@
                         qt = undefined;
                     }
                     // クォーテーション開始.
-                } else if (c == "\"" || c == "\'") {
+                } else if (c == "\"" || c == "\'" || c == "\`") {
                     qt = c;
                     // 波括弧開始.
                 } else if (c == "{") {
@@ -137,21 +152,51 @@
                     braces--;
                     // 波括弧が終わった場合.
                     if (braces == 0) {
-                        // <%= ... %> に置き換える.
-                        ret += "<%=" + jhtml.substring($pos + 2, i) + "%>";
+                        if (isRaw) {
+                            // <%- ... %> に置き換える.
+                            ret += "<%-" + jhtml.substring($pos + prefixLen, i) + "%>";
+                        } else {
+                            // <%= ... %> に置き換える.
+                            ret += "<%=" + jhtml.substring($pos + prefixLen, i) + "%>";
+                        }
                         $pos = -1;
+                        isRaw = false;
+                        prefixLen = 2;
                     }
                 }
-                // \${ の場合はリテラルとして扱う（エスケープ）.
+                // \${! / \${ の場合はリテラルとして扱う（エスケープ）.
             } else if (c == "$" && i + 1 < len && jhtml[i + 1] == "{") {
+                if (i + 2 < len && jhtml[i + 2] == "!") {
+                    if (by) {
+                        ret = ret.substring(0, ret.length - 1);
+                        ret += "${!";
+                        i += 2;
+                    } else {
+                        $pos = i;
+                        isRaw = true;
+                        prefixLen = 3;
+                    }
+                } else {
+                    if (by) {
+                        ret = ret.substring(0, ret.length - 1);
+                        ret += "${";
+                        i++;
+                    } else {
+                        $pos = i;
+                        isRaw = false;
+                        prefixLen = 2;
+                    }
+                }
+                // \!{ の場合はリテラルとして扱う（エスケープ）.
+            } else if (c == "!" && i + 1 < len && jhtml[i + 1] == "{") {
                 if (by) {
-                    // 直前がバックスラッシュなら、先に追加した '\' を除去して
-                    // リテラル '${' として出力.
                     ret = ret.substring(0, ret.length - 1);
-                    ret += "${";
-                    i++; // '{' をスキップ.
+                    ret += "!{";
+                    i++;
                 } else {
                     $pos = i;
+                    isRaw = true;
+                    prefixLen = 2;
                 }
                 // それ以外.
             } else {
@@ -220,7 +265,26 @@
                     // 実行処理部分を実装.
                     n = jhtml[start + 2];
                     if (n == "=") {
-                        // 直接出力.
+                        // HTMLエスケープ出力 (XSS対策).
+                        n = jhtml.substring(start + 3, i).trim();
+                        if (n.endsWith(";")) {
+                            n = n.substring(0, n.length - 1).trim();
+                        }
+                        if (ret.length != 0) {
+                            ret += "\n";
+                        }
+                        // $include(...) 呼び出しに await が無い場合は補完.
+                        if (/^\$include\s*\(/.test(n) || /^await\s+\$include\s*\(/.test(n)) {
+                            if (/^\$include\s*\(/.test(n)) {
+                                n = "await " + n;
+                            }
+                            // $include はHTMLテンプレートの展開結果のためエスケープしない.
+                            ret += out + "(" + n + ");\n";
+                        } else {
+                            ret += out + "(_$escape(" + n + "));\n";
+                        }
+                    } else if (n == "-") {
+                        // Raw直接出力 (エスケープなし).
                         n = jhtml.substring(start + 3, i).trim();
                         if (n.endsWith(";")) {
                             n = n.substring(0, n.length - 1).trim();
@@ -284,6 +348,9 @@
             ret = "exports.handler = async function($params) {\n" +
                 "if ($params === undefined || $params === null) { $params = {}; }\n" +
                 "let _$outString = \"\";\n" +
+                "const _$escape = function(v) { if (v === undefined || v === null) return \"\"; return String(v).replaceAll(\"&\", \"&amp;\").replaceAll(\"<\", \"&lt;\").replaceAll(\">\", \"&gt;\").replaceAll('\"', \"&quot;\").replaceAll(\"'\", \"&#39;\"); };\n" +
+                "const $escape = _$escape;\n" +
+                "const $escapeHtml = _$escape;\n" +
                 "const " + outFunc + " = function(n) { _$outString += (n !== undefined && n !== null ? n : \"\"); return " + outFunc + "; };\n" +
                 ret +
                 "\nreturn _$outString;\n" +
@@ -314,6 +381,8 @@
     /////////////////////////////////////////////////////
     // 外部定義.
     /////////////////////////////////////////////////////
+    exports.escape = _$escape;
+    exports.escapeHtml = _$escape;
     exports.convert = convert;
     exports.isExtension = isExtension;
     exports.changeExtensionByJhtmlToJs = changeExtensionByJhtmlToJs;

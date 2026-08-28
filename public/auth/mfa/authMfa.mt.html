@@ -89,9 +89,9 @@ if (user == undefined || user === "" ||
     </div>
     <script>
         (function () {
-            const user = <%= JSON.stringify(user) %>;
-            const password = <%= JSON.stringify(password) %>;
-            const redirect = <%= JSON.stringify(redirect) %>;
+            const user = <%- JSON.stringify(user) %>;
+            const password = <%- JSON.stringify(password) %>;
+            const redirect = <%- JSON.stringify(redirect) %>;
             const form = document.getElementById("mfaForm");
             const errorEl = document.getElementById("error");
             form.addEventListener("submit", async function (e) {

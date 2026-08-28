@@ -26,6 +26,60 @@ test("jhtml.convert: 基本的な変換", async () => {
     assert.match(result, /<p>world<\/p>/);
 });
 
+test("jhtml.convert: <%= ... %> および ${ ... } で XSS 特殊文字が自動エスケープされる", async () => {
+    const src = `
+<% const payload = '<script>alert("XSS & attack")</script>' + "'test'"; %>
+<div><%= payload %></div>
+<p>\${payload}</p>
+`;
+    const js = jhtml.convert(src);
+    const exp = {};
+    Function("exports", "module", js)(exp, { exports: exp });
+    const result = await exp.handler();
+    const expected = "&lt;script&gt;alert(&quot;XSS &amp; attack&quot;)&lt;/script&gt;&#39;test&#39;";
+    assert.match(result, new RegExp(`<div>${expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</div>`));
+    assert.match(result, new RegExp(`<p>${expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</p>`));
+});
+
+test("jhtml.convert: <%- ... %>, !{ ... }, ${! ... } でエスケープされずに raw 出力される", async () => {
+    const src = `
+<% const raw = '<b>太字</b> & "引用"'; %>
+<div><%- raw %></div>
+<span>!{ raw }</span>
+<p>\${! raw }</p>
+`;
+    const js = jhtml.convert(src);
+    const exp = {};
+    Function("exports", "module", js)(exp, { exports: exp });
+    const result = await exp.handler();
+    assert.match(result, /<div><b>太字<\/b> & "引用"<\/div>/);
+    assert.match(result, /<span><b>太字<\/b> & "引用"<\/span>/);
+    assert.match(result, /<p><b>太字<\/b> & "引用"<\/p>/);
+});
+
+test("jhtml.convert: $escape / $escapeHtml 組み込み関数がテンプレート内で利用できる", async () => {
+    const src = `
+<% const esc1 = $escape('<foo>&"bar"'); const esc2 = $escapeHtml('<baz>'); %>
+<div><%- esc1 %></div>
+<span><%- esc2 %></span>
+`;
+    const js = jhtml.convert(src);
+    const exp = {};
+    Function("exports", "module", js)(exp, { exports: exp });
+    const result = await exp.handler();
+    assert.match(result, /<div>&lt;foo&gt;&amp;&quot;bar&quot;<\/div>/);
+    assert.match(result, /<span>&lt;baz&gt;<\/span>/);
+});
+
+test("jhtml.escape / jhtml.escapeHtml: モジュール外部関数として利用できる", () => {
+    assert.equal(jhtml.escape("<>&\"'"), "&lt;&gt;&amp;&quot;&#39;");
+    assert.equal(jhtml.escapeHtml("<script>"), "&lt;script&gt;");
+    assert.equal(jhtml.escape(null), "");
+    assert.equal(jhtml.escape(undefined), "");
+    assert.equal(jhtml.escape(0), "0");
+    assert.equal(jhtml.escape(false), "false");
+});
+
 test("jhtml.convert: $params を受け取ってアクセスできる", async () => {
     const src = `<h1>\${$params.title}</h1><p>\${$params.count + 1}</p>`;
     const js = jhtml.convert(src);
