@@ -123,10 +123,12 @@ const mfaUrl = protocol + host + "/auth/mfa/mfa" +
         <a id="completeBtn" class="button" href="<%= redirect %>">登録を完了する</a>
 
     </div>
+    <script src="/js/jhtml.browser.js"></script>
     <script src="/auth/js/qrcode.js"></script>
     <script>
-        new QRCode(document.getElementById("qrcode"), {
-            text: document.getElementById("mfaLink").href,
+        const { $ } = jhtml;
+        new QRCode($("qrcode"), {
+            text: $("mfaLink").href,
             width: 200,
             height: 200,
             colorDark: "#000000",

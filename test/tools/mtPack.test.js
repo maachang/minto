@@ -65,6 +65,7 @@ test("mtpk: -t auth 指定時、public/authはpath構造を維持しjhtml変換�
 test("mtpk: -t auth 指定時でも、modules/***に対応しないpublic/jsは常にpackされる", () => {
     const list = runPackAndListZip(["-t", "auth"]);
     assert.match(list, /public\/js\/marked\.umd\.js/);
+    assert.match(list, /public\/js\/jhtml\.browser\.js/);
 });
 
 test("mtpk: -t s3table のようにauthを指定しない場合、public/authはpackされない", () => {
@@ -72,12 +73,14 @@ test("mtpk: -t s3table のようにauthを指定しない場合、public/authは
     assert.doesNotMatch(list, /public\/auth/);
     // modules/***と紐付かないpublic/jsは、authを指定していなくても常にpackされる.
     assert.match(list, /public\/js\/marked\.umd\.js/);
+    assert.match(list, /public\/js\/jhtml\.browser\.js/);
 });
 
 test("mtpk: -t all の場合、public/auth(modules/authに対応)もpackされる", () => {
     const list = runPackAndListZip(["-t", "all"]);
     assert.match(list, /public\/auth\/mfa\/mfa\.jhtml\.js/);
     assert.match(list, /public\/js\/marked\.umd\.js/);
+    assert.match(list, /public\/js\/jhtml\.browser\.js/);
 });
 
 test("mtpk: conf/xxx.local.jsonはデプロイzipに含まれない(通常のconf/xxx.jsonは含まれる)", () => {

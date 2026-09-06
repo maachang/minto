@@ -28,6 +28,8 @@ minto（llrtを使ったAWS Lambda軽量化） は、軽量化モジュール ll
   1. **着手時の全体検索**: 作業前に必ずプロジェクト全体（`lambda/src/`, `modules/`, `tools/`, `sample/` 等）に対して `grep` 検索等を実施し、対象ファイル・行・件数を網羅的に洗い出し、リスト化してから作業に着手する。
   2. **完了前の残存ゼロ検証**: 修正完了後、必ず再度全体検索コマンド（`git grep` 等）を実行し、対象の古いパターンや未対応箇所がプロジェクト内に残っていない（残存件数0、または意図的な除外のみ）ことを機械的に確認・検証する。
   3. **網羅性の報告**: 報告時にはどのファイルを対象にし、残存確認を実施して全件対応が完了したことを明確に示すこと。
+- **フロントエンド DOM 操作・レイアウト変更 & 画面スクリプトにおける `jhtml.browser.js` の利用義務**:
+  HTMLファイルや jhtml（`*.mt.html`）ファイルなどにおいて、ブラウザ JavaScript で**「レイアウトの変更を行う＝DOM操作」**（動的DOM生成・挿入、スタイル・表示切り替え、イベント登録、API通信、フォーム入出力、進捗ポーリング等）を実装・改修する際は、生の `document.getElementById` や生 `fetch`、インライン `onclick`、独自 `escapeHtml` などをベタ書きせず、必ず `<script src="/js/jhtml.browser.js"></script>` を読み込み、`jhtml.html`, `jhtml.$`, `jhtml.refs`, `jhtml.on`, `jhtml.api`, `jhtml.form`, `jhtml.show/hide`, `jhtml.poll` などの提供ユーティリティを利用すること。
 
 # プロジェクトタイプ
 

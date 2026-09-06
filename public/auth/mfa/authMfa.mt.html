@@ -87,33 +87,30 @@ if (user == undefined || user === "" ||
             <button type="submit">確認</button>
         </form>
     </div>
+    <script src="/js/jhtml.browser.js"></script>
     <script>
         (function () {
+            const { $, on, api } = jhtml;
             const user = <%- JSON.stringify(user) %>;
             const password = <%- JSON.stringify(password) %>;
             const redirect = <%- JSON.stringify(redirect) %>;
-            const form = document.getElementById("mfaForm");
-            const errorEl = document.getElementById("error");
-            form.addEventListener("submit", async function (e) {
+            const errorEl = $("error");
+
+            on("#mfaForm", "submit", async function (e) {
                 e.preventDefault();
                 errorEl.textContent = "";
-                const code = document.getElementById("code").value;
-                let data;
+                const code = $("code").value;
                 try {
-                    const res = await fetch("/auth/mfa/authMfaVerify", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ user: user, password: password, code: code, redirect: redirect })
+                    const data = await api.post("/auth/mfa/authMfaVerify", {
+                        user: user, password: password, code: code, redirect: redirect
                     });
-                    data = await res.json();
+                    if (data.success) {
+                        location.href = data.redirectUrl;
+                    } else {
+                        errorEl.textContent = data.message || "認証コードが正しくありません。";
+                    }
                 } catch (err) {
                     errorEl.textContent = "通信に失敗しました。もう一度お試しください。";
-                    return;
-                }
-                if (data.success) {
-                    location.href = data.redirectUrl;
-                } else {
-                    errorEl.textContent = data.message || "認証コードが正しくありません。";
                 }
             });
         })();

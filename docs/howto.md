@@ -10,6 +10,7 @@
 - [⑥minto用 $response 説明](#⑥minto用-response-説明)
 - [⑦動的コンテンツ(json返却)の実装説明](#⑦動的コンテンツjson返却-の実装説明)
 - [⑧jhtml実装](#⑧jhtml-実装)
+- [⑨フロントエンドDOM操作・レイアウト変更（jhtml.browser.js）](#⑨フロントエンドdom操作レイアウト変更jhtmlbrowserjs)
 
 事前にこちらを読んでください。
 
@@ -798,6 +799,51 @@ const s3sdk = $loadLib("s3sdk.js");
 またローカル環境では jhtml 利用が出来ますが、一方で lambda 実行では利用できないため、そのままこのファイルを AWS Console から手動で Lambda のファイル登録しても、動作しません。
 
 Lambda 上でjhtmlを利用可能にするには [mtpkコマンド](https://github.com/maachang/minto/blob/main/bin/README.md#mtpk-%E3%82%B3%E3%83%9E%E3%83%B3%E3%83%89) で lambda デプロイ形式(zip変換)したものを Lambda に zip アップロードする事で jhtmlを利用すること(実際にはjsに変換される)が出来ます。
+
+## ⑨フロントエンドDOM操作・レイアウト変更（jhtml.browser.js）
+
+HTMLファイル（`*.html`）や JHTMLファイル（`*.mt.html`）において、ブラウザ JavaScript で**「レイアウトの変更を行う＝DOM操作」**（動的DOM構築・挿入、表示切り替え、イベント委任、API通信、フォーム入出力、進捗ポーリング等）を行う場合は、生の `document.getElementById` や生 `fetch` などをベタ書きせず、minto 標準のフロントエンドランタイム **`public/js/jhtml.browser.js`** を利用します。
+
+### 読み込み方法
+
+minto では `${MINTO_HOME}/public/` 配下が自動フォールバック配信され、`mtpk` デプロイ時も `public/js/` は常にデプロイ zip に同梱されます。そのため、HTML 内で以下を読み込むだけで即座に利用できます。
+
+```html
+<script src="/js/jhtml.browser.js"></script>
+```
+
+### 主な利用例（レイアウト変更・DOM操作）
+
+```javascript
+const { $, $$, html, on, api, form, show, hide, toggle } = jhtml;
+
+// 1. DOM要素の取得（IDまたはセレクタ）
+const btn = $('submitBtn');
+const activeTabs = $$('.tab-btn.active');
+
+// 2. タグ付きテンプレートリテラルによる動的レイアウト構築（自動XSSエスケープ）
+const userListHtml = html`
+  <div class="user-list">
+    ${users.map(u => html`<div class="card"><h4>${u.name}</h4><p>${u.role}</p></div>`)}
+  </div>
+`;
+$('#userContainer').innerHTML = userListHtml;
+
+// 3. イベント委任（動的に生成された要素にも自動対応）
+on('#userContainer', 'click', '.card', (e, card) => {
+    console.log('選択されたカード:', card);
+});
+
+// 4. 表示・非表示切り替え
+show('#loadingOverlay');
+hide('#loadingOverlay');
+toggle('#modal', isModalOpen);
+
+// 5. API通信（ローディング連動付き）
+const res = await api.post('/api/users', { name: 'Yamada' }, { loading: '#loadingOverlay' });
+```
+
+詳しい全機能のリファレンスは [tools/jhtml.md](../tools/jhtml.md#フロントエンドブラウザ側ランタイム-jhtmlbrowserjs) を参照してください。
 
 ## EOF
 

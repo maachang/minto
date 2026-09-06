@@ -86,10 +86,12 @@ if (user == undefined || user === "" ||
         <% } else { %>
         <div class="code"><%= code %></div>
         <p class="timer"><span id="countdown"><%= Math.ceil(remainMs / 1000) %></span>秒後に更新</p>
+        <script src="/js/jhtml.browser.js"></script>
         <script>
             (function () {
+                const { $ } = jhtml;
                 let remain = <%= remainMs %>;
-                const el = document.getElementById("countdown");
+                const el = $("countdown");
                 const timer = setInterval(function () {
                     remain -= 1000;
                     if (remain <= 0) {
