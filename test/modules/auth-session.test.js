@@ -212,3 +212,21 @@ test("session: conf/session.jsonでsamesite='none'の場合はsecureが自動的
     assert.equal(_cookieOpts["minto_sid"].secure, true);
 });
 
+test("session: regenerateCookieはセッションデータを引き継ぎつつ新しいSIDを発行し古いSIDを破棄する", async () => {
+    const session = require("../../modules/auth/session.js");
+    const initialSid = await session.setCookie("user1", { role: "admin", email: "test@example.com" });
+    assert.equal(_cookies["minto_sid"], initialSid);
+
+    const newSid = await session.regenerateCookie();
+    assert.notEqual(newSid, initialSid);
+    assert.equal(_cookies["minto_sid"], newSid);
+
+    // 古いSIDは破棄されていること
+    assert.equal(await session.get(initialSid), null);
+
+    // 新しいSIDにデータが引き継がれていること
+    const newSession = await session.get(newSid);
+    assert.equal(newSession.userId, "user1");
+    assert.deepEqual(newSession.data, { role: "admin", email: "test@example.com" });
+});
+

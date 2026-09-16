@@ -216,6 +216,22 @@
         $cache()[_SESSION_CACHE] = undefined;
     };
 
+    // セッション固定化攻撃対策: 既存セッションのデータを引き継いだまま
+    // 新しいセッションIDを再発行し、古いセッションを破棄してCookieを更新します.
+    // 戻り値: 新しいセッションID(文字列)。既存セッションが無い場合は新規作成.
+    exports.regenerateCookie = async function () {
+        const req = $request();
+        const oldSid = req.cookie(_getCookieSessionName());
+        let currentSession = null;
+        if (oldSid != null) {
+            currentSession = await exports.get(oldSid);
+            await exports.destroy(oldSid);
+        }
+        const userId = currentSession ? currentSession.userId : null;
+        const userData = currentSession ? currentSession.data : {};
+        return await exports.setCookie(userId, userData);
+    };
+
     // requestのCookieからセッションIDを取得し、セッション情報を返却します.
     // 戻り値: {userId, data}(getと同じ形式)。存在しない場合はnull.
     exports.getCookie = async function () {
