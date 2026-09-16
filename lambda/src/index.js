@@ -2309,8 +2309,13 @@
         };
     };
     // グローバル化: createRandom.
+    // 【注意】Xor128アルゴリズムによる疑似乱数生成器(PRNG)です。
+    // セッションID、トークン、パスワード、ソルト、暗号鍵などのセキュリティ・
+    // 暗号化用途のランダム値としては絶対に使用しないでください。
+    // 暗号化・セキュリティ用途には、必ず crypto.randomBytes() や WebCrypto の
+    // crypto.getRandomValues() 等の暗号論的疑似乱数生成器(CSPRNG)を使用してください。
     _g.createRandom = createRandom;
-    // デフォルトランダム生成機を生成.
+    // デフォルトランダム生成機を生成(非暗号用途専用).
     _g.rand = createRandom();
 
 })(global);
