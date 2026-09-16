@@ -746,7 +746,12 @@
             headers["set-cookie"] = setCookie;
         }
         // 書き込み処理.
-        if (typeof (message) == "string") {
+        // statusMessageにASCII以外の文字(日本語等)が含まれるとNode.jsの
+        // res.writeHeadがERR_INVALID_CHARをスローして接続が異常切断されるため、
+        // ASCII印字可能文字のみで構成されている場合のみ渡す.
+        const isValidStatusMessage = typeof (message) === "string" &&
+            message.length > 0 && /^[\t \x20-\x7e]+$/.test(message);
+        if (isValidStatusMessage) {
             res.writeHead(status, message,
                 _setDefaultResponseHeader(headers));
         } else {

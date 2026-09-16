@@ -483,7 +483,10 @@
         return (ipNum & mask) === (cidrIpNum & mask);
     };
 
-    // IPv6文字列を4つの32bit無符号整数(128bit)配列に変換.
+    // IPv6文字列を128bit BigIntに変換.
+    // AIメモ: JavaScriptの通常のビット演算子(<<, |, &等)は内部で32bit符号付き整数
+    // として扱われるため、最上位ビット(0x80000000以上)が立つIPv6アドレスで符号反転や
+    // シフト桁あふれ破損が生じる。128bit BigIntを用いることでこの問題を完全に回避する.
     const _parseIPv6 = function (ip) {
         if (typeof ip !== "string") return null;
         let str = ip.trim().toLowerCase();
@@ -514,44 +517,30 @@
 
         if (full.length !== 8) return null;
 
-        const words = [];
+        let big = 0n;
         for (let i = 0; i < 8; i++) {
             if (!full[i]) full[i] = "0";
             const val = parseInt(full[i], 16);
             if (isNaN(val) || val < 0 || val > 0xffff) return null;
-            words.push(val);
+            big = (big << 16n) | BigInt(val);
         }
 
-        return [
-            ((words[0] << 16) | words[1]) >>> 0,
-            ((words[2] << 16) | words[3]) >>> 0,
-            ((words[4] << 16) | words[5]) >>> 0,
-            ((words[6] << 16) | words[7]) >>> 0
-        ];
+        return big;
     };
 
     // IPv6 CIDR判定.
-    const _matchIPv6Cidr = function (ipArr, cidrStr) {
+    // 128bit BigInt によるビットマスク判定でJavaScript 32bit符号反転問題を防止.
+    const _matchIPv6Cidr = function (ipBig, cidrStr) {
         const parts = cidrStr.split("/");
-        const cidrIpArr = _parseIPv6(parts[0]);
-        if (!cidrIpArr) return false;
+        const cidrIpBig = _parseIPv6(parts[0]);
+        if (cidrIpBig === null) return false;
         const maskLen = parseInt(parts[1], 10);
         if (isNaN(maskLen) || maskLen < 0 || maskLen > 128) return false;
         if (maskLen === 0) return true;
 
-        let remaining = maskLen;
-        for (let i = 0; i < 4; i++) {
-            if (remaining <= 0) break;
-            if (remaining >= 32) {
-                if (ipArr[i] !== cidrIpArr[i]) return false;
-                remaining -= 32;
-            } else {
-                const mask = (~0 << (32 - remaining)) >>> 0;
-                if ((ipArr[i] & mask) !== (cidrIpArr[i] & mask)) return false;
-                remaining = 0;
-            }
-        }
-        return true;
+        const prefixLen = BigInt(maskLen);
+        const mask = ((1n << prefixLen) - 1n) << (128n - prefixLen);
+        return (ipBig & mask) === (cidrIpBig & mask);
     };
 
     // 単一IPまたはCIDRパターンに一致するか判定.
@@ -583,10 +572,7 @@
             }
             const v6Pattern = _parseIPv6(pattern);
             if (v6Pattern !== null) {
-                return v6Source[0] === v6Pattern[0] &&
-                       v6Source[1] === v6Pattern[1] &&
-                       v6Source[2] === v6Pattern[2] &&
-                       v6Source[3] === v6Pattern[3];
+                return v6Source === v6Pattern;
             }
         }
         return false;
@@ -1405,6 +1391,12 @@
                 ext = "html";
             }
 
+            // publicディレクトリ境界チェック(パストラバーサル遮断).
+            if (!_isSafePublicPath(targetFile)) {
+                console.warn("[warning][" + $requestId() + "] forbidden path traversal attempt: " + targetFile);
+                return _errorStaticResult(403, ext);
+            }
+
             // etag内容の精査.
             const headers = { "expires": "-1" };
             const srcEtag = [null];
@@ -1515,6 +1507,12 @@
         // publicディレクトリ.
         path = _PUBLIC_PATH() + path;
 
+        // publicディレクトリ境界チェック(パストラバーサル遮断).
+        if (!_isSafePublicPath(path)) {
+            console.warn("[warning][" + $requestId() + "] forbidden path traversal attempt: " + path);
+            return _errorStaticResult(403, ext);
+        }
+
         // 拡張子が空の場合
         // *.mt.js: js実行(こちらが優先).
         // *.jhtml.js: jhtml実行.
@@ -1546,6 +1544,11 @@
             } else {
                 // js実行.
                 path += _RUN_JS;
+            }
+            // publicディレクトリ境界チェック(パストラバーサル遮断).
+            if (!_isSafePublicPath(path)) {
+                console.warn("[warning][" + $requestId() + "] forbidden path traversal attempt: " + path);
+                return _errorStaticResult(403, (ext === "jhtml") ? "html" : "js");
             }
             // 対象のファイルが存在しない場合.
             if (!_existsSync(path)) {
@@ -1704,6 +1707,16 @@
             status = e.getStatus();
             message = e.getMessage();
         }
+        // HTTPステータスメッセージはASCII文字列に限定(Node.js httpサーバーのERR_INVALID_CHAR防止).
+        const STATUS_TEXTS = {
+            400: "Bad Request",
+            401: "Unauthorized",
+            403: "Forbidden",
+            404: "Not Found",
+            500: "Internal Server Error"
+        };
+        const statusMessage = STATUS_TEXTS[status] || (status >= 400 && status < 500 ? "Client Error" : "Server Error");
+
         // エラーレスポンス返却.
         if (ext === "jhtml") {
             headers["content-type"] = "text/html";
@@ -1716,7 +1729,7 @@
         _setResponseNoCacheHeaders(headers);
         return {
             statusCode: status
-            , statusMessage: message
+            , statusMessage: statusMessage
             , headers: headers
             , isBase64Encoded: false
             , body: body
@@ -1758,12 +1771,27 @@
     }
 
     // パスに親ディレクトリ参照("..")セグメントが含まれるか判定する.
-    // AIメモ: 以前は rawPath.indexOf("/../") != -1 という部分文字列一致の
-    // みで判定していたが、パス末尾が"/.."で終わる(区切りスラッシュが
-    // 後続に無い)場合に検知をすり抜ける抜け穴があった。セグメント単位で
-    // 判定することでこの抜け穴を無くす.
+    // AIメモ: 単純な文字列一致や未デコードの検査では、%2e%2e や %2f、
+    // 多重URLエンコード(%252e)やすき間を突いたバックスラッシュ(\)等に
+    // よってパストラバーサルの検知をすり抜ける脆弱性があった。
+    // decodeURIComponent を収束するまで繰り返し適用し、\ を / に統一
+    // した上で各セグメントが ".." でないかを検査する.
     const _hasParentTraversal = function (path) {
-        const segs = path.split("/");
+        if (typeof path !== "string") return false;
+        let decoded = path;
+        for (let i = 0; i < 3; i++) {
+            try {
+                const next = decodeURIComponent(decoded);
+                if (next === decoded) break;
+                decoded = next;
+            } catch (_) {
+                // 不正なURIエンコーディング文字列は安全側に倒して検知(拒否)する.
+                return true;
+            }
+        }
+        if (decoded.includes("\0")) return true;
+        decoded = decoded.replace(/\\/g, "/");
+        const segs = decoded.split("/");
         const len = segs.length;
         for (let i = 0; i < len; i++) {
             if (segs[i] === "..") {
@@ -1771,7 +1799,20 @@
             }
         }
         return false;
-    }
+    };
+
+    // 指定されたファイルパスがpublic/ディレクトリ内に安全に収まっているか検証する.
+    // パストラバーサルによる親ディレクトリや設定ファイル(conf/等)の漏洩を防止する.
+    const _isSafePublicPath = function (targetFile) {
+        try {
+            const publicDir = pathLib.resolve(_PUBLIC_PATH());
+            const resolved = pathLib.resolve(targetFile);
+            const rel = pathLib.relative(publicDir, resolved);
+            return !rel.startsWith("..") && !pathLib.isAbsolute(rel);
+        } catch (_) {
+            return false;
+        }
+    };
 
     // 拡張子を取得.
     const _extends = function (path) {

@@ -154,3 +154,26 @@ test("e2e: フォールバック後もプロジェクト側のパス解決に影
     const body = await res.json();
     assert.equal(body.hello, "world");
 });
+
+test("e2e: パストラバーサル(.. や %2e%2e)によるpublic外のファイルアクセスは拒否される", async () => {
+    // 単純な .. トラバーサル.
+    const res1 = await fetch(baseUrl + "/../package.json");
+    assert.equal(res1.status >= 400, true);
+
+    // URLエンコードされたトラバーサル (%2e%2e).
+    const res2 = await fetch(baseUrl + "/%2e%2e/package.json");
+    assert.equal(res2.status >= 400, true);
+
+    // %2f を含むトラバーサル.
+    const res3 = await fetch(baseUrl + "/%2e%2e%2fpackage.json");
+    assert.equal(res3.status >= 400, true);
+
+    // 二重エンコード (%252e%252e).
+    const res4 = await fetch(baseUrl + "/%252e%252e/package.json");
+    assert.equal(res4.status >= 400, true);
+
+    // confディレクトリへのアクセス遮断.
+    const res5 = await fetch(baseUrl + "/%2e%2e/conf/sample.json");
+    assert.equal(res5.status >= 400, true);
+});
+
