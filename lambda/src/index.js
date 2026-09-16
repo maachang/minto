@@ -402,6 +402,11 @@
             throw new Error("Failed to $include file: " + name);
         }
 
+        // publicディレクトリ境界チェック(パストラバーサル遮断).
+        if (!_isSafePublicPath(target.path)) {
+            throw new Error("Invalid $include path (path traversal detected): " + name);
+        }
+
         // static html (convなし) の場合、ファイル内容を直接返す.
         if ((target.path.endsWith(".html") || target.path.endsWith(".htm")) && target.conv === null) {
             return fs.readFileSync(target.path, "utf8");

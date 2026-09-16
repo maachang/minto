@@ -245,3 +245,27 @@ test("$include: 存在しないファイルをインクルードするとエラ�
         fs.rmSync(tmpDir, { recursive: true, force: true });
     }
 });
+
+test("$include: publicディレクトリ外へのパストラバーサルは遮断される", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "minto-jhtml-traversal-"));
+    const publicDir = path.join(tmpDir, "public");
+    const confDir = path.join(tmpDir, "conf");
+    fs.mkdirSync(publicDir, { recursive: true });
+    fs.mkdirSync(confDir, { recursive: true });
+
+    try {
+        fs.writeFileSync(path.join(confDir, "secret.json"), JSON.stringify({ secret: "12345" }));
+        fs.writeFileSync(path.join(publicDir, "index.mt.html"), `\${$include("../conf/secret.json")}`);
+
+        lambda.setBasePath(tmpDir);
+        lambda.setJHTMLConvFunc(jhtml.convert);
+        lambda.clearCache();
+
+        const res = await lambda.handler({ rawPath: "/index" }, { awsRequestId: "req-traversal" });
+        assert.equal(res.statusCode, 500);
+        assert.match(res.body, /Internal Server Error/);
+    } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+});
+

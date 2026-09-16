@@ -558,6 +558,21 @@ HTTPメソッドが `GET` の場合は `null` 返却されます.
 
 それ以外のHTTPメソッド `POST` などの場合は バイナリおよび文字列が取得出来ます。
 
+### 13. $request().ip()
+
+接続元のクライアントIPアドレスを取得します。Lambda 関数 URL の `event.requestContext.http.sourceIp`、API Gateway / ALB の `identity.sourceIp`、または `X-Forwarded-For` ヘッダから解決されます（カンマ区切りの場合は最左端のIPアドレス）。
+
+使い方: /xxxx.mt.js
+~~~js
+const ip = $request().ip();
+console.log("client IP: " + ip);
+~~~
+
+実行結果:
+~~~cmd
+client IP: 192.168.1.100
+~~~
+
 ## ⑥minto用 $response 説明
 
 通常単純に動的コンテンツとしての処理結果を返却するだけなら
