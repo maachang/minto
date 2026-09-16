@@ -706,8 +706,11 @@
     // メンテナンスロックのキー名.
     const _TABLE_LOCK_KEY = "table-migration";
 
-    // メンテナンスロックのタイムアウト(実質無し扱い. 異常終了時は手動解除).
-    const _TABLE_LOCK_TIMEOUT_MS = Number.MAX_SAFE_INTEGER;
+    // メンテナンスロックのタイムアウト(AWS Lambdaの最大実行時間である15分).
+    // 万が一Lambdaがタイムアウトや強制終了(SIGKILL)でfinallyのロック解除を
+    // 行えずにプロセス死した場合でも、15分経過後に自動でstale判定・再取得
+    // (reclaim)できるようにして完全閉塞を防止する.
+    const _TABLE_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
 
     // カラム定義の差分(追加・削除)を検出する.
     // 戻り値: { addedNames, removedNames } (いずれもカラム名の配列).
