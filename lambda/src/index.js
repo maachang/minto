@@ -254,6 +254,18 @@
         return _context["awsRequestId"];
     }
 
+    // パスがベースディレクトリ内に安全に収まっているか検証するヘルパー.
+    const _isSafeSubPath = function (baseDir, targetFile) {
+        try {
+            const resolvedBase = pathLib.resolve(baseDir);
+            const resolvedTarget = pathLib.resolve(targetFile);
+            const rel = pathLib.relative(resolvedBase, resolvedTarget);
+            return !rel.startsWith("..") && !pathLib.isAbsolute(rel);
+        } catch (_) {
+            return false;
+        }
+    };
+
     // ライブラリをロード処理.
     // name: 対象のJSファイル等を設定します.
     // 戻り値: require結果が返却されます.
@@ -261,15 +273,19 @@
         name = ("" + name).trim();
         //if (name[0] === "/") {
         if (name.charCodeAt(0) === 47) {
-            name = name.substring(1)
+            name = name.substring(1);
+        }
+        const targetPath = _LIBRARY_PATH() + name;
+        if (!_isSafeSubPath(_LIBRARY_PATH(), targetPath)) {
+            throw new Error("Invalid lib path (path traversal detected): " + name);
         }
         // "/lib" 以下のファイルを require.
-        if (_existsSync(_LIBRARY_PATH() + name)) {
-            return require(_LIBRARY_PATH() + name)
+        if (_existsSync(targetPath)) {
+            return require(targetPath);
         }
         // 取得できない場合はエラー.
         throw new Error("Failed to load lib: " + name);
-    }
+    };
 
     // コンフィグJSONをロード処理.
     // name: 対象のjsonファイル等を設定します.
@@ -278,15 +294,19 @@
         name = ("" + name).trim();
         //if (name[0] === "/") {
         if (name.charCodeAt(0) === 47) {
-            name = name.substring(1)
+            name = name.substring(1);
         }
-        if (_existsSync(_CONF_PATH() + name)) {
+        const targetPath = _CONF_PATH() + name;
+        if (!_isSafeSubPath(_CONF_PATH(), targetPath)) {
+            return null;
+        }
+        if (_existsSync(targetPath)) {
             // "/conf" 以下のファイルを require.
-            return require(_CONF_PATH() + name)
+            return require(targetPath);
         }
         // 取得できない場合は null.
         return null;
-    }
+    };
 
     // 実行中のテンプレートパスのスタック.
     const _includeStack = [];
@@ -1995,6 +2015,21 @@
             }
             return ret;
         }
+        // 接続元IPアドレスを取得.
+        let _ip = null;
+        o.ip = function () {
+            if (_ip !== null) {
+                return _ip;
+            }
+            _ip = (event && event.requestContext && event.requestContext.http && event.requestContext.http.sourceIp)
+                || (event && event.requestContext && event.requestContext.identity && event.requestContext.identity.sourceIp)
+                || (event && event.headers && (event.headers["x-forwarded-for"] || event.headers["X-Forwarded-For"]))
+                || null;
+            if (_ip && _ip.indexOf(",") !== -1) {
+                _ip = _ip.split(",")[0].trim();
+            }
+            return _ip;
+        };
         // protocol.
         o.protocol = function () {
             return event.requestContext.http.protocol;
@@ -2185,8 +2220,8 @@
                         if (cnt !== 0) {
                             pms += "&";
                         }
-                        pms += decodeURIComponent(k) + "=" +
-                            decodeURIComponent(params[k]);
+                        pms += encodeURIComponent(k) + "=" +
+                            encodeURIComponent(params[k]);
                         cnt++;
                     }
                     params = pms;

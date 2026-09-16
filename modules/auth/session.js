@@ -59,6 +59,10 @@
                 timeout: (c.timeoutMin || 30) * 60 * 1000,
                 // Cookieの SameSite属性. 未設定の場合は "lax"(既定).
                 samesite: c.samesite || "lax",
+                // Cookieの Secure属性.
+                // conf/session.json で明示指定されている場合はその設定に従う.
+                // 未指定の場合はHTTPS環境またはsamesite="none"ならtrue, それ以外はfalse.
+                secure: c.secure !== undefined ? !!c.secure : (c.samesite === "none"),
                 s3opts: { region: c.region, credentials: c.credentials }
             };
         }
@@ -168,13 +172,17 @@
 
         // Cookie設定.
         const conf = _getConf();
-        res.cookie(_getCookieSessionName(), {
+        const cookieOpts = {
             value: sid,
             path: "/",
             httponly: true,
             samesite: conf.samesite,
             "max-age": "" + (conf.timeout / 1000)
-        });
+        };
+        if (conf.secure) {
+            cookieOpts.secure = true;
+        }
+        res.cookie(_getCookieSessionName(), cookieOpts);
 
         // キャッシュをクリア.
         $cache()[_SESSION_CACHE] = undefined;
@@ -191,14 +199,19 @@
         if (sid != null) {
             await exports.destroy(sid);
         }
+        const conf = _getConf();
         // Cookieクリア.
-        res.cookie(_getCookieSessionName(), {
+        const cookieOpts = {
             value: "",
             path: "/",
             httponly: true,
-            samesite: _getConf().samesite,
+            samesite: conf.samesite,
             "max-age": "0"
-        });
+        };
+        if (conf.secure) {
+            cookieOpts.secure = true;
+        }
+        res.cookie(_getCookieSessionName(), cookieOpts);
         // キャッシュをクリア.
         $cache()[_SESSION_CACHE] = undefined;
     };

@@ -203,3 +203,44 @@ test("IP制限: 最上位ビットが立つIPv6アドレス(0x80000000以上)の
         global.$loadConf = originalLoadConf;
     }
 });
+
+test("$request().ip: sourceIpやx-forwarded-forからクライアントIPを取得できる", async () => {
+    // 1. requestContext.http.sourceIp
+    await lambdaIndex.handler({
+        rawPath: "/hello",
+        requestContext: { http: { sourceIp: "198.51.100.1" } }
+    }, {});
+    assert.equal($request().ip(), "198.51.100.1");
+
+    // 2. requestContext.identity.sourceIp (REST API v1互換)
+    await lambdaIndex.handler({
+        rawPath: "/hello",
+        requestContext: { identity: { sourceIp: "198.51.100.2" } }
+    }, {});
+    assert.equal($request().ip(), "198.51.100.2");
+
+    // 3. headers["x-forwarded-for"] カンマ区切りの先頭
+    await lambdaIndex.handler({
+        rawPath: "/hello",
+        headers: { "x-forwarded-for": "203.0.113.10, 198.51.100.1" }
+    }, {});
+    assert.equal($request().ip(), "203.0.113.10");
+});
+
+test("$loadLib: 相対パスによるディレクトリトラバーサルは遮断される", () => {
+    assert.throws(() => {
+        $loadLib("../tools/args.js");
+    }, /path traversal detected/);
+
+    assert.throws(() => {
+        $loadLib("/../tools/args.js");
+    }, /path traversal detected/);
+});
+
+test("$response().redirect: 日本語や特殊文字を含むクエリパラメータが正しくエンコードされる", () => {
+    $response().redirect("/dest", { search: "テスト", page: 1 });
+    const res = $response()._$get();
+    assert.equal(res.status, 301);
+    assert.equal(res.headers["location"], "/dest?search=%E3%83%86%E3%82%B9%E3%83%88&page=1");
+});
+

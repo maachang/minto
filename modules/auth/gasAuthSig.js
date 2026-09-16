@@ -10,28 +10,20 @@ const convb = $loadLib("convb.js");
 // 乱数キー数.
 const _RAND_LENGTH = 16;
 
-// ランダムバイナリをout(Array)に格納.
+// crypto.
+const crypto = typeof $require === "function" ? $require("crypto") : require("crypto");
+
+// ランダムバイナリをout(Array)に格納(暗号論的乱数を使用).
 const getRandArray = function (out, len) {
-    let n, i, cnt = 0;
-    const len4 = len >> 2;
-    const lenEtc = len & 0x03;
-    for (i = 0; i < len4; i++) {
-        n = rand.next();
-        out[cnt++] = n & 0x0ff;
-        out[cnt++] = (n & 0x0ff00) >> 8;
-        out[cnt++] = (n & 0x0ff0000) >> 16;
-        out[cnt++] = ((n & 0xff000000) >> 24) & 0x0ff;
-    }
-    for (i = 0; i < lenEtc; i++) {
-        out[cnt++] = rand.next() & 0x0ff;
+    const buf = crypto.randomBytes(len);
+    for (let i = 0; i < len; i++) {
+        out[i] = buf[i];
     }
 };
 
-// ランダムバイナリを指定数取得.
+// ランダムバイナリを指定数取得(暗号論的乱数を使用).
 const getRandBytes = function (len) {
-    const ret = Buffer.alloc(len);
-    getRandArray(ret, len);
-    return ret;
+    return crypto.randomBytes(len);
 };
 
 // フリップ.

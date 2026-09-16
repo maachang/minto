@@ -26,9 +26,14 @@
 
     // [環境変数]CSRFトークン署名用シークレット.
     const _SECRET_ENV = "CSRF_SECRET";
+    let _warnedDefaultSecret = false;
     const _getSecret = function () {
         const ret = process.env[_SECRET_ENV];
         if (ret == undefined || ret == null || ret === "") {
+            if (!_warnedDefaultSecret) {
+                console.warn("[WARN] CSRF_SECRET environment variable is not set. Using default insecure secret. Please set CSRF_SECRET in production.");
+                _warnedDefaultSecret = true;
+            }
             // デフォルトシークレット(本番運用では必ず環境変数を設定すること).
             return "minto-default-csrf-secret";
         }

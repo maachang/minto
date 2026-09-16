@@ -195,3 +195,20 @@ test("session: destroyCookie時のCookieクリアにもsamesite設定が反映�
     await session.destroyCookie();
     assert.equal(_cookieOpts["minto_sid"].samesite, "none");
 });
+
+test("session: conf/session.jsonのsecureを設定した場合はCookieに反映される", async () => {
+    _sessionConf = { bucket: "test-bucket", secure: true };
+    const session = require("../../modules/auth/session.js");
+    await session.setCookie("user1", {});
+    assert.equal(_cookieOpts["minto_sid"].secure, true);
+    await session.destroyCookie();
+    assert.equal(_cookieOpts["minto_sid"].secure, true);
+});
+
+test("session: conf/session.jsonでsamesite='none'の場合はsecureが自動的にtrueになる", async () => {
+    _sessionConf = { bucket: "test-bucket", samesite: "none" };
+    const session = require("../../modules/auth/session.js");
+    await session.setCookie("user1", {});
+    assert.equal(_cookieOpts["minto_sid"].secure, true);
+});
+
