@@ -51,7 +51,7 @@ var qrcode = new QRCode(document.getElementById("$id"), {
 **/
 
 // crypto.
-const crypto = $require("crypto")
+const crypto = typeof $require === "function" ? $require("crypto") : require("crypto");
 
 // xor128ランダム.
 const xor128 =  function (seed) {
@@ -241,9 +241,11 @@ const generateRandomCode = function(count) {
     } else if(count <= 8) {
         count = 8;
     }
-    const r = xor128(process.hrtime()[1]);
-    const n = r.getBytes(count);
-    return n.toString('base64').substring(0, count);
+    // AIメモ: 以前は xor128(process.hrtime()[1]) を利用していたが、
+    // シード探索空間が小さく暗号論的に安全でないため、crypto.randomBytes を
+    // 使用して暗号論的疑似乱数(CSPRNG)で安全に生成する.
+    const buf = crypto.randomBytes(count);
+    return buf.toString('base64').substring(0, count);
 }
 
 // ２段階認証コードを生成.

@@ -34,7 +34,6 @@
                 console.warn("[WARN] CSRF_SECRET environment variable is not set. Using default insecure secret. Please set CSRF_SECRET in production.");
                 _warnedDefaultSecret = true;
             }
-            // デフォルトシークレット(本番運用では必ず環境変数を設定すること).
             return "minto-default-csrf-secret";
         }
         return ret;
