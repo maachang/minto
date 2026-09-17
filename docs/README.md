@@ -3,6 +3,7 @@
 - ローカル環境:
   - mintoをローカル環境セットアップ: https://github.com/maachang/minto/blob/main/docs/setup.md
   - mintoのローカル開発説明: https://github.com/maachang/minto/blob/main/docs/howto.md
+  - レスポンスストリーミング/SSE & セキュリティヘッダー設定: https://github.com/maachang/minto/blob/main/docs/streamAndSecurity.md
   - ローカルAWSエミュレータ(localAws、S3+SQS)説明: https://github.com/maachang/minto/blob/main/docs/localAws.md
 
 - Lambda生成 デプロイ

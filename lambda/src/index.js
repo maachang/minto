@@ -181,6 +181,121 @@
     const _CONF_PATH = function () {
         return _basePath + "conf/";
     }
+
+    // セキュリティヘッダー設定ファイル名とキャッシュ.
+    const _SECURITY_CONF = "security.json";
+    let _c_security = null;
+
+    // セキュリティ設定をロード.
+    const _loadSecurityConf = function () {
+        if (_c_security !== null) {
+            return _c_security;
+        }
+        try {
+            const targetPath = _CONF_PATH() + _SECURITY_CONF;
+            if (_existsSync(targetPath)) {
+                const content = fs.readFileSync(targetPath, "utf8");
+                _c_security = JSON.parse(content);
+            } else {
+                _c_security = { enabled: false };
+            }
+        } catch (e) {
+            console.error("[error] Failed to load security.json:", e);
+            _c_security = { enabled: false };
+        }
+        return _c_security;
+    }
+
+    // レスポンスヘッダにセキュリティヘッダーを適用.
+    const _applySecurityHeaders = function (targetHeaders) {
+        if (!targetHeaders || typeof (targetHeaders) !== "object") {
+            return;
+        }
+        const conf = _loadSecurityConf();
+        if (conf && conf.enabled !== false && conf.headers) {
+            for (let k in conf.headers) {
+                const headerKey = ("" + k).trim().toLowerCase();
+                if (targetHeaders[headerKey] === undefined) {
+                    targetHeaders[headerKey] = conf.headers[k];
+                }
+            }
+        }
+    }
+
+    // レスポンスストリーム用ラッパーオブジェクト生成.
+    const _createStreamWrapper = function (writer, ender) {
+        let isEnded = false;
+        const closeListeners = [];
+        const stream = {
+            write: function (chunk) {
+                if (isEnded) {
+                    return false;
+                }
+                return writer(chunk);
+            },
+            sendEvent: function (data, options) {
+                if (isEnded) {
+                    return false;
+                }
+                let out = "";
+                if (options) {
+                    if (options.id !== undefined && options.id !== null) {
+                        out += "id: " + options.id + "\n";
+                    }
+                    if (options.event) {
+                        out += "event: " + options.event + "\n";
+                    }
+                    if (options.retry !== undefined && options.retry !== null) {
+                        out += "retry: " + options.retry + "\n";
+                    }
+                }
+                let dataStr;
+                if (typeof (data) === "object" && data !== null && !(data instanceof Buffer)) {
+                    dataStr = JSON.stringify(data);
+                } else {
+                    dataStr = "" + (data !== undefined && data !== null ? data : "");
+                }
+                const lines = dataStr.split("\n");
+                for (let i = 0; i < lines.length; i++) {
+                    out += "data: " + lines[i] + "\n";
+                }
+                out += "\n";
+                return writer(out);
+            },
+            end: function (chunk) {
+                if (isEnded) {
+                    return;
+                }
+                if (chunk !== undefined && chunk !== null) {
+                    writer(chunk);
+                }
+                isEnded = true;
+                if (ender) {
+                    ender();
+                }
+            },
+            isEnded: function () {
+                return isEnded;
+            },
+            onClose: function (callback) {
+                if (typeof callback === "function") {
+                    closeListeners.push(callback);
+                }
+            },
+            _emitClose: function () {
+                for (let i = 0; i < closeListeners.length; i++) {
+                    try {
+                        closeListeners[i]();
+                    } catch (e) {
+                        console.error("[error] stream close listener error:", e);
+                    }
+                }
+            }
+        };
+        return stream;
+    }
+    exports._createStreamWrapper = _createStreamWrapper;
+
     // sqs実行プログラム名と実行パス
     const _SQS_FUNC_NAME = "runSqs";
     const _SQS_FUNC_FILE = _SQS_FUNC_NAME + _RUN_JS;
@@ -214,6 +329,7 @@
         _c_mime = null;
         _c_etag = null;
         _c_cache = null;
+        _c_security = null;
         _includeStack.length = 0;
         // キャッシュ情報.
         _existsCache.clear();
@@ -1445,6 +1561,8 @@
             headers["content-type"] = mime;
             // etagキャッシュが一致する場合.
             if (etagCache == true) {
+                // セキュリティヘッダー適用.
+                _applySecurityHeaders(headers);
                 // キャッシュ扱いで返却する.
                 return {
                     statusCode: 304
@@ -1458,6 +1576,8 @@
                 // gzipのfileを取得.
                 let body = fs.readFileSync(targetFile + _PUBLIC_CONTENTS_GZ);
                 headers["content-encoding"] = "gzip";
+                // セキュリティヘッダー適用.
+                _applySecurityHeaders(headers);
                 // 返却処理.
                 return {
                     statusCode: 200
@@ -1480,6 +1600,8 @@
                 body = _convGZIP(body);
                 headers["content-encoding"] = "gzip";
             }
+            // セキュリティヘッダー適用.
+            _applySecurityHeaders(headers);
             // 返却処理.
             return {
                 statusCode: 200
@@ -1515,6 +1637,8 @@
         }
         // ノーキャッシュヘッダをセット.
         _setResponseNoCacheHeaders(headers);
+        // セキュリティヘッダー適用.
+        _applySecurityHeaders(headers);
         return {
             statusCode: status | 0
             , headers: headers
@@ -1695,8 +1819,23 @@
                 break;
             }
         }
+        // セキュリティヘッダー適用.
+        _applySecurityHeaders(response.headers);
         // キャッシュなしを設定.
         _setResponseNoCacheHeaders(response.headers);
+
+        // ストリーミングレスポンスの場合.
+        if (response.isStream) {
+            return {
+                statusCode: response.status
+                , statusMessage: response.message
+                , headers: response.headers
+                , cookies: cookies
+                , isStream: true
+                , streamHandler: response.streamHandler
+            };
+        }
+
         // status message が設定されていない場合.
         if (response.message === undefined || response.message === null ||
             response.message === "") {
@@ -1752,6 +1891,8 @@
         }
         // ノーキャッシュヘッダをセット.
         _setResponseNoCacheHeaders(headers);
+        // セキュリティヘッダー適用.
+        _applySecurityHeaders(headers);
         return {
             statusCode: status
             , statusMessage: statusMessage
@@ -2202,6 +2343,41 @@
             }
             _headers["content-type"] = mime;
         }
+        // セキュリティヘッダーをレスポンス単位で動的に設定/上書き.
+        o.securityHeaders = function (headers) {
+            if (headers && typeof (headers) === "object") {
+                for (let k in headers) {
+                    _headers[("" + k).trim().toLowerCase()] = headers[k];
+                }
+            }
+        }
+        // ストリーミングレスポンスフラグとハンドラ.
+        let _isStream = false;
+        let _streamHandler = null;
+
+        // レスポンスストリーミング.
+        // fn: async function(stream) { stream.write(...); stream.end(); }
+        o.stream = function (fn) {
+            if (typeof (fn) !== "function") {
+                throw new Error("stream handler must be a function");
+            }
+            _isStream = true;
+            _streamHandler = fn;
+        }
+
+        // Server-Sent Events (SSE).
+        // fn: async function(stream) { stream.sendEvent(...); stream.end(); }
+        o.sse = function (fn) {
+            if (typeof (fn) !== "function") {
+                throw new Error("sse handler must be a function");
+            }
+            _isStream = true;
+            o.header("content-type", "text/event-stream");
+            o.header("cache-control", "no-cache");
+            o.header("connection", "keep-alive");
+            _streamHandler = fn;
+        }
+
         // リダイレクト.
         o.redirect = function (url, params, status) {
             if (status === undefined) {
@@ -2250,7 +2426,9 @@
                 message: _state_msg,
                 headers: _headers,
                 cookies: _cookies,
-                body: _body
+                body: _body,
+                isStream: _isStream,
+                streamHandler: _streamHandler
             }
         }
         _c_response = o;
@@ -2357,5 +2535,90 @@
     _g.createRandom = createRandom;
     // デフォルトランダム生成機を生成(非暗号用途専用).
     _g.rand = createRandom();
+
+    // ストリームレスポンスをメモリバッファに集約して通常レスポンス形式に変換(テスト・互換用).
+    exports.consumeStreamResponse = async function (result) {
+        if (!result || !result.isStream || typeof result.streamHandler !== "function") {
+            return result;
+        }
+        const chunks = [];
+        const stream = _createStreamWrapper(
+            (chunk) => {
+                if (typeof chunk === "string") {
+                    chunks.push(Buffer.from(chunk));
+                } else if (chunk instanceof Buffer) {
+                    chunks.push(chunk);
+                } else {
+                    chunks.push(Buffer.from("" + chunk));
+                }
+                return true;
+            },
+            () => {}
+        );
+        try {
+            const p = result.streamHandler(stream);
+            if (p && typeof p.then === "function") {
+                await p;
+            }
+        } finally {
+            if (!stream.isEnded()) {
+                stream.end();
+            }
+        }
+        const totalBody = Buffer.concat(chunks);
+        return {
+            statusCode: result.statusCode,
+            statusMessage: result.statusMessage,
+            headers: result.headers,
+            cookies: result.cookies,
+            isBase64Encoded: false,
+            body: totalBody.toString("utf8")
+        };
+    };
+
+    // AWS Lambda レスポンスストリーミング用ハンドラ.
+    // ランタイム環境が awslambda.streamifyResponse を提供する場合に利用可能.
+    if (typeof awslambda !== "undefined" && typeof awslambda.streamifyResponse === "function") {
+        exports.streamHandler = awslambda.streamifyResponse(async function (event, responseStream, context) {
+            const result = await exports.handler(event, context);
+            if (result && result.isStream && typeof result.streamHandler === "function") {
+                const httpResponseMetadata = {
+                    statusCode: result.statusCode || 200,
+                    headers: result.headers || {},
+                    cookies: result.cookies || []
+                };
+                responseStream = awslambda.HttpResponseStream.from(responseStream, httpResponseMetadata);
+                const stream = _createStreamWrapper(
+                    (chunk) => responseStream.write(chunk),
+                    () => responseStream.end()
+                );
+                try {
+                    const p = result.streamHandler(stream);
+                    if (p && typeof p.then === "function") {
+                        await p;
+                    }
+                } finally {
+                    if (!stream.isEnded()) {
+                        stream.end();
+                    }
+                }
+            } else if (result) {
+                const httpResponseMetadata = {
+                    statusCode: result.statusCode || 200,
+                    headers: result.headers || {},
+                    cookies: result.cookies || []
+                };
+                responseStream = awslambda.HttpResponseStream.from(responseStream, httpResponseMetadata);
+                if (result.body) {
+                    if (result.isBase64Encoded) {
+                        responseStream.write(Buffer.from(result.body, "base64"));
+                    } else {
+                        responseStream.write(result.body);
+                    }
+                }
+                responseStream.end();
+            }
+        });
+    }
 
 })(global);

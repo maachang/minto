@@ -331,6 +331,8 @@
         }
         // lambda.index のキャッシュクリア.
         mintoLambdaIndex.clearCache();
+        // セキュリティヘッダー設定キャッシュクリア.
+        _securityConf = null;
         // ユニークリクエストIDをクリア
         _uniqueRequestId = null;
     }
@@ -475,7 +477,11 @@
                 }
             }
             // mintoMainLambdaから返却された内容をresponse.
-            _resultMinto(res, result);
+            if (result != null && result.isStream === true && typeof result.streamHandler === "function") {
+                await _resultMintoStream(res, result);
+            } else {
+                _resultMinto(res, result);
+            }
         } catch (err) {
             try {
                 // エラー送信.
@@ -572,6 +578,42 @@
         headers['access-control-allow-methods'] = "GET, POST";
     }
 
+    // セキュリティヘッダー設定キャッシュ.
+    let _securityConf = null;
+    let _lastSecurityConfCheck = 0;
+
+    const _getSecurityConf = function () {
+        const now = Date.now();
+        if (_securityConf !== null && now - _lastSecurityConfCheck < 1000) {
+            return _securityConf;
+        }
+        _lastSecurityConfCheck = now;
+        try {
+            const secPath = mainPath + "conf/security.json";
+            if (fs.existsSync(secPath)) {
+                _securityConf = JSON.parse(fs.readFileSync(secPath, "utf8"));
+            } else {
+                _securityConf = { enabled: false };
+            }
+        } catch (e) {
+            _securityConf = { enabled: false };
+        }
+        return _securityConf;
+    };
+
+    const _applySecurityHeader = function (headers) {
+        const conf = _getSecurityConf();
+        if (conf && conf.enabled !== false && conf.headers) {
+            for (let k in conf.headers) {
+                const headerKey = ("" + k).trim().toLowerCase();
+                if (headers[headerKey] === undefined) {
+                    headers[headerKey] = conf.headers[k];
+                }
+            }
+        }
+        return headers;
+    };
+
     // デフォルトレスポンスヘッダをセット.
     // headers 対象のHTTPヘッダ(Object型)を設定します.
     // 戻り値: Objectが返却されます.
@@ -591,6 +633,8 @@
             // cros返却.
             _setCrosHeader(headers);
         }
+        // セキュリティヘッダー適用.
+        _applySecurityHeader(headers);
         return headers;
     }
 
@@ -676,6 +720,90 @@
             event.isBase64Encoded = true;
         }
         return event;
+    }
+
+    // minto(lambda index.js)で返却されたストリーミングレスポンスを送信.
+    const _resultMintoStream = function (res, result) {
+        return new Promise((resolve) => {
+            const headers = _setDefaultResponseHeader(result.headers || {});
+            delete headers["content-length"];
+            headers["server"] = _SERVER_NAME;
+            headers["date"] = new Date().toISOString();
+            if (Array.isArray(result.cookies) && result.cookies.length > 0) {
+                headers["set-cookie"] = result.cookies;
+            }
+
+            const statusCode = result.statusCode || 200;
+            const statusMessage = result.statusMessage || "OK";
+            try {
+                res.writeHead(statusCode, statusMessage, headers);
+            } catch (e) {
+                try {
+                    res.writeHead(statusCode, headers);
+                } catch (err) {
+                    console.error("[error] writeHead failed:", err);
+                    resolve();
+                    return;
+                }
+            }
+
+            let ended = false;
+            const finish = () => {
+                if (!ended) {
+                    ended = true;
+                    try {
+                        res.end();
+                    } catch (e) {}
+                    resolve();
+                }
+            };
+
+            const stream = (mintoLambdaIndex._createStreamWrapper)
+                ? mintoLambdaIndex._createStreamWrapper(
+                    (chunk) => {
+                        if (!ended) {
+                            try {
+                                return res.write(chunk);
+                            } catch (e) {
+                                return false;
+                            }
+                        }
+                        return false;
+                    },
+                    finish
+                )
+                : null;
+
+            if (!stream) {
+                finish();
+                return;
+            }
+
+            res.on("close", () => {
+                if (typeof stream._emitClose === "function") {
+                    stream._emitClose();
+                }
+                finish();
+            });
+            res.on("error", finish);
+
+            try {
+                const p = result.streamHandler(stream);
+                if (p && typeof p.then === "function") {
+                    p.then(() => {
+                        if (!stream.isEnded()) {
+                            stream.end();
+                        }
+                    }).catch((err) => {
+                        console.error("[error] Stream handler error:", err);
+                        finish();
+                    });
+                }
+            } catch (err) {
+                console.error("[error] Stream handler execution failed:", err);
+                finish();
+            }
+        });
     }
 
     // minto(lambda index.js)で返却されたresult内容を送信.
