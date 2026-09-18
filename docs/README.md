@@ -32,4 +32,6 @@
   - createTable/dropTable/alterTable/alterIndex（`bin/tableTool`）: https://github.com/maachang/minto/blob/main/bin/README.md
 
 - メモ・補足資料
+  - 未対応タスク・バックログ管理 (TODO): https://github.com/maachang/minto/blob/main/docs/memo/todo-list.md
+  - 機能拡張・改善アイデア検討メモ: https://github.com/maachang/minto/blob/main/docs/memo/feature-ideas.md
   - s3IndexTable.jsのS3 I/Oコスト試算: https://github.com/maachang/minto/blob/main/docs/memo/s3IndexTable-cost-estimate.md

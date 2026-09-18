@@ -81,6 +81,9 @@ minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事�
 - **`session.js`**: S3 ベースセッション管理（Cookie 自動連携、1 実行毎キャッシュ内蔵）。設定は `conf/session.json`（`bucket`, `prefix`, `timeoutMin`, `samesite`, `secure`, `region`）で管理。本番環境でのセキュアクッキー（`secure: true`）やSameSite（`lax`/`strict`/`none`）属性に対応。
 - **`csrf.js`**: CSRF トークン生成・検証。HMAC 署名シークレットは環境変数 `CSRF_SECRET` で管理（本番運用では必ず設定）。
 - **`rbac.js`**: ロールベース認可（`hasRole`, `hasPermission`, `routeGuard`、ロール階層継承）。
+- **`apiKey.js`**: APIキー / Bearerトークン認証ガード（定数時間比較、`apiKey.guard()`）。
+- **`webhookSig.js`**: Webhook HMAC署名検証ガード（GitHub/Stripe/Slack対応、`webhookSig.guard()`）。
+- **`rateLimit.js`**: 固定費0円の軽量インメモリレートリミット（429ガード、`rateLimit.guard()`）。
 - **`password.js`**: パスワードハッシュ化（SHA-256 + salt）。
 - **`jwt.js`**: JWT 署名・検証（HS256）。
 - **`cors.js`**: CORS プリフライト / レスポンスヘッダー組み立て。
