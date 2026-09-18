@@ -469,3 +469,99 @@ test("tableTool: importCsv/exportCsvでCSVの往復ができる(target=masterの
         "--csvBucket", BUCKET]);
     assert.match(rNoFileName.error, /csvFileNameの指定が必須/);
 });
+
+test("tableTool: dump / import でローカルファイル経由のバックアップ・復元ができる(JSONL/CSV, master/index両対応)", async () => {
+    // 1. master テーブルでの検証 (JSONL)
+    writeTableConf("master", { bucket: BUCKET }, {
+        dumpUsers: { columns: { name: { type: "string" }, age: { type: "int" } } }
+    });
+    await runTableTool(["-t", "master", "-c", "createTable"]);
+
+    // import (JSONL)
+    const jsonlFile = path.join(projectDir, "users.jsonl");
+    fs.writeFileSync(jsonlFile, JSON.stringify({ name: "Alice", age: 30 }) + "\n" +
+        JSON.stringify({ name: "Bob", age: 25 }) + "\n");
+
+    const rImportJsonl = await runTableTool(["-t", "master", "-c", "import", "-n", "dumpUsers",
+        "-f", jsonlFile]);
+    assert.deepEqual(rImportJsonl, {
+        command: "import", target: "master", tableName: "dumpUsers", mode: "append", rowCount: 2
+    });
+
+    // dump (JSONL)
+    const dumpOutJsonl = path.join(projectDir, "dump_out.jsonl");
+    const rDumpJsonl = await runTableTool(["-t", "master", "-c", "dump", "-n", "dumpUsers",
+        "-f", dumpOutJsonl]);
+    assert.equal(rDumpJsonl.command, "dump");
+    assert.equal(rDumpJsonl.rowCount, 2);
+    assert.equal(rDumpJsonl.file, dumpOutJsonl);
+    assert.equal(rDumpJsonl.format, "jsonl");
+    assert.ok(fs.existsSync(dumpOutJsonl));
+    const dumpedJsonlText = fs.readFileSync(dumpOutJsonl, "utf-8");
+    assert.match(dumpedJsonlText, /Alice/);
+    assert.match(dumpedJsonlText, /Bob/);
+
+    // import replace モード (1件のみに置換)
+    const replaceJsonlFile = path.join(projectDir, "replace.jsonl");
+    fs.writeFileSync(replaceJsonlFile, JSON.stringify({ name: "Carol", age: 40 }) + "\n");
+    const rReplace = await runTableTool(["-t", "master", "-c", "import", "-n", "dumpUsers",
+        "-f", replaceJsonlFile, "-m", "replace"]);
+    assert.deepEqual(rReplace, {
+        command: "import", target: "master", tableName: "dumpUsers", mode: "replace", rowCount: 1
+    });
+
+    // dump して確認 (Carolのみになっていること)
+    const rDumpAfterReplace = await runTableTool(["-t", "master", "-c", "dump", "-n", "dumpUsers",
+        "-f", dumpOutJsonl]);
+    assert.equal(rDumpAfterReplace.rowCount, 1);
+    assert.equal(rDumpAfterReplace.rows[0].name, "Carol");
+
+    // 2. CSVフォーマットでの dump / import 検証
+    const csvFile = path.join(projectDir, "users_csv.csv");
+    fs.writeFileSync(csvFile, "name,age\nDave,50\nEve,22\n");
+    const rImportCsv = await runTableTool(["-t", "master", "-c", "import", "-n", "dumpUsers",
+        "-f", csvFile, "--format", "csv", "-m", "replace"]);
+    assert.equal(rImportCsv.command, "import");
+    assert.equal(rImportCsv.rowCount, 2);
+
+    const dumpOutCsv = path.join(projectDir, "dump_out.csv");
+    const rDumpCsv = await runTableTool(["-t", "master", "-c", "dump", "-n", "dumpUsers",
+        "-f", dumpOutCsv, "--format", "csv"]);
+    assert.equal(rDumpCsv.command, "dump");
+    assert.equal(rDumpCsv.rowCount, 2);
+    assert.equal(rDumpCsv.format, "csv");
+    const dumpedCsvText = fs.readFileSync(dumpOutCsv, "utf-8");
+    assert.match(dumpedCsvText, /Dave/);
+    assert.match(dumpedCsvText, /Eve/);
+
+    // 3. index テーブルでの検証
+    writeTableConf("index", { bucket: BUCKET }, {
+        indexLogs: {
+            columns: { logId: { type: "string" }, level: { type: "string" } },
+            indexes: { byLevel: ["level"] }
+        }
+    });
+    await runTableTool(["-t", "index", "-c", "createTable"]);
+
+    const indexJsonlFile = path.join(projectDir, "index_logs.jsonl");
+    fs.writeFileSync(indexJsonlFile, JSON.stringify({ logId: "l1", level: "info" }) + "\n" +
+        JSON.stringify({ logId: "l2", level: "error" }) + "\n");
+    const rImportIndex = await runTableTool(["-t", "index", "-c", "import", "-n", "indexLogs",
+        "-f", indexJsonlFile]);
+    assert.equal(rImportIndex.command, "import");
+    assert.equal(rImportIndex.target, "index");
+    assert.equal(rImportIndex.rowCount, 2);
+
+    const indexDumpFile = path.join(projectDir, "index_dump.jsonl");
+    const rDumpIndex = await runTableTool(["-t", "index", "-c", "dump", "-n", "indexLogs",
+        "-f", indexDumpFile]);
+    assert.equal(rDumpIndex.command, "dump");
+    assert.equal(rDumpIndex.target, "index");
+    assert.equal(rDumpIndex.rowCount, 2);
+
+    // クリーンアップ
+    [jsonlFile, dumpOutJsonl, replaceJsonlFile, csvFile, dumpOutCsv, indexJsonlFile, indexDumpFile].forEach((f) => {
+        fs.rmSync(f, { force: true });
+    });
+});
+

@@ -965,9 +965,10 @@
             return { error: "不正なtargetです: " + target };
         }
         const _CSV_COMMANDS = ["exportCsv", "importCsv"];
+        const _DUMP_IMPORT_COMMANDS = ["dump", "import"];
         const _TABLE_NAME_REQUIRED_COMMANDS = ["alterIndex", "backupTable", "restoreTable",
             "listBackups", "previewRestore", "pruneBackups", "restoreBackupAs", "describeBackup"]
-            .concat(_CSV_COMMANDS);
+            .concat(_CSV_COMMANDS).concat(_DUMP_IMPORT_COMMANDS);
         if (["createTable", "dropTable", "alterTable"].concat(_TABLE_NAME_REQUIRED_COMMANDS).indexOf(command) === -1) {
             return { error: "不正なcommandです: " + command };
         }
@@ -1049,6 +1050,10 @@
                 return await _tableCommandExportCsv(db, event.tableName, event.csvBucket, event.csvPrefix, event.csvFileName, options);
             } else if (command === "importCsv") {
                 return await _tableCommandImportCsv(db, event.tableName, event.csvBucket, event.csvPrefix, event.csvFileName, options);
+            } else if (command === "dump") {
+                return await _tableCommandDump(db, target, event.tableName);
+            } else if (command === "import") {
+                return await _tableCommandImport(db, target, event.tableName, event.rows, event.mode);
             } else {
                 return await _tableCommandDescribeBackup(db, target, event.tableName, event.backupId);
             }
@@ -1246,6 +1251,74 @@
         return { command: "importCsv", target: "master", tableName: tableName,
             csvBucket: csvBucket, csvPrefix: csvPrefix || "", csvFileName: csvFileName,
             rowCount: rowCount };
+    };
+
+    // dump: 指定テーブルの全レコードを取得して返却(master/index両対応).
+    const _tableCommandDump = async function (db, target, tableName) {
+        const tables = await db.listTables();
+        const schema = tables ? tables[tableName] : null;
+        let rows = [];
+        if (target === "index") {
+            const idxNames = schema && schema.indexes ? Object.keys(schema.indexes) : [];
+            if (idxNames.length > 0) {
+                const where = {};
+                where[idxNames[0]] = {};
+                rows = await db.select(tableName, { where: where });
+            }
+        } else {
+            rows = await db.select(tableName, {});
+        }
+        return {
+            command: "dump",
+            target: target,
+            tableName: tableName,
+            rowCount: rows.length,
+            rows: rows,
+            schema: schema
+        };
+    };
+
+    // import: 指定テーブルにレコード配列を一括登録(master/index両対応).
+    // mode: "append"(デフォルト) | "replace"(既存データを破棄して置換)
+    const _tableCommandImport = async function (db, target, tableName, rows, mode) {
+        if (!Array.isArray(rows)) {
+            return { error: "importにはrows(配列)の指定が必要です。" };
+        }
+        mode = mode || "append";
+
+        // replaceモードの場合、既存全レコードを削除
+        if (mode === "replace") {
+            if (target === "index") {
+                const tables = await db.listTables();
+                const schema = tables ? tables[tableName] : null;
+                const idxNames = schema && schema.indexes ? Object.keys(schema.indexes) : [];
+                if (idxNames.length > 0) {
+                    const where = {};
+                    where[idxNames[0]] = {};
+                    await db.delete(tableName, { where: where });
+                }
+            } else {
+                await db.delete(tableName, {});
+            }
+        }
+
+        let insertedCount = 0;
+        for (let i = 0; i < rows.length; i++) {
+            await db.insert(tableName, rows[i]);
+            insertedCount++;
+        }
+
+        if (typeof db.flush === "function") {
+            await db.flush(tableName);
+        }
+
+        return {
+            command: "import",
+            target: target,
+            tableName: tableName,
+            mode: mode,
+            rowCount: insertedCount
+        };
     };
 
     // requestオブジェクトを取得.

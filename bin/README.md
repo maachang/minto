@@ -211,9 +211,13 @@ DeleteObject・ListObjectsV2 の最低限のみです。それ以外の操作(�
     取得し、テーブルの内容を丸ごと置き換える(**`target=master`のみ対応**。
     既存の行データは全て破棄される。`-n`・`--csvBucket`・`--csvFileName`必須。
     `--csvPrefix`は省略可)
+  - `dump`: 指定した1テーブルの全データをローカルファイルへ出力する
+    (`master`/`index`両対応、`-n`必須。JSONLまたはCSV形式)
+  - `import`: ローカルファイルからデータを読み込み、指定したテーブルへ一括登録する
+    (`master`/`index`両対応、`-n`・`-f`必須。追加モードまたは全置換モード)
 - `-n` / `--table`: `alterIndex`/`backupTable`/`restoreTable`/`listBackups`/
   `previewRestore`/`pruneBackups`/`restoreBackupAs`/`describeBackup`/
-  `exportCsv`/`importCsv`実行時に対象とするテーブル名(必須。`restoreBackupAs`
+  `exportCsv`/`importCsv`/`dump`/`import`実行時に対象とするテーブル名(必須。`restoreBackupAs`
   ではバックアップ取得元のテーブル名)
 - `-b` / `--backupId`: `restoreTable`/`previewRestore`/`restoreBackupAs`/
   `describeBackup`実行時に対象とするバックアップ世代ID(必須、`backupTable`
@@ -223,6 +227,10 @@ DeleteObject・ListObjectsV2 の最低限のみです。それ以外の操作(�
 - `--csvBucket` / `--csvPrefix` / `--csvFileName`: `exportCsv`/`importCsv`
   実行時のCSV入出力先(`--csvBucket`・`--csvFileName`必須、`--csvPrefix`は
   省略可・省略時は空文字列)
+- `-f` / `--file`: `dump`/`import`実行時の入出力ローカルファイルパス(`import`時は必須、
+  `dump`時省略時は`{テーブル名}.{format}`)
+- `--format`: `dump`/`import`実行時のファイルフォーマット(`jsonl`(デフォルト) | `csv`)
+- `-m` / `--mode`: `import`実行時の登録モード(`append`(デフォルト・追記) | `replace`(全行破棄して置換))
 
 対象(`master`/`index`)ごとに、プロジェクトの`conf/table/master.json`・
 `conf/table/index.json`に「あるべきテーブル定義」を記載しておく必要があります。

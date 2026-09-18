@@ -797,4 +797,81 @@ exports.handler = async function() {
 };
 ```
 
+---
+
+# ◆◆◆ rateLimit.js ◆◆◆
+
+固定費0円・外部npm依存ゼロで動作するインメモリ・レートリミットモジュールです。
+
+APIやエンドポイントへの過剰アクセス・総当たり攻撃を防御します。同一コンテナ内への連続リクエストを検知し、瞬時に `429 Too Many Requests` を返却してLambdaハンドラの無駄な処理・DBアクセスを防止します。
+
+---
+
+## 主な機能
+
+- **固定費0円**: 外部RedisやDynamoDBを使わず、メモリ内Mapで超高速に動作。通信レイテンシもゼロ。
+- **メモリ保護**: 最大エントリ制限(`_MAX_KEYS = 10,000`)とアクセス時の自動パージにより、長寿命コンテナでもメモリリークを防止。
+- **HTTP標準準拠**: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After` ヘッダーを自動付与。
+- **柔軟なキー生成**: IPアドレス(`req.ip()`)のほか、APIキーやユーザーID等のカスタムキーに対応。
+
+---
+
+## エクスポート
+
+| 関数 | 説明 |
+|---|---|
+| `exports.check(key, options)` | 指定キーに対するレートリミット判定とカウント増加 |
+| `exports.guard(options)` | $request()/$response() と連携し、制限超過時に 429 レスポンスを設定して `false` を返すガード関数 |
+| `exports.reset(key)` | 特定キーのカウントをリセット |
+| `exports.clear()` | 全カウントをクリア (テスト用) |
+| `exports.size()` | 現在追跡中のキー数を取得 |
+
+---
+
+## `check(key, options)`
+
+### 引数
+
+- `key` (`string`): 制限対象の識別子 (IPアドレスやユーザーIDなど)
+- `options` (`object`, 任意):
+  - `windowMs` (`number`): ウィンドウ時間枠ミリ秒 (デフォルト: `60000` = 1分)
+  - `limit` (`number`): 時間枠あたりの最大許容回数 (デフォルト: `60`)
+  - `cost` (`number`): 消費コスト (デフォルト: `1`)
+
+### 戻り値
+
+```javascript
+{
+    allowed: boolean,    // 許容内なら true, 超過なら false
+    limit: number,      // 設定上限
+    remaining: number,  // 残り許容回数
+    resetMs: number,    // リセットまでの残りミリ秒
+    resetTime: number   // リセット時刻 (ミリ秒エポック)
+}
+```
+
+---
+
+## `guard(options)`
+
+### 使用例 (filter.mt.js や *.mt.js の先頭)
+
+```javascript
+const rateLimit = $loadLib("rateLimit.js");
+
+exports.handler = async function() {
+    // 1分あたり最大30リクエストに制限
+    const allowed = rateLimit.guard({
+        windowMs: 60 * 1000,
+        limit: 30
+    });
+
+    if (!allowed) {
+        return false; // 自動的に 429 Too Many Requests と Retry-After ヘッダーが設定される
+    }
+
+    return { hello: "world" };
+};
+```
+
 # ◆◆◆ EOF ◆◆◆
