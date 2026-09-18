@@ -54,7 +54,7 @@ minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事�
 | ヘルパー | 説明 | 主なメソッド / プロパティ |
 |---|---|---|
 | `$request()` | リクエスト情報の取得 | `.query(key)`, `.param(key)`, `.params()`, `.path()`, `.method()`, `.headers()`, `.header(key)`, `.body()`, `.json()`, `.ip()`, `.cookie(key)` |
-| `$response()` | レスポンスの生成・返却 | `.json(data, status?)`, `.html(html, status?)`, `.redirect(url, status?)`, `.cookie(name, val, opt?)`, `.header(key, val)`, `.status(code)` |
+| `$response()` | レスポンスの生成・返却 | `.json(data, status?)`, `.html(html, status?)`, `.redirect(url, status?)`, `.cookie(name, val, opt?)`, `.header(key, val)`, `.status(code)`, `.securityHeaders(headers)`, `.stream(async fn)` (SSE/Streaming対応) |
 | `$log` | 構造化 JSON ログ出力 | `$log.info(...)`, `$log.warn(...)`, `$log.error(...)`, `$log.debug(...)`<br>※ `$requestId()`, `path`, `method` が自動付与される。 |
 | `$notifyError(err, context?, opt?)` | Slack への一元化エラー通知 | Webhook URL (`SLACK_WEBHOOK_URL`) または Slack Bot Token を自動判別してスタックトレース付きリッチ通知を送信 |
 | `$loadLib("name.js")` | モジュールのロード | `lib/` → `${MINTO_HOME}/modules/` の順で検索してロード |
@@ -73,12 +73,12 @@ minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事�
 - **`paginate.js`**:
   - `paginate.query(db, tableName, options)`: S3 `StartAfter` 直結の高速カーソル式（$O(1)$）およびオフセット式ページネーション。
   - `paginate.url(url, cursorOrPage, paramName)`: SSR / リンク生成用ヘルパー。
-- **`s3presign.js`**: AWS SigV4 署名付き URL 生成（Direct to S3 アップロード / 一時ダウンロード）。
+- **`s3presign.js`**: AWS SigV4 署名付き URL 生成（Direct to S3 アップロード `createPresignedPutUrl` / 一時ダウンロード `createPresignedGetUrl`）。
 - **`s3Lock.js`**: S3 `IfNoneMatch` による分散排他ロック。
 - **`seqId.js`**: Snowflake ID（固定長 16 桁 hex）採番。
 
 ### 2. `auth`（認証・認可 & セキュリティ）
-- **`session.js`**: S3 ベースセッション管理（Cookie 自動連携、1 実行毎キャッシュ内蔵）。設定は `conf/session.json`（`bucket`, `prefix`, `timeoutMin`, `samesite`, `secure`, `region`）で管理。本番環境でのセキュアクッキー（`secure: true`）やSameSite（`lax`/`strict`/`none`）属性に対応。
+- **`session.js`**: S3 ベースセッション管理（Cookie 自動連携、1 実行毎キャッシュ内蔵、セッション固定化攻撃対策 `regenerateCookie()` 提供）。設定は `conf/session.json`（`bucket`, `prefix`, `timeoutMin`, `samesite`, `secure`, `region`）で管理。本番環境でのセキュアクッキー（`secure: true`）やSameSite（`lax`/`strict`/`none`）属性に対応。
 - **`csrf.js`**: CSRF トークン生成・検証。HMAC 署名シークレットは環境変数 `CSRF_SECRET` で管理（本番運用では必ず設定）。
 - **`rbac.js`**: ロールベース認可（`hasRole`, `hasPermission`, `routeGuard`、ロール階層継承）。
 - **`apiKey.js`**: APIキー / Bearerトークン認証ガード（定数時間比較、`apiKey.guard()`）。
@@ -131,7 +131,7 @@ minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事�
 - `minto`: ローカル開発サーバー起動（デフォルト `http://127.0.0.1:3210/`）。
   - **ホットリロード / ライブリロード内蔵**: `public/`, `lib/`, `conf/` の変更はサーバー再起動不要で即座に反映される。
 - `localAws [-p 9911] [-d .localS3]`: ローカル S3 + SQS エミュレータ。
-- `tableTool -t <master|index> -c <createTable|alterTable|alterIndex|dropTable|backupTable|restoreTable>`: S3 テーブル定義の管理・マイグレーション。
+- `tableTool -t <master|index> -c <createTable|alterTable|alterIndex|dropTable|backupTable|restoreTable|listBackups|previewRestore|pruneBackups|restoreBackupAs|describeBackup|exportCsv|importCsv|dump|import>`: S3 テーブル定義・データ管理（マイグレーション、世代バックアップ/リストア、ローカルJSONL/CSV dump/import）。
 - `checkModules`: デプロイ前の `$loadLib` 依存関係・`-t` オプション漏れチェック。
 - `mtpk [-t {カテゴリ名} ...] [-t all]`: AWS Lambda デプロイ用 zip (`mtpack.zip`) の作成。
 
@@ -144,7 +144,7 @@ minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事�
 | `public/` | Web コンテンツ・動的スクリプト (`*.mt.js` / `*.mt.html`) の配置先 |
 | `lib/` | プロジェクト固有の `$loadLib()` モジュールの配置先 |
 | `validates/` | AI定義またはプロジェクト固有のバリデーションスキーマ定義 (`*.js`) の配置先 |
-| `conf/` | 設定 JSON (`minto.json`, `table/*.json`, `notify.json` 等) の配置先。<br>`*.local.json` はローカル実行時優先、`*.test.json` はテスト時優先（デプロイ zip からは自動除外）。 |
+| `conf/` | 設定 JSON (`minto.json`, `table/*.json`, `security.json`, `session.json`, `notify.json` 等) の配置先。<br>`*.local.json` はローカル実行時優先、`*.test.json` はテスト時優先（デプロイ zip からは自動除外）。 |
 | `package.json` | ローカル開発用依存関係 |
 | `.claude/CLAUDE.md` | 本ファイル |
 
@@ -154,4 +154,11 @@ minto の `*.mt.js` / `*.mt.html` (JHTML) 内では以下のヘルパーが事�
 
 # 未対応・残課題(随時更新)
 
-（プロジェクト固有の、未対応・課題があればこの内容を削除して記載する）
+プロジェクト固有の未対応・課題、およびフレームワーク全体のバックログ（詳細は `docs/memo/todo-list.md` を参照）:
+- `conf/security.json` への `rateLimit` 設定統合（自動レートリミットガード）
+- 環境診断 & トラブルシュートツール (`bin/doctor`)
+- 大容量CSVのストリーミング / チャンク処理
+- Magic Link / メールワンタイムパスコード (OTP) 認証
+- プロジェクト / CRUD 画面雛形ジェネレーター (`minto create` / `minto gen`)
+- ローカルSESエミュレータ（擬似メールボックス）
+
