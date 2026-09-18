@@ -153,6 +153,26 @@
         res.end(body);
     };
 
+    // HeadObject処理.
+    const _handleHead = function (req, res, bucket, key) {
+        const filePath = _resolveFilePath(bucket, key);
+        if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+            res.writeHead(404, { "content-type": "application/xml" });
+            res.end();
+            return;
+        }
+        const stat = fs.statSync(filePath);
+        const body = fs.readFileSync(filePath);
+        const etag = crypto.createHash("md5").update(body).digest("hex");
+        res.writeHead(200, {
+            "content-type": "application/octet-stream",
+            "content-length": stat.size,
+            "etag": "\"" + etag + "\"",
+            "last-modified": stat.mtime.toUTCString()
+        });
+        res.end();
+    };
+
     // DeleteObject処理(S3同様、存在しなくても成功扱い=冪等).
     const _handleDelete = function (req, res, bucket, key) {
         const filePath = _resolveFilePath(bucket, key);
@@ -376,6 +396,9 @@
                     break;
                 case "GET":
                     _handleGet(req, res, bucket, key);
+                    break;
+                case "HEAD":
+                    _handleHead(req, res, bucket, key);
                     break;
                 case "DELETE":
                     _handleDelete(req, res, bucket, key);

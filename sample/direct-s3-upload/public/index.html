@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S3 Direct Upload Sample - Minto</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 680px;
+            margin: 40px auto;
+            padding: 0 20px;
+            color: #333;
+            background: #fafafa;
+        }
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .dropzone {
+            border: 2px dashed #0066cc;
+            border-radius: 6px;
+            padding: 32px;
+            text-align: center;
+            background: #f0f7ff;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+        .progress-bar-wrap {
+            display: none;
+            width: 100%;
+            height: 16px;
+            background: #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background: #0066cc;
+            transition: width 0.2s ease;
+        }
+        .status {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #555;
+        }
+        .result {
+            display: none;
+            margin-top: 20px;
+            padding: 16px;
+            background: #eef9ee;
+            border: 1px solid #b7e4b7;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>S3 Direct Upload Sample</h2>
+        <p>Lambda Function URLs の 6MB 上限を回避し、ブラウザから S3 へ直接大容量ファイルをアップロードします。</p>
+
+        <div class="dropzone" id="dropzone">
+            <input type="file" id="fileInput" style="display: none;">
+            <p>クリックしてファイルを選択、またはここにドラッグ＆ドロップ</p>
+            <small style="color: #888;">(最大 100MB、画像・PDF・動画等)</small>
+        </div>
+
+        <div class="progress-bar-wrap" id="progressWrap">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="status" id="statusText"></div>
+
+        <div class="result" id="resultArea">
+            <strong>アップロード完了！</strong>
+            <pre id="resultJson" style="margin-top: 8px; font-size: 13px;"></pre>
+            <a id="downloadLink" href="#" target="_blank">アップロードしたファイルを開く</a>
+        </div>
+    </div>
+
+    <script>
+        const dropzone = document.getElementById("dropzone");
+        const fileInput = document.getElementById("fileInput");
+        const progressWrap = document.getElementById("progressWrap");
+        const progressBar = document.getElementById("progressBar");
+        const statusText = document.getElementById("statusText");
+        const resultArea = document.getElementById("resultArea");
+        const resultJson = document.getElementById("resultJson");
+        const downloadLink = document.getElementById("downloadLink");
+
+        dropzone.addEventListener("click", () => fileInput.click());
+        fileInput.addEventListener("change", (e) => {
+            if (e.target.files.length > 0) {
+                startUpload(e.target.files[0]);
+            }
+        });
+
+        dropzone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            dropzone.style.background = "#e1effe";
+        });
+        dropzone.addEventListener("dragleave", () => {
+            dropzone.style.background = "#f0f7ff";
+        });
+        dropzone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropzone.style.background = "#f0f7ff";
+            if (e.dataTransfer.files.length > 0) {
+                startUpload(e.dataTransfer.files[0]);
+            }
+        });
+
+        async function startUpload(file) {
+            resultArea.style.display = "none";
+            progressWrap.style.display = "block";
+            progressBar.style.width = "0%";
+            statusText.textContent = "1/3: 署名付きアップロードチケットを取得中...";
+
+            try {
+                // 1. チケット取得
+                const ticketRes = await fetch("/api/ticket", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        filename: file.name,
+                        contentType: file.type || "application/octet-stream"
+                    })
+                });
+                const ticketData = await ticketRes.json();
+                if (!ticketData.ok) {
+                    throw new Error(ticketData.error || "チケット取得失敗");
+                }
+                const ticket = ticketData.ticket;
+
+                // 2. S3へ直接PUT (XMLHttpRequestで進捗監視)
+                statusText.textContent = "2/3: S3へ直接アップロード中 (0%)...";
+                await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open("PUT", ticket.uploadUrl, true);
+                    if (ticket.contentType) {
+                        xhr.setRequestHeader("Content-Type", ticket.contentType);
+                    }
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable) {
+                            const percent = Math.round((e.loaded / e.total) * 100);
+                            progressBar.style.width = percent + "%";
+                            statusText.textContent = `2/3: S3へ直接アップロード中 (${percent}%)...`;
+                        }
+                    };
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            resolve();
+                        } else {
+                            reject(new Error("S3アップロードに失敗しました: " + xhr.status));
+                        }
+                    };
+                    xhr.onerror = () => reject(new Error("S3アップロードネットワークエラー"));
+                    xhr.send(file);
+                });
+
+                // 3. 完了通知・検証
+                statusText.textContent = "3/3: バックエンドでアップロード結果を検証中...";
+                const compRes = await fetch("/api/complete", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        bucket: ticket.bucket,
+                        key: ticket.key
+                    })
+                });
+                const compData = await compRes.json();
+                if (!compData.ok) {
+                    throw new Error(compData.error || "完了検証失敗");
+                }
+
+                statusText.textContent = "アップロード成功！";
+                resultArea.style.display = "block";
+                resultJson.textContent = JSON.stringify(compData.file, null, 2);
+                downloadLink.href = compData.file.downloadUrl;
+            } catch (err) {
+                statusText.textContent = "エラー: " + err.message;
+                progressBar.style.background = "#e53e3e";
+            }
+        }
+    </script>
+</body>
+</html>

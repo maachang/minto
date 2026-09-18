@@ -17,8 +17,10 @@
   - s3MasterTable.js（書き込み頻度が少なく読み込み頻度が多い用途向け）: https://github.com/maachang/minto/blob/main/docs/s3MasterTable.md
   - s3IndexTable.js（書き込み頻度が多い用途向け）設計ドキュメント: https://github.com/maachang/minto/blob/main/docs/s3-row-store-design.md
   - s3tableモジュール詳細 (s3sdk / s3presign / paginate / s3Lock / seqId): https://github.com/maachang/minto/blob/main/modules/s3table/README.md
+  - S3 Direct-to-S3 アップロード (大容量ファイル対応): https://github.com/maachang/minto/blob/main/docs/directS3Upload.md
   - 構造化ログ & 一元化エラー通知 ($log / $notifyError / sendSlack): https://github.com/maachang/minto/blob/main/modules/notification/README.md
   - ロールベース認可 (RBAC / routeGuard): https://github.com/maachang/minto/blob/main/modules/auth/README.md
+  - 外部API認証 (APIキー/Bearer) & Webhook署名検証: https://github.com/maachang/minto/blob/main/docs/authApiKeyAndWebhook.md
   - 汎用ユーティリティ (dateEx.js 日付拡張・フォーマット・期間判定): https://github.com/maachang/minto/blob/main/modules/util/README.md
 
 - 認証（GoogleWorkspace企業の社内Webアプリ向け）

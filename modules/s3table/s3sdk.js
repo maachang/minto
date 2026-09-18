@@ -10,6 +10,7 @@
         PutObjectCommand,
         DeleteObjectCommand,
         GetObjectCommand,
+        HeadObjectCommand,
         ListObjectsV2Command
     } = require("@aws-sdk/client-s3")
 
@@ -242,6 +243,45 @@
             return null;
         }
     }
+
+    // 指定BucketのPrefix+Keyのメタデータを取得(HEAD).
+    // bucket 対象のBucket名を設定します.
+    // prefix 対象のprefixを設定します.
+    // key 対象のkeyを設定します.
+    // option 任意のオプションを設定します.
+    //        noError: false の場合例外返却(デフォルト: true).
+    //        region: 接続先リージョンを設定します(デフォルト: 東京).
+    //        credentials: access_key, secret_access_key, session_token などを設定します.
+    // 戻り値: メタデータ({ ContentLength, ContentType, ETag, LastModified 等 })が返却されます.
+    //         存在しない場合は null.
+    exports.head = async function (bucket, prefix, key, options) {
+        if (options == undefined) {
+            options = {};
+        }
+        try {
+            return await _getS3Client(options.region, options.credentials).send(
+                new HeadObjectCommand({
+                    Bucket: bucket,
+                    Key: _prefixKey(prefix, key)
+                })
+            );
+        } catch (e) {
+            // オブジェクトが存在しない(NotFound / 404)場合は警告ログを出さずにnullを返す
+            if (e.name === "NotFound" || e.$metadata && e.$metadata.httpStatusCode === 404) {
+                if (options.noError === false) {
+                    throw e;
+                }
+                return null;
+            }
+            console.warn("[S3.HEAD]bucket: " + bucket + " prefix: " + prefix +
+                " key: " + key + " options: " + _strOptions(options), e);
+            if (options.noError === false) {
+                throw e;
+            }
+            return null;
+        }
+    }
+    exports.headObject = exports.head;
 
     // 指定BucketのPrefix以下のリスト取得.
     // bucket 対象のBucket名を設定します.
